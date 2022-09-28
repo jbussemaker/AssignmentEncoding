@@ -202,12 +202,11 @@ def test_filter_matrices():
         [[0, 2], [1, 0]],
     ]))
     matrix = gen.get_agg_matrix()
-    emtpy_matrix = matrix[:0, :, :]
+    all_mask = np.ones((matrix.shape[0],), dtype=bool)
+    none_mask = np.zeros((matrix.shape[0],), dtype=bool)
 
-    assert np.all(gen.filter_matrices(matrix, [True, True], [True, True]) == matrix)
-    assert np.all(gen.filter_matrices(matrix, [True, False], [True, True]) == emtpy_matrix)
+    assert np.all(gen.filter_matrices(matrix, [True, True], [True, True]) == all_mask)
+    assert np.all(gen.filter_matrices(matrix, [True, False], [True, True]) == none_mask)
 
-    assert np.all(gen.filter_matrices(matrix, [True, True], [False, True]) == np.array([
-        [[0, 1], [0, 1]],
-        [[0, 2], [0, 1]],
-    ]))
+    assert np.all(gen.filter_matrices(matrix, [True, True], [False, True]) ==
+                  np.array([True, False, False, True, False, False], dtype=bool))

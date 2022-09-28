@@ -146,7 +146,7 @@ class AggregateAssignmentMatrixGenerator:
             if not tgt_exists:
                 matrix_mask &= np.sum(matrix[:, :, i], axis=1) == 0
 
-        return matrix[matrix_mask, :, :]
+        return matrix_mask
 
     def iter_conns(self) -> Generator[List[Tuple[Node, Node]], None, None]:
         """Generate lists of edges from matrices"""
