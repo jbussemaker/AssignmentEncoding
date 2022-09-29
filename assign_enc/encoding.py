@@ -2,13 +2,16 @@ import numpy as np
 from typing import *
 from dataclasses import dataclass
 
-__all__ = ['DiscreteDV', 'DesignVector', 'PartialDesignVector', 'MatrixSelectMask', 'Imputer', 'Encoder',
-           'filter_design_vectors']
+__all__ = ['DiscreteDV', 'DesignVector', 'PartialDesignVector', 'MatrixSelectMask', 'Imputer', 'FirstImputer',
+           'Encoder', 'filter_design_vectors']
 
 
 @dataclass
 class DiscreteDV:
     n_opts: int
+
+    def get_random(self):
+        return np.random.randint(0, self.n_opts)
 
 
 DesignVector = List[int]
@@ -49,21 +52,38 @@ class Imputer:
         raise NotImplementedError
 
 
+class FirstImputer(Imputer):
+    """Imputer that simply chooses the first possible matrix. Mainly for testing purposes."""
+
+    def impute(self, vector: DesignVector, matrix_mask: MatrixSelectMask) -> Tuple[DesignVector, np.ndarray]:
+        i_mat = np.where(matrix_mask)[0][0]
+        return self._design_vectors[i_mat, :], self._matrix[i_mat, :, :]
+
+
 class Encoder:
     """Base class that encodes assignment matrices to discrete design variables."""
 
-    def __init__(self, matrix: np.ndarray, imputer: Imputer):
+    def __init__(self, imputer: Imputer, matrix: np.ndarray = None):
         self._matrix = matrix
-        self._n_mat = matrix.shape[0]
-        self._design_vectors = self._encode(matrix)
-        self._design_vars = self._get_design_variables(self._design_vectors)
-
+        self._n_mat = 0
+        self._design_vectors = np.array([])
+        self._design_vars = []
         self._imputer = imputer
-        imputer.initialize(matrix, self._design_vectors, self._design_vars)
+
+        if matrix is not None:
+            self.matrix = matrix
 
     @property
     def matrix(self) -> np.ndarray:
         return self._matrix
+
+    @matrix.setter
+    def matrix(self, matrix: np.ndarray):
+        self._matrix = matrix
+        self._n_mat = matrix.shape[0]
+        self._design_vectors = self._encode(matrix)
+        self._design_vars = self._get_design_variables(self._design_vectors)
+        self._imputer.initialize(matrix, self._design_vectors, self._design_vars)
 
     @property
     def n_mat(self) -> int:
@@ -73,8 +93,13 @@ class Encoder:
     def design_vars(self) -> List[DiscreteDV]:
         return self._design_vars
 
+    def get_random_design_vector(self) -> DesignVector:
+        return [dv.get_random() for dv in self.design_vars]
+
     def get_matrix(self, vector: DesignVector, matrix_mask: MatrixSelectMask = None) -> Tuple[DesignVector, np.ndarray]:
         """Select a connection matrix (n_src x n_tgt) and impute the design vector if needed."""
+        if self._matrix is None:
+            raise RuntimeError('Matrix not set!')
         if matrix_mask is None:
             matrix_mask = np.ones((self._matrix.shape[0],), dtype=bool)
         i_mat, = np.where(matrix_mask & self._filter_design_variables(vector))

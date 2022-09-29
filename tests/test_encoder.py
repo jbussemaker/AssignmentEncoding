@@ -1,8 +1,5 @@
-import numpy as np
-from typing import *
-
 import pytest
-
+import numpy as np
 from assign_enc.encoding import *
 
 
@@ -36,14 +33,28 @@ class DirectEncoder(Encoder):
 
 
 def test_encoder():
+    enc = DirectEncoder(Imputer())
+    with pytest.raises(RuntimeError):
+        enc.get_matrix([0])
+
     matrix = np.random.randint(0, 3, (10, 2, 3), dtype=int)
-    enc = DirectEncoder(matrix, Imputer())
+    enc = DirectEncoder(Imputer(), matrix)
     assert enc.matrix is matrix
     assert enc.n_mat == 10
 
     assert enc._design_vectors.shape == (10, 1)
     assert len(enc.design_vars) == 1
     assert enc.design_vars[0].n_opts == 10
+
+    for _ in range(100):
+        val = enc.design_vars[0].get_random()
+        assert val >= 0
+        assert val < 10
+
+        dv = enc.get_random_design_vector()
+        assert len(dv) == 1
+        assert dv[0] >= 0
+        assert dv[0] < 10
 
     dv, mat = enc.get_matrix([0])
     assert dv == [0]
@@ -58,17 +69,10 @@ def test_encoder():
         enc.get_matrix([0], matrix_mask=matrix_mask)
 
 
-class DummyImputer(Imputer):
-
-    def impute(self, vector: DesignVector, matrix_mask: MatrixSelectMask) -> Tuple[DesignVector, np.ndarray]:
-        design_vectors = self._design_vectors[matrix_mask, :]
-        matrices = self._matrix[matrix_mask, :, :]
-        return design_vectors[0, :], matrices[0, :, :]
-
-
 def test_encoder_impute():
     matrix = np.random.randint(0, 3, (10, 2, 3), dtype=int)
-    enc = DirectEncoder(matrix, DummyImputer())
+    enc = DirectEncoder(FirstImputer())
+    enc.matrix = matrix
     assert enc.matrix is matrix
     assert enc.n_mat == 10
 
@@ -92,5 +96,6 @@ class DuplicateEncoder(Encoder):
 
 def test_duplicate_encoder():
     matrix = np.random.randint(0, 3, (10, 2, 3), dtype=int)
+    enc = DuplicateEncoder(Imputer())
     with pytest.raises(RuntimeError):
-        DuplicateEncoder(matrix, Imputer())
+        enc.matrix = matrix

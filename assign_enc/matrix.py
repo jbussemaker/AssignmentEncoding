@@ -132,37 +132,42 @@ class AggregateAssignmentMatrixGenerator:
             agg_matrix[i, :, :] = matrix
         return agg_matrix
 
-    def filter_matrices(self, matrix: np.ndarray, src_exists: List[bool], tgt_exists: List[bool]) -> np.ndarray:
+    def filter_matrices(self, matrix: np.ndarray, src_exists: List[bool] = None, tgt_exists: List[bool] = None) \
+            -> np.ndarray:
         """Only keep matrices where non-existent nodes have no connections"""
         matrix_mask = np.ones((matrix.shape[0],), dtype=bool)
+        if src_exists is None and tgt_exists is None:
+            return matrix_mask
 
         # Deselect matrices where non-existing src nodes have one or more connections
-        for i, src_exists in enumerate(src_exists):
-            if not src_exists:
-                matrix_mask &= np.sum(matrix[:, i, :], axis=1) == 0
+        if src_exists is not None:
+            for i, src_exists in enumerate(src_exists):
+                if not src_exists:
+                    matrix_mask &= np.sum(matrix[:, i, :], axis=1) == 0
 
         # Deselect matrices where non-existing tgt nodes have one or more connections
-        for i, tgt_exists in enumerate(tgt_exists):
-            if not tgt_exists:
-                matrix_mask &= np.sum(matrix[:, :, i], axis=1) == 0
+        if tgt_exists is not None:
+            for i, tgt_exists in enumerate(tgt_exists):
+                if not tgt_exists:
+                    matrix_mask &= np.sum(matrix[:, :, i], axis=1) == 0
 
         return matrix_mask
 
     def iter_conns(self) -> Generator[List[Tuple[Node, Node]], None, None]:
         """Generate lists of edges from matrices"""
-        src_nodes, tgt_nodes = self.src, self.tgt
         for matrix in self:
+            yield tuple(self.get_conns(matrix))
 
-            # Convert connection matrix to edges
-            edges = []
-            for i_src in range(matrix.shape[0]):
-                src = src_nodes[i_src]
-                for j_tgt in range(matrix.shape[1]):
-                    tgt = tgt_nodes[j_tgt]
-                    for _ in range(matrix[i_src, j_tgt]):
-                        edges.append((src, tgt))
-
-            yield tuple(edges)
+    def get_conns(self, matrix: np.ndarray) -> List[Tuple[Node, Node]]:
+        """Convert matrix to edge tuples"""
+        edges = []
+        for i_src in range(matrix.shape[0]):
+            src = self.src[i_src]
+            for j_tgt in range(matrix.shape[1]):
+                tgt = self.tgt[j_tgt]
+                for _ in range(matrix[i_src, j_tgt]):
+                    edges.append((src, tgt))
+        return edges
 
     def _iter_sources(self):
         yield from self._iter_conn_slots(self.src)

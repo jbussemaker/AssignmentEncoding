@@ -1,5 +1,5 @@
-import numpy as np
 import pytest
+import numpy as np
 from assign_enc.matrix import *
 
 
@@ -206,7 +206,12 @@ def test_filter_matrices():
     none_mask = np.zeros((matrix.shape[0],), dtype=bool)
 
     assert np.all(gen.filter_matrices(matrix, [True, True], [True, True]) == all_mask)
+    assert np.all(gen.filter_matrices(matrix) == all_mask)
+    assert np.all(gen.filter_matrices(matrix, tgt_exists=[True, True]) == all_mask)
     assert np.all(gen.filter_matrices(matrix, [True, False], [True, True]) == none_mask)
+    assert np.all(gen.filter_matrices(matrix, src_exists=[True, False]) == none_mask)
 
     assert np.all(gen.filter_matrices(matrix, [True, True], [False, True]) ==
+                  np.array([True, False, False, True, False, False], dtype=bool))
+    assert np.all(gen.filter_matrices(matrix, tgt_exists=[False, True]) ==
                   np.array([True, False, False, True, False, False], dtype=bool))
