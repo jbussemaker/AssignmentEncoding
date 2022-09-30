@@ -56,6 +56,8 @@ def test_encoder():
         assert dv[0] >= 0
         assert dv[0] < 10
 
+    assert enc.get_matrix_index([0]) == 0
+    assert enc.is_valid_vector([0])
     dv, mat = enc.get_matrix([0])
     assert dv == [0]
     assert np.all(mat == matrix[0, :, :])
@@ -68,6 +70,12 @@ def test_encoder():
     with pytest.raises(NotImplementedError):
         enc.get_matrix([0], matrix_mask=matrix_mask)
 
+    matrix_mask = np.zeros((10,), dtype=bool)
+    assert not enc.is_valid_vector([0], matrix_mask=matrix_mask)
+    dv, mat = enc.get_matrix([0], matrix_mask=matrix_mask)
+    assert np.all(dv == [0])
+    assert np.all(mat == 0)
+
 
 def test_encoder_impute():
     matrix = np.random.randint(0, 3, (10, 2, 3), dtype=int)
@@ -76,6 +84,8 @@ def test_encoder_impute():
     assert enc.matrix is matrix
     assert enc.n_mat == 10
 
+    assert not enc.is_valid_vector([10])
+    assert enc.get_matrix_index([10]) is None
     dv, mat = enc.get_matrix([10])
     assert dv == enc._design_vectors[0, :]
     assert np.all(mat == matrix[0, :, :])

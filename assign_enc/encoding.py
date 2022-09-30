@@ -35,9 +35,9 @@ class Imputer:
     """Base class for imputing design vectors to select existing matrices."""
 
     def __init__(self):
-        self._matrix = None
-        self._design_vectors = None
-        self._design_vars = None
+        self._matrix: Optional[np.ndarray] = None
+        self._design_vectors: Optional[np.ndarray] = None
+        self._design_vars: Optional[List[DiscreteDV]] = None
 
     def initialize(self, matrix: np.ndarray, design_vectors: np.ndarray, design_vars: List[DiscreteDV]):
         self._matrix = matrix
@@ -46,6 +46,9 @@ class Imputer:
 
     def _filter_design_vectors(self, vector: PartialDesignVector) -> MatrixSelectMask:
         return filter_design_vectors(self._design_vectors, vector)
+
+    def _return_imputation(self, i_dv: int) -> Tuple[DesignVector, np.ndarray]:
+        return self._design_vectors[i_dv, :], self._matrix[i_dv, :, :]
 
     def impute(self, vector: DesignVector, matrix_mask: MatrixSelectMask) -> Tuple[DesignVector, np.ndarray]:
         """Return a new design vector and associated assignment matrix (n_src x n_tgt)"""
@@ -57,7 +60,7 @@ class FirstImputer(Imputer):
 
     def impute(self, vector: DesignVector, matrix_mask: MatrixSelectMask) -> Tuple[DesignVector, np.ndarray]:
         i_mat = np.where(matrix_mask)[0][0]
-        return self._design_vectors[i_mat, :], self._matrix[i_mat, :, :]
+        return self._return_imputation(i_mat)
 
 
 class Encoder:
@@ -98,6 +101,27 @@ class Encoder:
 
     def get_matrix(self, vector: DesignVector, matrix_mask: MatrixSelectMask = None) -> Tuple[DesignVector, np.ndarray]:
         """Select a connection matrix (n_src x n_tgt) and impute the design vector if needed."""
+        i_mat = self.get_matrix_index(vector, matrix_mask=matrix_mask)
+
+        # If no matrix can be found, impute
+        if i_mat is None:
+            if matrix_mask is None:
+                matrix_mask = np.ones((self._matrix.shape[0],), dtype=bool)
+
+            # If the mask filters out all design vectors, there is no need to try imputing
+            elif np.all(~matrix_mask):
+                null_matrix = self._matrix[0, :, :]*0
+                return [0]*len(vector), null_matrix
+
+            return self._imputer.impute(vector, matrix_mask)
+
+        # Design vector directly maps to possible matrix
+        return vector, self._matrix[i_mat, :, :]
+
+    def is_valid_vector(self, vector: DesignVector, matrix_mask: MatrixSelectMask = None) -> bool:
+        return self.get_matrix_index(vector, matrix_mask=matrix_mask) is not None
+
+    def get_matrix_index(self, vector: DesignVector, matrix_mask: MatrixSelectMask = None) -> Optional[int]:
         if self._matrix is None:
             raise RuntimeError('Matrix not set!')
         if matrix_mask is None:
@@ -106,12 +130,8 @@ class Encoder:
         if len(i_mat) > 1:
             raise RuntimeError(f'Design vector maps to more than one matrix: {vector}')
 
-        # If no matrix can be found, impute
-        if len(i_mat) == 0:
-            return self._imputer.impute(vector, matrix_mask)
-
-        # Design vector directly maps to possible matrix
-        return vector, self._matrix[i_mat[0], :, :]
+        # Only if we find exactly one corresponding matrix, it is indeed a valid design vector
+        return i_mat[0] if len(i_mat) == 1 else None
 
     def _filter_design_variables(self, vector: PartialDesignVector) -> MatrixSelectMask:
         return filter_design_vectors(self._design_vectors, vector)
