@@ -6,6 +6,16 @@ __all__ = ['AutoModImputer']
 
 
 class AutoModImputer(Imputer):
+    """
+    Imputes design vectors by moving from the start or end to change design variables if they are too restrictive:
+    For each design variable (from start or end):
+    - Create a new design vector only fixing the values up to that design vector
+    - Filter out design vectors matching this partial vector
+    - If none were found: try to assign different values to the design variable (skipping the current value)
+      - If a value is found that matches 1 or more design vectors, stop the search for a different value
+    - If exactly one design vector was found to comply: return this as the imputed design vector
+    - If more than one design vectors were found: move to the next design variable
+    """
 
     def __init__(self, reverse=False):
         super().__init__()
