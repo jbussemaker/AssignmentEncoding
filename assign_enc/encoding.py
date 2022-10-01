@@ -2,8 +2,8 @@ import numpy as np
 from typing import *
 from dataclasses import dataclass
 
-__all__ = ['DiscreteDV', 'DesignVector', 'PartialDesignVector', 'MatrixSelectMask', 'Imputer', 'FirstImputer',
-           'Encoder', 'filter_design_vectors']
+__all__ = ['DiscreteDV', 'DesignVector', 'PartialDesignVector', 'MatrixSelectMask', 'Imputer', 'Encoder',
+           'filter_design_vectors']
 
 
 @dataclass
@@ -53,14 +53,6 @@ class Imputer:
     def impute(self, vector: DesignVector, matrix_mask: MatrixSelectMask) -> Tuple[DesignVector, np.ndarray]:
         """Return a new design vector and associated assignment matrix (n_src x n_tgt)"""
         raise NotImplementedError
-
-
-class FirstImputer(Imputer):
-    """Imputer that simply chooses the first possible matrix. Mainly for testing purposes."""
-
-    def impute(self, vector: DesignVector, matrix_mask: MatrixSelectMask) -> Tuple[DesignVector, np.ndarray]:
-        i_mat = np.where(matrix_mask)[0][0]
-        return self._return_imputation(i_mat)
 
 
 class Encoder:

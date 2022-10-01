@@ -1,6 +1,7 @@
 import numpy as np
 from assign_enc.matrix import *
 from assign_enc.encoding import *
+from assign_enc.imputation.first import *
 from assign_enc.assignment_manager import *
 
 
