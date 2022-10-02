@@ -5,7 +5,7 @@ from assign_enc.encodings.direct_matrix import *
 
 def test_encoding():
     for n in range(5, 15):
-        enc = DirectMatrixEncoder(FirstImputer())
+        enc = DirectMatrixEncoder(FirstImputer(), remove_gaps=False)
         n_src, n_tgt = 3, 4
         enc.matrix = matrix = np.random.randint(0, 3, (n, n_src, n_tgt))
 
@@ -24,3 +24,12 @@ def test_encoding():
             else:
                 assert np.all(imp_dv == enc._design_vectors[0, :])
                 assert np.all(mat == matrix[0, :, :])
+
+        n_unique = [len(np.unique(enc._design_vectors[:, i_dv])) for i_dv in range(enc._design_vectors.shape[1])]
+
+        enc_remove_gaps = DirectMatrixEncoder(FirstImputer())
+        enc_remove_gaps.matrix = matrix
+        n_unique_rg = [len(np.unique(enc_remove_gaps._design_vectors[:, i_dv]))
+                       for i_dv in range(enc_remove_gaps._design_vectors.shape[1])]
+        assert np.all(n_unique_rg == n_unique)
+        assert all([dv.n_opts == n_unique_rg[i] for i, dv in enumerate(enc_remove_gaps.design_vars)])

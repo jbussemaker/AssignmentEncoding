@@ -106,7 +106,55 @@ class DuplicateEncoder(Encoder):
 
 
 def test_duplicate_encoder():
-    matrix = np.random.randint(0, 3, (10, 2, 3), dtype=int)
+    matrix = np.random.randint(0, 3, (10, 2, 3))
     enc = DuplicateEncoder(Imputer())
     with pytest.raises(RuntimeError):
         enc.matrix = matrix
+
+
+class LowerThanZeroEncoder(Encoder):
+
+    def _encode(self, matrix: np.ndarray) -> np.ndarray:
+        n_mat = matrix.shape[0]
+        return np.column_stack([np.arange(0, n_mat)-1, np.arange(0, n_mat)])
+
+
+class HigherThanZeroEncoder(Encoder):
+
+    def _encode(self, matrix: np.ndarray) -> np.ndarray:
+        n_mat = matrix.shape[0]
+        return np.column_stack([np.arange(0, n_mat)+1, np.arange(0, n_mat)+1])
+
+
+def test_non_zero_encoder():
+    matrix = np.random.randint(0, 3, (10, 2, 3))
+    with pytest.raises(RuntimeError):
+        LowerThanZeroEncoder(FirstImputer(), matrix)
+    with pytest.raises(RuntimeError):
+        HigherThanZeroEncoder(FirstImputer(), matrix)
+
+
+def test_flatten_matrix():
+    matrix = np.random.randint(0, 3, (10, 4, 3))
+    flattened = flatten_matrix(matrix)
+    assert flattened.shape == (10, 4*3)
+
+
+def test_normalize_dvs():
+    des_vectors = np.array([
+        [0, 1, 0, 2, -1],
+        [1, 2, 3, 0,  0],
+        [2, 3, 2, 0,  1],
+    ])
+
+    assert np.all(Encoder._normalize_design_vectors(des_vectors, remove_gaps=False) == np.array([
+        [0, 0, 0, 2, 0],
+        [1, 1, 3, 0, 1],
+        [2, 2, 2, 0, 2],
+    ]))
+
+    assert np.all(Encoder._normalize_design_vectors(des_vectors) == np.array([
+        [0, 0, 0, 1, 0],
+        [1, 1, 2, 0, 1],
+        [2, 2, 1, 0, 2],
+    ]))

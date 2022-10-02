@@ -7,13 +7,13 @@ __all__ = ['DirectMatrixEncoder']
 class DirectMatrixEncoder(Encoder):
     """Defines one design variable for each matrix element."""
 
+    def __init__(self, *args, remove_gaps=True, **kwargs):
+        self.remove_gaps = remove_gaps
+        super().__init__(*args, **kwargs)
+
     def _encode(self, matrix: np.ndarray) -> np.ndarray:
-        n_mat, n_src, n_tgt = matrix.shape
-        n_dv = n_src*n_tgt
-
         # Map matrix elements to design vector values
-        design_vectors = matrix.reshape(n_mat, n_dv)
+        design_vectors = self.flatten_matrix(matrix)
 
-        # Move design vector values so that the first value is always 0
-        design_vectors -= np.min(design_vectors, axis=0)
-        return design_vectors
+        # Normalize design vectors (move to 0 and optionally remove value gaps)
+        return self._normalize_design_vectors(design_vectors, remove_gaps=self.remove_gaps)

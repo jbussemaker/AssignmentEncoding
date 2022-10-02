@@ -3,7 +3,7 @@ from typing import *
 from dataclasses import dataclass
 
 __all__ = ['DiscreteDV', 'DesignVector', 'PartialDesignVector', 'MatrixSelectMask', 'Imputer', 'Encoder',
-           'filter_design_vectors']
+           'filter_design_vectors', 'flatten_matrix']
 
 
 @dataclass
@@ -135,11 +135,42 @@ class Encoder:
         if np.unique(design_vectors, axis=0).shape[0] < design_vectors.shape[0]:
             raise RuntimeError('Not all design vectors are unique!')
 
+        # Check bounds
+        if np.min(design_vectors) != 0:
+            raise RuntimeError('Design variables should start at zero!')
+
         return [DiscreteDV(n_opts=np.max(design_vectors[:, i])+1) for i in range(design_vectors.shape[1])]
+
+    @staticmethod
+    def flatten_matrix(matrix: np.ndarray) -> np.ndarray:
+        return flatten_matrix(matrix)
+
+    @staticmethod
+    def _normalize_design_vectors(design_vectors: np.ndarray, remove_gaps=True) -> np.ndarray:
+        """Move lowest values to 0 and eliminate value gaps."""
+
+        # Move to zero
+        if not remove_gaps:
+            return design_vectors-np.min(design_vectors, axis=0)
+
+        # Remove gaps
+        design_vectors = design_vectors.copy()
+        for i_dv in range(design_vectors.shape[1]):
+            des_var = design_vectors[:, i_dv].copy()
+            unique_values = np.sort(np.unique(des_var))
+            for i_unique, value in enumerate(unique_values):
+                design_vectors[des_var == value, i_dv] = i_unique
+        return design_vectors
 
     def _encode(self, matrix: np.ndarray) -> np.ndarray:
         """
         Encode a matrix of size n_patterns x n_src x n_tgt as discrete design variables.
         Returns the list of design vectors for each matrix in a n_patterns x n_dv array.
+        Assumes values range between 0 and the number of options per design variable.
         """
         raise NotImplementedError
+
+
+def flatten_matrix(matrix: np.ndarray) -> np.ndarray:
+    """Helper function that flattens matrices in the higher dimensions: n_mat x n_src x n_tgt --> n_mat x n_src*n_tgt"""
+    return matrix.reshape(matrix.shape[0], np.prod(matrix.shape[1:]))
