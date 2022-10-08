@@ -1,4 +1,5 @@
 import math
+import numba
 import itertools
 import numpy as np
 from typing import *
@@ -253,46 +254,11 @@ class AggregateAssignmentMatrixGenerator:
             blocked[i_src, j_tgt] = True
         not_blocked = ~blocked
 
-        def _branch_matrices(src_remaining: List[int], current_matrix: np.ndarray, current_sum: np.ndarray):
-            if not src_remaining:
-                # Check if the matrix we are about to yield is new
-                matrix_hash = hash(current_matrix.tobytes())
-                if matrix_hash not in yielded_matrices:
-                    yielded_matrices.add(matrix_hash)
-                    yield current_matrix
-                return
-
-            # Get next src index to make a connection from
-            i = src_remaining[0]
-            next_src = src_remaining[1:]
-
-            # Check which targets we can assign to (check the three constraints)
-            tgt_can_receive_mask = current_sum < n_tgt_conn
-            tgt_can_repeat_mask = (current_matrix[i, :] == 0) | can_repeat[i, :]
-            tgt_not_blocked_mask = not_blocked[i, :]
-            tgt_possible_mask = tgt_can_receive_mask & tgt_can_repeat_mask & tgt_not_blocked_mask
-
-            # Loop over assignment targets
-            for j, is_possible in enumerate(tgt_possible_mask):
-                if not is_possible:
-                    continue
-
-                # Modify matrix (add 1 to assigned index)
-                next_matrix_sum = np.zeros((n_src, n_tgt), dtype=int)
-                next_matrix_sum[i, j] = 1
-                next_matrix = current_matrix+next_matrix_sum
-
-                next_sum_sum = np.zeros((n_tgt,), dtype=int)
-                next_sum_sum[j] = 1
-                next_sum = current_sum+next_sum_sum
-
-                # Branch out
-                yield from _branch_matrices(next_src, next_matrix, next_sum)
-
-        yielded_matrices = set()
-        init_matrix = np.zeros((n_src, n_tgt), dtype=int)
-        init_tgt_sum = np.zeros((n_tgt,), dtype=int)
-        yield from _branch_matrices(src_idx_list, init_matrix, init_tgt_sum)
+        # Generate matrices
+        if len(src_idx_list) == 0:
+            return
+        for matrix in yield_matrices(n_src, n_tgt, tuple(src_idx_list), n_tgt_conn, can_repeat, not_blocked):
+            yield matrix
 
     def _get_max_conn(self) -> int:
         """
@@ -332,3 +298,55 @@ class AggregateAssignmentMatrixGenerator:
             else:
                 n_appear += 1
         return min(n_appear, n_max)
+
+
+def yield_matrices(n_src: int, n_tgt: int, src_idx_list, n_tgt_conn, can_repeat, not_blocked):
+    n_src_idx = len(src_idx_list)
+
+    yielded_matrices = set()
+    init_matrix = np.zeros((n_src, n_tgt), dtype=np.int64)
+    init_tgt_sum = np.zeros((n_tgt,), dtype=np.int64)
+
+    for matrix in _branch_matrices(0, init_matrix, init_tgt_sum, n_src, n_tgt, n_src_idx, src_idx_list, n_tgt_conn, can_repeat, not_blocked):
+        matrix_hash = hash(matrix.tobytes())
+        if matrix_hash not in yielded_matrices:
+            yielded_matrices.add(matrix_hash)
+            yield matrix
+
+
+@numba.jit(nopython=True, cache=True)
+def _branch_matrices(i_src, current_matrix: np.ndarray, current_sum: np.ndarray, n_src, n_tgt, n_src_idx, src_idx_list, n_tgt_conn, can_repeat, not_blocked) -> List[np.ndarray]:
+    # Get next src index to make a connection from
+    i = src_idx_list[i_src]
+    i_next = i_src+1
+
+    # Check which targets we can assign to (check the three constraints)
+    tgt_can_receive_mask = current_sum < n_tgt_conn
+    tgt_can_repeat_mask = (current_matrix[i, :] == 0) | can_repeat[i, :]
+    tgt_not_blocked_mask = not_blocked[i, :]
+    tgt_possible_mask = tgt_can_receive_mask & tgt_can_repeat_mask & tgt_not_blocked_mask
+
+    # Loop over assignment targets
+    branched_matrices = []
+    for j, is_possible in enumerate(tgt_possible_mask):
+        if not is_possible:
+            continue
+
+        # Modify matrix (add 1 to assigned index)
+        next_matrix_sum = np.zeros((n_src, n_tgt), dtype=np.int64)
+        next_matrix_sum[i, j] = 1
+        next_matrix = current_matrix+next_matrix_sum
+
+        # Check if we can stop branching out
+        if i_next == n_src_idx:
+            branched_matrices.append(next_matrix)
+            continue
+
+        next_sum_sum = np.zeros((n_tgt,), dtype=np.int64)
+        next_sum_sum[j] = 1
+        next_sum = current_sum+next_sum_sum
+
+        # Branch out
+        for branched_matrix in _branch_matrices(i_next, next_matrix, next_sum, n_src, n_tgt, n_src_idx, src_idx_list, n_tgt_conn, can_repeat, not_blocked):
+            branched_matrices.append(branched_matrix)
+    return branched_matrices

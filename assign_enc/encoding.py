@@ -1,3 +1,4 @@
+import numba
 import numpy as np
 from typing import *
 from dataclasses import dataclass
@@ -20,15 +21,24 @@ MatrixSelectMask = np.ndarray
 
 
 def filter_design_vectors(design_vectors: np.ndarray, vector: PartialDesignVector) -> MatrixSelectMask:
+    int_vector = np.array([-1 if val is None else val for val in vector], dtype=int)
+    return _filter_design_vectors(design_vectors, int_vector)
+
+
+@numba.jit(nopython=True, cache=True)
+def _filter_design_vectors(design_vectors: np.ndarray, vector: np.ndarray) -> MatrixSelectMask:
     """Filter matrices along the first dimension given a design vector. Returns a mask of selected matrices."""
 
-    dv_mask = np.ones(design_vectors.shape, dtype=bool)
+    dv_mask = np.ones(design_vectors.shape, dtype=numba.types.bool_)
     for i, value in enumerate(vector):
-        if value is not None:
+        if value != -1:
             # Select design vectors that have the targeted value for this design variable
             dv_mask[:, i] = design_vectors[:, i] == value
 
-    return np.all(dv_mask, axis=1)
+    matrix_mask = np.ones((design_vectors.shape[0],), dtype=numba.types.bool_)
+    for i in range(design_vectors.shape[0]):
+        matrix_mask[i] = np.all(dv_mask[i, :])
+    return matrix_mask
 
 
 class Imputer:

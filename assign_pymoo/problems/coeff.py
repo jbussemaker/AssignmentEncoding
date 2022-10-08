@@ -58,5 +58,18 @@ if __name__ == '__main__':
     from assign_enc.imputation import *
     enc = DirectMatrixEncoder(FirstImputer())
 
-    prob = MediumExpCoeffProblem(enc)
-    prob.plot_points()
+    # Strange setup like this for profiling
+    import timeit
+
+    def _start_comp():
+        s = timeit.default_timer()
+        SmallExpCoeffProblem(enc).eval_points()
+        print(f'{timeit.default_timer()-s} sec')
+
+    def _do_real():
+        s = timeit.default_timer()
+        MediumExpCoeffProblem(enc).eval_points()
+        print(f'{timeit.default_timer()-s} sec')
+
+    _start_comp()
+    _do_real()
