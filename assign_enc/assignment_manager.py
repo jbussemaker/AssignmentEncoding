@@ -49,9 +49,9 @@ class AssignmentManager:
         imputed_vector, _ = self._encoder.get_matrix(vector, matrix_mask=matrix_mask)
         return imputed_vector
 
-    def get_conns(self, vector: DesignVector, src_exists: List[bool] = None, tgt_exists: List[bool] = None) \
-            -> Tuple[DesignVector, List[Tuple[Node, Node]]]:
-        """Get node connections for a given design vector"""
+    def get_matrix(self, vector: DesignVector, src_exists: List[bool] = None, tgt_exists: List[bool] = None) \
+            -> Tuple[DesignVector, np.ndarray]:
+        """Get connection matrix from a given design vector"""
 
         # Pre-filter matrices if (potentially) not all nodes exist
         matrix_mask = None
@@ -59,7 +59,26 @@ class AssignmentManager:
             matrix_mask = self._matrix_gen.filter_matrices(self.matrix, src_exists=src_exists, tgt_exists=tgt_exists)
 
         # Get matrix and impute design vector
-        imputed_vector, matrix = self._encoder.get_matrix(vector, matrix_mask=matrix_mask)
+        return self._encoder.get_matrix(vector, matrix_mask=matrix_mask)
+
+    def get_conn_idx(self, vector: DesignVector, src_exists: List[bool] = None, tgt_exists: List[bool] = None) \
+            -> Tuple[DesignVector, List[Tuple[int, int]]]:
+        """Get node connections for a given design vector"""
+
+        # Get matrix and impute design vector
+        imputed_vector, matrix = self.get_matrix(vector, src_exists=src_exists, tgt_exists=tgt_exists)
+
+        # Get connections from matrix
+        edges_idx = self._matrix_gen.get_conn_idx(matrix)
+
+        return imputed_vector, edges_idx
+
+    def get_conns(self, vector: DesignVector, src_exists: List[bool] = None, tgt_exists: List[bool] = None) \
+            -> Tuple[DesignVector, List[Tuple[Node, Node]]]:
+        """Get node connections for a given design vector"""
+
+        # Get matrix and impute design vector
+        imputed_vector, matrix = self.get_matrix(vector, src_exists=src_exists, tgt_exists=tgt_exists)
 
         # Get connections from matrix
         edges = self._matrix_gen.get_conns(matrix)

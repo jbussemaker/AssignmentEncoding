@@ -158,6 +158,15 @@ class AggregateAssignmentMatrixGenerator:
         for matrix in self:
             yield tuple(self.get_conns(matrix))
 
+    def get_conn_idx(self, matrix: np.ndarray) -> List[Tuple[int, int]]:
+        """Convert matrix to edge tuples"""
+        edges = []
+        for i_src in range(matrix.shape[0]):
+            for j_tgt in range(matrix.shape[1]):
+                for _ in range(matrix[i_src, j_tgt]):
+                    edges.append((i_src, j_tgt))
+        return edges
+
     def get_conns(self, matrix: np.ndarray) -> List[Tuple[Node, Node]]:
         """Convert matrix to edge tuples"""
         edges = []

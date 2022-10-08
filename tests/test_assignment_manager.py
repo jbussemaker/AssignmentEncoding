@@ -33,11 +33,15 @@ def test_manager():
     seen_dvs = set()
     for _ in range(100):
         dv = manager.get_random_design_vector()
+        imp_dv, conn_idx = manager.get_conn_idx(dv)
         imp_dv, conn = manager.get_conns(dv)
 
         assert imp_dv is not None
         assert conn is not None
         assert len(conn) > 0
+
+        assert len(conn_idx) == len(conn)
+        assert [(manager._matrix_gen.src[i], manager._matrix_gen.tgt[j]) for i, j in conn_idx] == conn
 
         seen_dvs.add(tuple(imp_dv))
 
