@@ -228,14 +228,14 @@ class AggregateAssignmentMatrixGenerator:
         """
 
         # Get list of source connection indices
+        n_src_conn = np.array(n_src_conn, dtype=np.int64)
         n_src = len(n_src_conn)
-        src_idx_list = []
-        for i_src, n_conn in enumerate(n_src_conn):
-            src_idx_list += [i_src]*n_conn
+        if n_src == 0:
+            return
 
         # Prepare connection targets
         n_tgt = len(n_tgt_conn)
-        n_tgt_conn = np.array(n_tgt_conn, dtype=int)
+        n_tgt_conn = np.array(n_tgt_conn, dtype=np.int64)
 
         # Check which connections cannot be repeated
         no_repeat = np.zeros((n_src, n_tgt), dtype=bool)
@@ -245,7 +245,6 @@ class AggregateAssignmentMatrixGenerator:
         for i_src, tgt in enumerate(self.tgt):
             if not tgt.rep:
                 no_repeat[:, i_src] = True
-        can_repeat = ~no_repeat
 
         # Check which connections cannot be made at all
         ex = self.ex
@@ -255,10 +254,7 @@ class AggregateAssignmentMatrixGenerator:
         not_blocked = ~blocked
 
         # Generate matrices
-        if len(src_idx_list) == 0:
-            return
-        for matrix in yield_matrices(n_src, n_tgt, tuple(src_idx_list), n_tgt_conn, can_repeat, not_blocked):
-            yield matrix
+        yield from yield_matrices(n_src, n_tgt, n_src_conn, n_tgt_conn, no_repeat, not_blocked)
 
     def _get_max_conn(self) -> int:
         """
@@ -300,53 +296,80 @@ class AggregateAssignmentMatrixGenerator:
         return min(n_appear, n_max)
 
 
-def yield_matrices(n_src: int, n_tgt: int, src_idx_list, n_tgt_conn, can_repeat, not_blocked):
-    n_src_idx = len(src_idx_list)
-
-    yielded_matrices = set()
+@numba.jit(nopython=True)
+def yield_matrices(n_src: int, n_tgt: int, n_src_conn, n_tgt_conn, no_repeat, not_blocked):
     init_matrix = np.zeros((n_src, n_tgt), dtype=np.int64)
     init_tgt_sum = np.zeros((n_tgt,), dtype=np.int64)
+    last_src_idx = n_src-1
+    last_tgt_idx = n_tgt-1
 
-    for matrix in _branch_matrices(0, init_matrix, init_tgt_sum, n_src, n_tgt, n_src_idx, src_idx_list, n_tgt_conn, can_repeat, not_blocked):
-        matrix_hash = hash(matrix.tobytes())
-        if matrix_hash not in yielded_matrices:
-            yielded_matrices.add(matrix_hash)
-            yield matrix
+    return _branch_matrices(0, init_matrix, init_tgt_sum, n_src_conn, n_tgt_conn, no_repeat, not_blocked, n_tgt,
+                            last_src_idx, last_tgt_idx)
 
 
-@numba.jit(nopython=True, cache=True)
-def _branch_matrices(i_src, current_matrix: np.ndarray, current_sum: np.ndarray, n_src, n_tgt, n_src_idx, src_idx_list, n_tgt_conn, can_repeat, not_blocked) -> List[np.ndarray]:
-    # Get next src index to make a connection from
-    i = src_idx_list[i_src]
-    i_next = i_src+1
+@numba.jit(nopython=True)
+def _branch_matrices(i_src, current_matrix, current_sum, n_src_conn, n_tgt_conn, no_repeat, not_blocked, n_tgt,
+                     last_src_idx, last_tgt_idx):
+    # Get total connections from this source
+    n_total_conns = n_src_conn[i_src]
 
-    # Check which targets we can assign to (check the three constraints)
-    tgt_can_receive_mask = current_sum < n_tgt_conn
-    tgt_can_repeat_mask = (current_matrix[i, :] == 0) | can_repeat[i, :]
-    tgt_not_blocked_mask = not_blocked[i, :]
-    tgt_possible_mask = tgt_can_receive_mask & tgt_can_repeat_mask & tgt_not_blocked_mask
+    # Determine the amount of target connections available (per target node) for the current source node
+    n_tgt_conn_avbl = n_tgt_conn-current_sum
 
-    # Loop over assignment targets
+    not_can_repeat = (no_repeat[i_src, :]) & (n_tgt_conn_avbl > 1)
+    n_tgt_conn_avbl[not_can_repeat] = 1
+    blocked = ~not_blocked[i_src, :]
+    n_tgt_conn_avbl[blocked] = 0
+
+    # Get number of minimum connections per target in order to be able to distribute all outgoing connections
+    # starting from the first target
+    reverse_cum_max_conn = np.cumsum(n_tgt_conn_avbl[::-1])[::-1]
+    n_tgt_conn_min = (n_total_conns-reverse_cum_max_conn)[1:]
+
+    # Loop over different source-to-targets connection patterns
     branched_matrices = []
-    for j, is_possible in enumerate(tgt_possible_mask):
-        if not is_possible:
-            continue
-
-        # Modify matrix (add 1 to assigned index)
-        next_matrix_sum = np.zeros((n_src, n_tgt), dtype=np.int64)
-        next_matrix_sum[i, j] = 1
-        next_matrix = current_matrix+next_matrix_sum
+    init_tgt_conns = np.zeros((n_tgt,), dtype=np.int64)
+    for tgt_conns in _get_branch_tgt_conns(
+            init_tgt_conns, 0, 0, n_total_conns, n_tgt_conn_avbl, n_tgt_conn_min, last_tgt_idx):
+        # Modify matrix
+        next_matrix = current_matrix.copy()
+        next_matrix[i_src, :] = tgt_conns
 
         # Check if we can stop branching out
-        if i_next == n_src_idx:
+        if i_src == last_src_idx:
             branched_matrices.append(next_matrix)
             continue
 
-        next_sum_sum = np.zeros((n_tgt,), dtype=np.int64)
-        next_sum_sum[j] = 1
-        next_sum = current_sum+next_sum_sum
+        # Modify matrix sum
+        next_sum = current_sum+tgt_conns
 
-        # Branch out
-        for branched_matrix in _branch_matrices(i_next, next_matrix, next_sum, n_src, n_tgt, n_src_idx, src_idx_list, n_tgt_conn, can_repeat, not_blocked):
+        # Branch out for next src node
+        for branched_matrix in _branch_matrices(i_src+1, next_matrix, next_sum, n_src_conn, n_tgt_conn, no_repeat,
+                                                not_blocked, n_tgt, last_src_idx, last_tgt_idx):
             branched_matrices.append(branched_matrix)
+
     return branched_matrices
+
+
+@numba.jit(nopython=True)
+def _get_branch_tgt_conns(tgt_conns, i_tgt, n_conn_set, n_total_conns, n_tgt_conn_avbl, n_tgt_conn_min, last_tgt_idx):
+    # Check if we already have distributed all connections
+    if n_conn_set == n_total_conns:
+        return [tgt_conns]
+    sub_tgt_conns = []
+
+    # Branch: add another connection to the current target index, if below max for this target
+    if tgt_conns[i_tgt] < n_tgt_conn_avbl[i_tgt]:
+        next_tgt_conns = tgt_conns.copy()
+        next_tgt_conns[i_tgt] += 1
+        for sub_tgt_conn in _get_branch_tgt_conns(
+                next_tgt_conns, i_tgt, n_conn_set+1, n_total_conns, n_tgt_conn_avbl, n_tgt_conn_min, last_tgt_idx):
+            sub_tgt_conns.append(sub_tgt_conn)
+
+    # Branch: move to next target, if we are not at the end and if we are above the minimum connections
+    if i_tgt < last_tgt_idx and n_conn_set >= n_tgt_conn_min[i_tgt]:
+        for sub_tgt_conn in _get_branch_tgt_conns(
+                tgt_conns, i_tgt+1, n_conn_set, n_total_conns, n_tgt_conn_avbl, n_tgt_conn_min, last_tgt_idx):
+            sub_tgt_conns.append(sub_tgt_conn)
+
+    return sub_tgt_conns

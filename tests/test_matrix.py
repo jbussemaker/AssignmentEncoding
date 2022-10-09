@@ -76,7 +76,9 @@ def test_iter_order():
 
 
 def _assert_matrix(gen: AggregateAssignmentMatrixGenerator, matrix_gen, assert_matrix: np.ndarray):
-    assert np.all(gen._agg_matrices(matrix_gen) == assert_matrix)
+    agg_matrix = gen._agg_matrices(matrix_gen)
+    assert agg_matrix.shape == assert_matrix.shape
+    assert np.all(agg_matrix == assert_matrix)
 
 
 def test_iter_permuted_conns(nodes):
@@ -106,6 +108,16 @@ def test_iter_permuted_conns(nodes):
             [[1, 0], [0, 2]],
             [[0, 1], [1, 1]],
         ]))
+
+
+def test_iter_matrix_zero_conn():
+    gen = AggregateAssignmentMatrixGenerator(src=[Node([0, 1]), Node([0, 1])], tgt=[Node([0, 1])])
+    _assert_matrix(gen, gen._iter_matrices([1, 0], [1]), np.array([
+        [[1], [0]],
+    ]))
+    _assert_matrix(gen, gen._iter_matrices([0, 0], [0]), np.array([
+        [[0], [0]],
+    ]))
 
 
 def test_iter_edges():
@@ -215,3 +227,115 @@ def test_filter_matrices():
                   np.array([True, False, False, True, False, False], dtype=bool))
     assert np.all(gen.filter_matrices(matrix, tgt_exists=[False, True]) ==
                   np.array([True, False, False, True, False, False], dtype=bool))
+
+
+def test_matrix_all_inf():
+    gen = AggregateAssignmentMatrixGenerator(src=[Node(min_conn=0), Node(min_conn=0)],
+                                             tgt=[Node(min_conn=0), Node(min_conn=0)])
+
+    _assert_matrix(gen, gen, np.array([  # 26 diff
+        [[0, 0], [0, 0]],
+        [[0, 0], [0, 1]],
+        [[0, 0], [1, 0]],
+        [[0, 0], [0, 2]],
+        [[0, 0], [1, 1]],
+        [[0, 0], [2, 0]],
+
+        [[0, 1], [0, 0]],
+        [[1, 0], [0, 0]],
+        [[0, 1], [0, 1]],
+        [[1, 0], [0, 1]],
+        [[0, 1], [1, 0]],
+        [[1, 0], [1, 0]],
+        [[1, 0], [0, 2]],
+        [[0, 1], [1, 1]],
+        [[1, 0], [1, 1]],
+        [[0, 1], [2, 0]],
+
+        [[0, 2], [0, 0]],
+        [[1, 1], [0, 0]],
+        [[2, 0], [0, 0]],
+        [[1, 1], [0, 1]],
+        [[0, 2], [1, 0]],
+        [[2, 0], [0, 1]],
+        [[1, 1], [1, 0]],
+        [[2, 0], [0, 2]],
+        [[1, 1], [1, 1]],
+        [[0, 2], [2, 0]],
+    ]))
+
+
+def test_matrix_all_inf_no_repeat():
+    gen = AggregateAssignmentMatrixGenerator(
+        src=[Node(min_conn=0, repeated_allowed=False), Node(min_conn=0, repeated_allowed=False)],
+        tgt=[Node(min_conn=0, repeated_allowed=False), Node(min_conn=0, repeated_allowed=False)],
+    )
+
+    _assert_matrix(gen, gen, np.array([  # 16 diff
+        [[0, 0], [0, 0]],
+        [[0, 0], [0, 1]],
+        [[0, 0], [1, 0]],
+        [[0, 0], [1, 1]],
+
+        [[0, 1], [0, 0]],
+        [[1, 0], [0, 0]],
+        [[0, 1], [0, 1]],
+        [[1, 0], [0, 1]],
+        [[0, 1], [1, 0]],
+        [[1, 0], [1, 0]],
+        [[0, 1], [1, 1]],
+        [[1, 0], [1, 1]],
+
+        [[1, 1], [0, 0]],
+        [[1, 1], [0, 1]],
+        [[1, 1], [1, 0]],
+        [[1, 1], [1, 1]],
+    ]))
+
+
+def test_matrix_all_inf_no_repeat_23():
+    gen = AggregateAssignmentMatrixGenerator(src=[Node(min_conn=0, repeated_allowed=False) for _ in range(2)],
+                                             tgt=[Node(min_conn=0, repeated_allowed=False) for _ in range(3)])
+    assert gen.max_conn == 3
+    assert list(gen._iter_conn_slots(gen.src)) == [
+        (0, 0), (0, 1), (0, 2), (0, 3),
+        (1, 0), (1, 1), (1, 2), (1, 3),
+        (2, 0), (2, 1), (2, 2), (2, 3),
+        (3, 0), (3, 1), (3, 2), (3, 3),
+    ]
+
+    assert list(gen._iter_conn_slots(gen.tgt, is_src=False, n=2)) == [
+        (0, 0, 2), (0, 1, 1), (0, 2, 0), (1, 0, 1), (1, 1, 0), (2, 0, 0),
+    ]
+
+    _assert_matrix(gen, gen._iter_matrices([0, 2], [0, 0, 2]), np.empty((0, 2, 3)))
+    _assert_matrix(gen, gen._iter_matrices([0, 2], [0, 2, 0]), np.empty((0, 2, 3)))
+    _assert_matrix(gen, gen._iter_matrices([0, 2], [2, 0, 0]), np.empty((0, 2, 3)))
+    _assert_matrix(gen, gen._iter_matrices([0, 2], [0, 1, 1]), np.array([[[0, 0, 0], [0, 1, 1]]]))
+    _assert_matrix(gen, gen._iter_matrices([0, 2], [1, 1, 0]), np.array([[[0, 0, 0], [1, 1, 0]]]))
+    _assert_matrix(gen, gen._iter_matrices([0, 2], [1, 0, 1]), np.array([[[0, 0, 0], [1, 0, 1]]]))
+
+    assert list(gen._iter_conn_slots(gen.tgt, is_src=False, n=3)) == [
+        (0, 1, 2), (0, 2, 1), (1, 0, 2), (1, 1, 1), (1, 2, 0), (2, 0, 1), (2, 1, 0),
+    ]
+    _assert_matrix(gen, gen._iter_matrices([0, 3], [0, 1, 2]), np.empty((0, 2, 3)))
+    _assert_matrix(gen, gen._iter_matrices([0, 3], [1, 1, 1]), np.array([[[0, 0, 0], [1, 1, 1]]]))
+
+    gen0 = AggregateAssignmentMatrixGenerator(src=[Node([0]), Node(min_conn=0, repeated_allowed=False)],
+                                              tgt=[Node(min_conn=0, repeated_allowed=False) for _ in range(3)])
+    assert gen0.max_conn == 3
+    assert list(gen0._iter_conn_slots(gen0.src)) == [
+        (0, 0), (0, 1), (0, 2), (0, 3),
+    ]
+    _assert_matrix(gen0, gen0._iter_matrices((0, 2), (1, 0, 1)), np.array([[[0, 0, 0], [1, 0, 1]]]))
+
+    _assert_matrix(gen0, gen0, np.array([
+        [[0, 0, 0], [0, 0, 0]],
+        [[0, 0, 0], [0, 0, 1]],
+        [[0, 0, 0], [0, 1, 0]],
+        [[0, 0, 0], [1, 0, 0]],
+        [[0, 0, 0], [0, 1, 1]],
+        [[0, 0, 0], [1, 0, 1]],
+        [[0, 0, 0], [1, 1, 0]],
+        [[0, 0, 0], [1, 1, 1]],
+    ]))
