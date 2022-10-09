@@ -252,7 +252,8 @@ class AggregateAssignmentMatrixGenerator:
 
             yield tuple(n_conn_nodes)
 
-    def validate_matrix(self, matrix: np.ndarray, src_exists: List[bool] = None, tgt_exists: List[bool] = None) -> bool:
+    def validate_matrix(self, matrix: np.ndarray, src_exists: Union[List[bool], np.ndarray] = None,
+                        tgt_exists: Union[List[bool], np.ndarray] = None) -> bool:
         """Checks whether a connection matrix is valid"""
 
         # Check if any connections have repetitions that are not allowed

@@ -125,7 +125,7 @@ class LazyAssignmentManager(AssignmentManagerBase):
 
     @property
     def design_vars(self):
-        raise NotImplementedError
+        return self._encoder.design_vars
 
     def correct_vector(self, vector: DesignVector, src_exists: List[bool] = None, tgt_exists: List[bool] = None) \
             -> DesignVector:

@@ -15,7 +15,7 @@ class DiscreteDV:
         return np.random.randint(0, self.n_opts)
 
 
-DesignVector = List[int]
+DesignVector = Union[List[int], np.ndarray]
 PartialDesignVector = List[Optional[int]]
 MatrixSelectMask = np.ndarray
 
