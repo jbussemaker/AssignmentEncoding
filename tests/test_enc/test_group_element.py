@@ -1,6 +1,6 @@
 import numpy as np
-from assign_enc.imputation.first import *
-from assign_enc.encodings.group_element import *
+from assign_enc.eager.imputation.first import *
+from assign_enc.eager.encodings.group_element import *
 
 
 def test_element_grouper():

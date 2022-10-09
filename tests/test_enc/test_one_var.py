@@ -1,6 +1,6 @@
 import numpy as np
-from assign_enc.imputation.first import *
-from assign_enc.encodings.one_var import *
+from assign_enc.eager.imputation.first import *
+from assign_enc.eager.encodings.one_var import *
 
 
 def test_encoding():

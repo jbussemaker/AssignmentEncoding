@@ -1,12 +1,12 @@
 import numpy as np
 from assign_enc.encoding import *
-from assign_enc.imputation.first import *
-from assign_enc.encodings.group_amount import *
+from assign_enc.eager.imputation.first import *
+from assign_enc.eager.encodings import *
 
 
 def test_encoder():
     for _ in range(10):
-        matrix = np.random.randint(0, 3, (10, 4, 3))
+        matrix = np.random.randint(0, 5, (10, 4, 3))
         n_tot = np.sum(flatten_matrix(matrix), axis=1)
 
         encoder = AmountFirstGroupedEncoder(FirstImputer(), TotalAmountGrouper(), OneVarLocationGrouper())

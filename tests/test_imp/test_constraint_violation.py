@@ -1,6 +1,6 @@
 import numpy as np
-from assign_enc.encodings.direct_matrix import *
-from assign_enc.imputation.constraint_violation import *
+from assign_enc.eager.encodings.direct_matrix import *
+from assign_enc.eager.imputation.constraint_violation import *
 
 
 def test_imputer():

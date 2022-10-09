@@ -1,7 +1,7 @@
 import itertools
 import numpy as np
 from assign_enc.encoding import *
-from assign_enc.encodings.grouped_base import *
+from assign_enc.eager.encodings.grouped_base import *
 
 __all__ = ['AmountGrouper', 'LocationGrouper', 'AmountFirstGroupedEncoder', 'TotalAmountGrouper', 'SourceAmountGrouper',
            'SourceAmountFlattenedGrouper', 'TargetAmountGrouper', 'TargetAmountFlattenedGrouper',

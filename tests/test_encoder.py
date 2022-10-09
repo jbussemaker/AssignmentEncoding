@@ -1,7 +1,7 @@
 import pytest
 import numpy as np
 from assign_enc.encoding import *
-from assign_enc.imputation.first import *
+from assign_enc.eager.imputation.first import *
 
 
 def test_filter_design_vectors():

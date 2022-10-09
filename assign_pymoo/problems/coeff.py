@@ -54,8 +54,8 @@ class MediumExpCoeffProblem(SmallExpCoeffProblem):
 
 
 if __name__ == '__main__':
-    from assign_enc.encodings import *
-    from assign_enc.imputation import *
+    from assign_enc.eager.encodings import *
+    from assign_enc.eager.imputation import *
     enc = DirectMatrixEncoder(FirstImputer())
 
     # Strange setup like this for profiling

@@ -1,5 +1,5 @@
 import numpy as np
-from assign_enc.encodings.grouped_base import *
+from assign_enc.eager.encodings.grouped_base import *
 
 __all__ = ['ElementGroupedEncoder']
 

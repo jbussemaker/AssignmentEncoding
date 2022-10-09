@@ -1,8 +1,8 @@
 import pytest
 import itertools
 import numpy as np
-from assign_enc.imputation.first import *
-from assign_enc.encodings.grouped_base import *
+from assign_enc.eager.imputation.first import *
+from assign_enc.eager.encodings.grouped_base import *
 
 
 class ProductEncoder(GroupedEncoder):
