@@ -76,6 +76,8 @@ class AggregateAssignmentMatrixGenerator:
         self._min_src_appear = None
         self._max_src_appear = None
         self._max_tgt_appear = None
+        self._no_repeat_mat = None
+        self._conn_blocked_mat = None
 
     @property
     def ex(self) -> Optional[Set[Tuple[int, int]]]:
@@ -91,6 +93,7 @@ class AggregateAssignmentMatrixGenerator:
             self._ex = set([(src_idx[ex[0]], tgt_idx[ex[1]]) for ex in excluded])
             if len(self._ex) == 0:
                 self._ex = None
+        self._conn_blocked_mat = None
 
     @property
     def max_conn(self):
@@ -116,9 +119,32 @@ class AggregateAssignmentMatrixGenerator:
             self._max_tgt_appear = self._get_max_appear(self.src)
         return self._max_tgt_appear
 
+    @property
+    def no_repeat_mask(self):
+        """Matrix mask that specifies whether for the connections repetition is not allowed (True value)"""
+        if self._no_repeat_mat is None:
+            self._no_repeat_mat = no_repeat = np.zeros((len(self.src), len(self.tgt)), dtype=bool)
+            for i_src, src in enumerate(self.src):
+                if not src.rep:
+                    no_repeat[i_src, :] = True
+            for i_src, tgt in enumerate(self.tgt):
+                if not tgt.rep:
+                    no_repeat[:, i_src] = True
+        return self._no_repeat_mat
+
+    @property
+    def conn_blocked_mask(self):
+        """Mask that specifies whether connections are blocked (True) or not (False)"""
+        if self._conn_blocked_mat is None:
+            ex = self.ex
+            self._conn_blocked_mat = blocked = np.zeros((len(self.src), len(self.tgt)), dtype=bool)
+            for i_src, j_tgt in ex or []:
+                blocked[i_src, j_tgt] = True
+        return self._conn_blocked_mat
+
     def __iter__(self) -> Generator[np.array, None, None]:
-        for src_nr in self._iter_sources():  # Iterate over source node nrs
-            for tgt_nr in self._iter_targets(n_source=sum(src_nr)):  # Iterate over target node nrs
+        for src_nr in self.iter_sources():  # Iterate over source node nrs
+            for tgt_nr in self.iter_targets(n_source=sum(src_nr)):  # Iterate over target node nrs
                 yield from self._iter_matrices(src_nr, tgt_nr)  # Iterate over assignment matrices
 
     def get_agg_matrix(self, cache=False):
@@ -200,10 +226,10 @@ class AggregateAssignmentMatrixGenerator:
                     edges.append((src, tgt))
         return edges
 
-    def _iter_sources(self):
+    def iter_sources(self):
         yield from self._iter_conn_slots(self.src)
 
-    def _iter_targets(self, n_source):
+    def iter_targets(self, n_source):
         yield from self._iter_conn_slots(self.tgt, is_src=False, n=n_source)
 
     def _iter_conn_slots(self, nodes: List[Node], is_src=True, n=None):
@@ -225,6 +251,48 @@ class AggregateAssignmentMatrixGenerator:
                 continue
 
             yield tuple(n_conn_nodes)
+
+    def validate_matrix(self, matrix: np.ndarray, src_exists: List[bool] = None, tgt_exists: List[bool] = None) -> bool:
+        """Checks whether a connection matrix is valid"""
+
+        # Check if any connections have repetitions that are not allowed
+        if np.any((matrix > 1) & self.no_repeat_mask):
+            return False
+
+        # Check if any connections are made that are not allowed
+        if np.any((matrix > 0) & self.conn_blocked_mask):
+            return False
+
+        # Check total number of connections
+        n_min_tot = self.min_src_appear
+        if n_min_tot > 0 and np.sum(matrix) < n_min_tot:
+            return False
+
+        # Check number of source connections
+        max_conn = self.max_src_appear
+        for i, n_src in enumerate(np.sum(matrix, axis=1)):
+            if src_exists is not None and not src_exists[i] and n_src > 0:
+                return False
+            if not self._check_conns(n_src, self.src[i], max_conn):
+                return False
+
+        # Check number of target connections
+        max_conn = self.max_tgt_appear
+        for i, n_tgt in enumerate(np.sum(matrix, axis=0)):
+            if tgt_exists is not None and not tgt_exists[i] and n_tgt > 0:
+                return False
+            if not self._check_conns(n_tgt, self.tgt[i], max_conn):
+                return False
+
+        return True
+
+    @staticmethod
+    def _check_conns(n_conns: int, node: Node, max_conn: int) -> bool:
+        if n_conns > max_conn:
+            return False
+        if node.max_inf:
+            return node.min_conns <= n_conns
+        return n_conns in node.conns
 
     @staticmethod
     def _get_conns(node: Node, max_conn: int):
@@ -258,24 +326,8 @@ class AggregateAssignmentMatrixGenerator:
         n_tgt = len(n_tgt_conn)
         n_tgt_conn = np.array(n_tgt_conn, dtype=np.int64)
 
-        # Check which connections cannot be repeated
-        no_repeat = np.zeros((n_src, n_tgt), dtype=bool)
-        for i_src, src in enumerate(self.src):
-            if not src.rep:
-                no_repeat[i_src, :] = True
-        for i_src, tgt in enumerate(self.tgt):
-            if not tgt.rep:
-                no_repeat[:, i_src] = True
-
-        # Check which connections cannot be made at all
-        ex = self.ex
-        blocked = np.zeros((n_src, n_tgt), dtype=bool)
-        for i_src, j_tgt in ex or []:
-            blocked[i_src, j_tgt] = True
-        not_blocked = ~blocked
-
         # Generate matrices
-        yield from yield_matrices(n_src, n_tgt, n_src_conn, n_tgt_conn, no_repeat, not_blocked)
+        yield from yield_matrices(n_src, n_tgt, n_src_conn, n_tgt_conn, self.no_repeat_mask, self.conn_blocked_mask)
 
     def _get_max_conn(self) -> int:
         """
@@ -318,18 +370,18 @@ class AggregateAssignmentMatrixGenerator:
 
 
 @numba.jit(nopython=True)
-def yield_matrices(n_src: int, n_tgt: int, n_src_conn, n_tgt_conn, no_repeat, not_blocked):
+def yield_matrices(n_src: int, n_tgt: int, n_src_conn, n_tgt_conn, no_repeat, blocked):
     init_matrix = np.zeros((n_src, n_tgt), dtype=np.int64)
     init_tgt_sum = np.zeros((n_tgt,), dtype=np.int64)
     last_src_idx = n_src-1
     last_tgt_idx = n_tgt-1
 
-    return _branch_matrices(0, init_matrix, init_tgt_sum, n_src_conn, n_tgt_conn, no_repeat, not_blocked, n_tgt,
+    return _branch_matrices(0, init_matrix, init_tgt_sum, n_src_conn, n_tgt_conn, no_repeat, blocked, n_tgt,
                             last_src_idx, last_tgt_idx)
 
 
 @numba.jit(nopython=True)
-def _branch_matrices(i_src, current_matrix, current_sum, n_src_conn, n_tgt_conn, no_repeat, not_blocked, n_tgt,
+def _branch_matrices(i_src, current_matrix, current_sum, n_src_conn, n_tgt_conn, no_repeat, blocked, n_tgt,
                      last_src_idx, last_tgt_idx):
     # Get total connections from this source
     n_total_conns = n_src_conn[i_src]
@@ -339,8 +391,7 @@ def _branch_matrices(i_src, current_matrix, current_sum, n_src_conn, n_tgt_conn,
 
     not_can_repeat = (no_repeat[i_src, :]) & (n_tgt_conn_avbl > 1)
     n_tgt_conn_avbl[not_can_repeat] = 1
-    blocked = ~not_blocked[i_src, :]
-    n_tgt_conn_avbl[blocked] = 0
+    n_tgt_conn_avbl[blocked[i_src, :]] = 0
 
     # Get number of minimum connections per target in order to be able to distribute all outgoing connections
     # starting from the first target
@@ -366,7 +417,7 @@ def _branch_matrices(i_src, current_matrix, current_sum, n_src_conn, n_tgt_conn,
 
         # Branch out for next src node
         for branched_matrix in _branch_matrices(i_src+1, next_matrix, next_sum, n_src_conn, n_tgt_conn, no_repeat,
-                                                not_blocked, n_tgt, last_src_idx, last_tgt_idx):
+                                                blocked, n_tgt, last_src_idx, last_tgt_idx):
             branched_matrices.append(branched_matrix)
 
     return branched_matrices

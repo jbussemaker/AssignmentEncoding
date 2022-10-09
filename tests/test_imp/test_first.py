@@ -20,7 +20,7 @@ def test_imputer():
 
 
 def test_imputer_masked():
-    matrix = np.random.randint(0, 3, (10, 3, 4))
+    matrix = np.random.randint(0, 5, (10, 3, 4))
     encoder = DirectMatrixEncoder(FirstImputer(), matrix)
 
     for _ in range(10):

@@ -18,11 +18,13 @@ class LazyEncoder:
         self.src = None
         self.tgt = None
         self._ex = None
+        self._matrix_gen = None
 
     def set_nodes(self, src: List[Node], tgt: List[Node], excluded: List[Tuple[Node, Node]] = None):
         self.src = src
         self.tgt = tgt
         self.ex = excluded
+        self._matrix_gen = AggregateAssignmentMatrixGenerator(src, tgt, excluded=excluded)
         self._encode()
 
     @property

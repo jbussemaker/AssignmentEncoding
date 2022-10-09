@@ -1,6 +1,4 @@
-import os
 import pytest
-import timeit
 import numpy as np
 from assign_enc.matrix import *
 
@@ -34,24 +32,24 @@ def test_conn_override_map(nodes, inf_nodes):
 
 
 def test_iter_conns(nodes, inf_nodes):
-    assert set(AggregateAssignmentMatrixGenerator(src=[nodes[0]], tgt=[nodes[1]])._iter_sources()) == {
+    assert set(AggregateAssignmentMatrixGenerator(src=[nodes[0]], tgt=[nodes[1]]).iter_sources()) == {
         (1,),
     }
-    assert set(AggregateAssignmentMatrixGenerator(src=[inf_nodes[0]], tgt=[nodes[1]])._iter_sources()) == {
+    assert set(AggregateAssignmentMatrixGenerator(src=[inf_nodes[0]], tgt=[nodes[1]]).iter_sources()) == {
         (1,),
     }
 
     obj = Node([1, 2])
-    assert set(AggregateAssignmentMatrixGenerator(src=[obj], tgt=[nodes[1]])._iter_sources()) == {
+    assert set(AggregateAssignmentMatrixGenerator(src=[obj], tgt=[nodes[1]]).iter_sources()) == {
         (1,),
     }
 
     obj2 = Node([0, 1, 2])
-    assert set(AggregateAssignmentMatrixGenerator(src=[obj, obj2], tgt=[nodes[1]])._iter_sources()) == {
+    assert set(AggregateAssignmentMatrixGenerator(src=[obj, obj2], tgt=[nodes[1]]).iter_sources()) == {
         (1, 0), (1, 1),
     }
 
-    assert set(AggregateAssignmentMatrixGenerator(src=[obj, inf_nodes[0]], tgt=[nodes[1]])._iter_sources()) == {
+    assert set(AggregateAssignmentMatrixGenerator(src=[obj, inf_nodes[0]], tgt=[nodes[1]]).iter_sources()) == {
         (1, 1),
     }
 
@@ -98,6 +96,9 @@ def test_iter_permuted_conns(nodes):
         [[1, 0], [0, 1]],
         [[0, 1], [1, 0]],
     ]))
+    assert gen.validate_matrix(np.array([[1, 0], [0, 1]]))
+    assert not gen.validate_matrix(np.array([[1, 0], [1, 0]]))
+    assert not gen.validate_matrix(np.array([[1, 1], [0, 0]]))
 
     gen.ex = [(gen.src[1], gen.tgt[0])]
     _assert_matrix(gen, gen._iter_matrices([1, 1], [1, 1]), np.array([
@@ -148,6 +149,7 @@ def test_iter_edges():
         }
 
     obj1.rep = False
+    gen._no_repeat_mat = None
     for _ in range(10):
         assert set(gen.iter_conns()) == {
             ((obj1, obj4), (obj2, obj4)),
@@ -215,11 +217,11 @@ def test_filter_matrices():
         [[1, 1], [0, 1]],
         [[0, 2], [1, 0]],
     ]))
-    s = timeit.default_timer()
     matrix = gen.get_agg_matrix()
-    t0 = timeit.default_timer()-s
     all_mask = np.ones((matrix.shape[0],), dtype=bool)
     none_mask = np.zeros((matrix.shape[0],), dtype=bool)
+    for i in range(matrix.shape[0]):
+        assert gen.validate_matrix(matrix[i, :, :])
 
     assert np.all(gen.filter_matrices(matrix, [True, True], [True, True]) == all_mask)
     assert np.all(gen.filter_matrices(matrix) == all_mask)
@@ -231,6 +233,9 @@ def test_filter_matrices():
                   np.array([True, False, False, True, False, False], dtype=bool))
     assert np.all(gen.filter_matrices(matrix, tgt_exists=[False, True]) ==
                   np.array([True, False, False, True, False, False], dtype=bool))
+
+    assert gen.validate_matrix(matrix[0, :, :], tgt_exists=[False, True])
+    assert not gen.validate_matrix(matrix[1, :, :], tgt_exists=[False, True])
 
     matrix2 = gen.get_agg_matrix(cache=True)
     assert np.all(matrix == matrix2)
@@ -271,6 +276,9 @@ def test_matrix_all_inf():
         [[0, 2], [2, 0]],
     ]))
 
+    for matrix in gen:
+        assert gen.validate_matrix(matrix)
+
 
 def test_matrix_all_inf_no_repeat():
     gen = AggregateAssignmentMatrixGenerator(
@@ -298,6 +306,9 @@ def test_matrix_all_inf_no_repeat():
         [[1, 1], [1, 0]],
         [[1, 1], [1, 1]],
     ]))
+
+    for matrix in gen:
+        assert gen.validate_matrix(matrix)
 
 
 def test_matrix_all_inf_no_repeat_23():
