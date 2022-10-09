@@ -1,4 +1,6 @@
+import os
 import pytest
+import timeit
 import numpy as np
 from assign_enc.matrix import *
 
@@ -213,7 +215,9 @@ def test_filter_matrices():
         [[1, 1], [0, 1]],
         [[0, 2], [1, 0]],
     ]))
+    s = timeit.default_timer()
     matrix = gen.get_agg_matrix()
+    t0 = timeit.default_timer()-s
     all_mask = np.ones((matrix.shape[0],), dtype=bool)
     none_mask = np.zeros((matrix.shape[0],), dtype=bool)
 
@@ -227,6 +231,9 @@ def test_filter_matrices():
                   np.array([True, False, False, True, False, False], dtype=bool))
     assert np.all(gen.filter_matrices(matrix, tgt_exists=[False, True]) ==
                   np.array([True, False, False, True, False, False], dtype=bool))
+
+    matrix2 = gen.get_agg_matrix(cache=True)
+    assert np.all(matrix == matrix2)
 
 
 def test_matrix_all_inf():

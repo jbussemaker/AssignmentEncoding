@@ -44,11 +44,11 @@ class AssignmentManager(AssignmentManagerBase):
     """
 
     def __init__(self, src: List[Node], tgt: List[Node], encoder: EagerEncoder,
-                 excluded: List[Tuple[Node, Node]] = None):
+                 excluded: List[Tuple[Node, Node]] = None, cache=True):
         self._matrix_gen = gen = AggregateAssignmentMatrixGenerator(src, tgt, excluded=excluded)
         self._encoder = encoder
 
-        encoder.matrix = gen.get_agg_matrix()
+        encoder.matrix = gen.get_agg_matrix(cache=cache)
 
     @property
     def matrix_gen(self) -> AggregateAssignmentMatrixGenerator:

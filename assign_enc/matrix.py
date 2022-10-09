@@ -1,5 +1,7 @@
+import os
 import math
 import numba
+import hashlib
 import itertools
 import numpy as np
 from typing import *
@@ -119,8 +121,27 @@ class AggregateAssignmentMatrixGenerator:
             for tgt_nr in self._iter_targets(n_source=sum(src_nr)):  # Iterate over target node nrs
                 yield from self._iter_matrices(src_nr, tgt_nr)  # Iterate over assignment matrices
 
-    def get_agg_matrix(self):
-        return self._agg_matrices(self)
+    def get_agg_matrix(self, cache=False):
+        cache_path = self._cache_path(f'{self._get_cache_key()}.npy')
+        if cache and os.path.exists(cache_path):
+            return np.load(cache_path)
+
+        agg_matrix = self._agg_matrices(self)
+        os.makedirs(os.path.dirname(cache_path), exist_ok=True)
+        np.save(cache_path, agg_matrix, allow_pickle=False)
+        return agg_matrix
+
+    def _get_cache_key(self):
+        src_cache_key = ';'.join([repr(src) for src in self.src])
+        tgt_cache_key = ';'.join([repr(tgt) for tgt in self.tgt])
+        excluded_cache_key = ';'.join([f'{tup[0]:d},{tup[1]:d}' for tup in sorted([ex for ex in self._ex])]) \
+            if self._ex is not None else ''
+        cache_str = '||'.join([src_cache_key, tgt_cache_key, excluded_cache_key])
+        return hashlib.md5(cache_str.encode('utf-8')).hexdigest()
+
+    def _cache_path(self, sub_path=None):
+        cache_folder = os.path.join(os.path.dirname(__file__), '.matrix_cache')
+        return cache_folder if sub_path is None else os.path.join(cache_folder, sub_path)
 
     def _agg_matrices(self, matrix_gen):
         """Aggregate generated matrices into one big matrix"""
