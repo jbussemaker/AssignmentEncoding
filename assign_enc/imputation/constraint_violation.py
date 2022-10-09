@@ -5,7 +5,7 @@ from assign_enc.encoding import *
 __all__ = ['ConstraintViolationImputer']
 
 
-class ConstraintViolationImputer(Imputer):
+class ConstraintViolationImputer(EagerImputer):
     """Does not do imputation, but sends a matrix with -1 as values to indicate an invalid design point.
     The optimization problem should represent this as a violated constraint."""
 

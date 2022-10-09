@@ -5,7 +5,7 @@ from assign_enc.encoding import *
 __all__ = ['ClosestImputer']
 
 
-class ClosestImputer(Imputer):
+class ClosestImputer(EagerImputer):
     """Imputes by looking for the closest valid design vector based on euclidean or Mahattan distance."""
 
     def __init__(self, euclidean=True):

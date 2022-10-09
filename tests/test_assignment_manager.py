@@ -5,7 +5,7 @@ from assign_enc.imputation.first import *
 from assign_enc.assignment_manager import *
 
 
-class FlattenEncoder(Encoder):
+class FlattenEncoder(EagerEncoder):
 
     def _encode(self, matrix: np.ndarray) -> np.ndarray:
         n_mat, n_src, n_tgt = matrix.shape

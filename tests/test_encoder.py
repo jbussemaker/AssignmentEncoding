@@ -26,7 +26,7 @@ def test_filter_design_vectors():
     _assert_indices([0, 1, None, 3], [2])
 
 
-class DirectEncoder(Encoder):
+class DirectEncoder(EagerEncoder):
 
     def _encode(self, matrix: np.ndarray) -> np.ndarray:
         n_mat = matrix.shape[0]
@@ -34,12 +34,12 @@ class DirectEncoder(Encoder):
 
 
 def test_encoder():
-    enc = DirectEncoder(Imputer())
+    enc = DirectEncoder(EagerImputer())
     with pytest.raises(RuntimeError):
         enc.get_matrix([0])
 
     matrix = np.random.randint(0, 3, (10, 2, 3), dtype=int)
-    enc = DirectEncoder(Imputer(), matrix)
+    enc = DirectEncoder(EagerImputer(), matrix)
     assert enc.matrix is matrix
     assert enc.n_mat == 10
 
@@ -98,7 +98,7 @@ def test_encoder_impute():
     assert np.all(mat == matrix[1, :, :])
 
 
-class DuplicateEncoder(Encoder):
+class DuplicateEncoder(EagerEncoder):
 
     def _encode(self, matrix: np.ndarray) -> np.ndarray:
         n_mat = matrix.shape[0]
@@ -107,19 +107,19 @@ class DuplicateEncoder(Encoder):
 
 def test_duplicate_encoder():
     matrix = np.random.randint(0, 3, (10, 2, 3))
-    enc = DuplicateEncoder(Imputer())
+    enc = DuplicateEncoder(EagerImputer())
     with pytest.raises(RuntimeError):
         enc.matrix = matrix
 
 
-class LowerThanZeroEncoder(Encoder):
+class LowerThanZeroEncoder(EagerEncoder):
 
     def _encode(self, matrix: np.ndarray) -> np.ndarray:
         n_mat = matrix.shape[0]
         return np.column_stack([np.arange(0, n_mat)-1, np.arange(0, n_mat)])
 
 
-class HigherThanZeroEncoder(Encoder):
+class HigherThanZeroEncoder(EagerEncoder):
 
     def _encode(self, matrix: np.ndarray) -> np.ndarray:
         n_mat = matrix.shape[0]
@@ -147,13 +147,13 @@ def test_normalize_dvs():
         [2, 3, 2, 0,  1],
     ])
 
-    assert np.all(Encoder._normalize_design_vectors(des_vectors, remove_gaps=False) == np.array([
+    assert np.all(EagerEncoder._normalize_design_vectors(des_vectors, remove_gaps=False) == np.array([
         [0, 0, 0, 2, 0],
         [1, 1, 3, 0, 1],
         [2, 2, 2, 0, 2],
     ]))
 
-    assert np.all(Encoder._normalize_design_vectors(des_vectors) == np.array([
+    assert np.all(EagerEncoder._normalize_design_vectors(des_vectors) == np.array([
         [0, 0, 0, 1, 0],
         [1, 1, 2, 0, 1],
         [2, 2, 1, 0, 2],

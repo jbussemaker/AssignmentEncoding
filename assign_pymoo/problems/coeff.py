@@ -12,7 +12,7 @@ class CoefficientProblemBase(AssignmentProblem):
     the sum of the products of the coefficient of each connection.
     The number of possible connections is given by 2^(n_src*n_tgt)."""
 
-    def __init__(self, encoder: Encoder):
+    def __init__(self, encoder: EagerEncoder):
         self.src_coeff, self.tgt_coeff = self.get_coefficients()
         super().__init__(encoder)
 

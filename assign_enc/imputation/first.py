@@ -5,7 +5,7 @@ from assign_enc.encoding import *
 __all__ = ['FirstImputer']
 
 
-class FirstImputer(Imputer):
+class FirstImputer(EagerImputer):
     """Imputer that simply chooses the first possible matrix."""
 
     def impute(self, vector: DesignVector, matrix_mask: MatrixSelectMask) -> Tuple[DesignVector, np.ndarray]:

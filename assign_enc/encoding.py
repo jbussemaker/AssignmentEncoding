@@ -3,7 +3,7 @@ import numpy as np
 from typing import *
 from dataclasses import dataclass
 
-__all__ = ['DiscreteDV', 'DesignVector', 'PartialDesignVector', 'MatrixSelectMask', 'Imputer', 'Encoder',
+__all__ = ['DiscreteDV', 'DesignVector', 'PartialDesignVector', 'MatrixSelectMask', 'EagerImputer', 'EagerEncoder',
            'filter_design_vectors', 'flatten_matrix']
 
 
@@ -41,7 +41,7 @@ def _filter_design_vectors(design_vectors: np.ndarray, vector: np.ndarray) -> Ma
     return matrix_mask
 
 
-class Imputer:
+class EagerImputer:
     """Base class for imputing design vectors to select existing matrices."""
 
     def __init__(self):
@@ -65,10 +65,10 @@ class Imputer:
         raise NotImplementedError
 
 
-class Encoder:
+class EagerEncoder:
     """Base class that encodes assignment matrices to discrete design variables."""
 
-    def __init__(self, imputer: Imputer, matrix: np.ndarray = None):
+    def __init__(self, imputer: EagerImputer, matrix: np.ndarray = None):
         self._matrix = matrix
         self._n_mat = 0
         self._design_vectors = np.array([])

@@ -4,7 +4,7 @@ from assign_enc.encoding import *
 __all__ = ['DirectMatrixEncoder']
 
 
-class DirectMatrixEncoder(Encoder):
+class DirectMatrixEncoder(EagerEncoder):
     """Defines one design variable for each matrix element."""
 
     def __init__(self, *args, remove_gaps=True, **kwargs):

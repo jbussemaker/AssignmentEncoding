@@ -4,7 +4,7 @@ from assign_enc.encoding import *
 __all__ = ['GroupedEncoder', 'GroupByIndexEncoder']
 
 
-class GroupedEncoder(Encoder):
+class GroupedEncoder(EagerEncoder):
     """
     Base class for an encoder that recursively separates the matrix based on some grouping criteria, until all
     matrices are associated to one unique design vector.

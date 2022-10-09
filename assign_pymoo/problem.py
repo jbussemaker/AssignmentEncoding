@@ -3,6 +3,7 @@ from typing import *
 from assign_enc.matrix import *
 from assign_enc.encoding import *
 from assign_pymoo.sampling import *
+from assign_enc.lazy_encoding import *
 from assign_enc.assignment_manager import *
 
 from pymoo.core.repair import Repair
@@ -18,11 +19,14 @@ __all__ = ['AssignmentProblem', 'AssignmentRepair']
 class AssignmentProblem(Problem):
     """class representing an assignment optimization problem."""
 
-    def __init__(self, encoder: Encoder):
+    def __init__(self, encoder: Union[EagerEncoder, LazyEncoder]):
         src, tgt = self.get_src_tgt_nodes()
         excluded = self.get_excluded_edges()
-        self.assignment_manager = assignment_manager = AssignmentManager(src, tgt, encoder, excluded=excluded)
-
+        if isinstance(encoder, LazyEncoder):
+            assignment_manager = LazyAssignmentManager(src, tgt, encoder, excluded=excluded)
+        else:
+            assignment_manager = AssignmentManager(src, tgt, encoder, excluded=excluded)
+        self.assignment_manager = assignment_manager
         design_vars = assignment_manager.design_vars
 
         aux_des_vars = self.get_aux_des_vars() or []

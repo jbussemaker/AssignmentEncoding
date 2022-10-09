@@ -5,7 +5,7 @@ from assign_enc.encoding import *
 __all__ = ['AutoModImputer']
 
 
-class AutoModImputer(Imputer):
+class AutoModImputer(EagerImputer):
     """
     Imputes design vectors by moving from the start or end to change design variables if they are too restrictive:
     For each design variable (from start or end):
