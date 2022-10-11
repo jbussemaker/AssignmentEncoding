@@ -9,8 +9,9 @@ from assign_enc.assignment_manager import *
 class DummyImputer(LazyImputer):
 
     def _impute(self, vector: DesignVector, matrix: np.ndarray, src_exists: np.ndarray, tgt_exists: np.ndarray,
-                validate: Callable[[np.ndarray], bool]) -> Tuple[DesignVector, np.ndarray]:
+                validate: Callable[[np.ndarray], bool], tried_vectors: Set[Tuple[int, ...]]) -> Tuple[DesignVector, np.ndarray]:
         assert not validate(matrix)
+        assert tuple(vector) in tried_vectors
         imputed_dv = np.array(vector)*0
         imputed_matrix = matrix*0-1
         return imputed_dv, imputed_matrix

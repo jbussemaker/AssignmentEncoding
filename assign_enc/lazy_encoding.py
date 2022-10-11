@@ -12,15 +12,20 @@ class LazyImputer:
     def __init__(self):
         self._matrix_gen: Optional[AggregateAssignmentMatrixGenerator] = None
         self._des_vars: Optional[List[DiscreteDV]] = None
+        self._decode_func = None
         self._impute_cache = {}
 
-    def initialize(self, matrix_gen: AggregateAssignmentMatrixGenerator, design_vars: List[DiscreteDV]):
+    def initialize(self, matrix_gen: AggregateAssignmentMatrixGenerator, design_vars: List[DiscreteDV], decode_func):
         self._matrix_gen = matrix_gen
         self._des_vars = design_vars
+        self._decode_func = decode_func
         self._impute_cache = {}
 
-    def impute(self, vector: DesignVector, matrix: np.ndarray, src_exists: np.ndarray, tgt_exists: np.ndarray) \
-            -> Tuple[DesignVector, np.ndarray]:
+    def _decode(self, vector: DesignVector, src_exists: np.ndarray, tgt_exists: np.ndarray) -> np.ndarray:
+        return self._decode_func(vector, src_exists, tgt_exists)
+
+    def impute(self, vector: DesignVector, matrix: np.ndarray, src_exists: np.ndarray, tgt_exists: np.ndarray,
+               tried_vectors: set = None) -> Tuple[DesignVector, np.ndarray]:
         """Returns the imputed design vector and associated connection matrix"""
 
         # Check in cache
@@ -45,14 +50,21 @@ class LazyImputer:
                 imputed_vector, imputed_matrix = vector, matrix
 
             else:  # Custom imputation
-                imputed_vector, imputed_matrix = self._impute(vector, matrix, src_exists, tgt_exists, _validate)
+                if tried_vectors is None:
+                    tried_vectors = set()
+                tried_vectors.add(tuple(vector))
+
+                vector = np.array(vector)
+                imputed_vector, imputed_matrix = \
+                    self._impute(vector, matrix, src_exists, tgt_exists, _validate, tried_vectors)
 
         # Update cache
         self._impute_cache[cache_key] = (imputed_vector, imputed_matrix)
         return imputed_vector, imputed_matrix
 
     def _impute(self, vector: DesignVector, matrix: np.ndarray, src_exists: np.ndarray, tgt_exists: np.ndarray,
-                validate: Callable[[np.ndarray], bool]) -> Tuple[DesignVector, np.ndarray]:
+                validate: Callable[[np.ndarray], bool], tried_vectors: Set[Tuple[int, ...]]) \
+            -> Tuple[DesignVector, np.ndarray]:
         """Returns the imputed design vector and associated connection matrix"""
         raise NotImplementedError
 
@@ -69,7 +81,7 @@ class LazyEncoder:
     def set_nodes(self, src: List[Node], tgt: List[Node], excluded: List[Tuple[Node, Node]] = None):
         self._matrix_gen = AggregateAssignmentMatrixGenerator(src, tgt, excluded=excluded)
         self._design_vars = self._encode()
-        self._imputer.initialize(self._matrix_gen, self._design_vars)
+        self._imputer.initialize(self._matrix_gen, self._design_vars, self._decode)
 
     @property
     def src(self):

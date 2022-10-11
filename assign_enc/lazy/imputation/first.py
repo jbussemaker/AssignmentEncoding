@@ -1,0 +1,31 @@
+import itertools
+import numpy as np
+from typing import *
+from assign_enc.lazy_encoding import *
+
+__all__ = ['LazyFirstImputer']
+
+
+class LazyFirstImputer(LazyImputer):
+    """Imputer that chooses the first possible matrix."""
+
+    def _impute(self, vector: DesignVector, matrix: np.ndarray, src_exists: np.ndarray, tgt_exists: np.ndarray,
+                validate: Callable[[np.ndarray], bool], tried_vectors: Set[Tuple[int, ...]]) -> Tuple[DesignVector, np.ndarray]:
+
+        # Loop through possible design vectors until one is found that has not been tried yet
+        for dv in itertools.product(*[list(range(dv.n_opts)) for dv in self._des_vars]):
+            dv = tuple(dv)
+            if dv in tried_vectors:
+                continue
+            break
+        else:
+            raise RuntimeError('No valid design vector found!')
+
+        # Validate this design vector and associated matrix
+        vector = np.array(dv)
+        matrix = self._decode(vector, src_exists, tgt_exists)
+        if validate(matrix):
+            return vector, matrix
+
+        # Otherwise, continue imputation
+        return self.impute(vector, matrix, src_exists, tgt_exists, tried_vectors)
