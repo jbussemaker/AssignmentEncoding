@@ -25,6 +25,10 @@ def test_element_grouper():
         [1, 1],
     ]))
 
+    assert [dv.n_opts for dv in encoder.design_vars] == [3, 2]
+    assert encoder.get_n_design_points() == 3*2
+    assert encoder.get_imputation_ratio() == 1.5
+
     encoder.normalize_within_group = False
     encoder.matrix = matrix
     assert np.all(encoder._design_vectors == np.array([

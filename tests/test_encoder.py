@@ -47,6 +47,9 @@ def test_encoder():
     assert len(enc.design_vars) == 1
     assert enc.design_vars[0].n_opts == 10
 
+    assert enc.get_n_design_points() == 10
+    assert enc.get_imputation_ratio() == 1.
+
     for _ in range(100):
         val = enc.design_vars[0].get_random()
         assert val >= 0

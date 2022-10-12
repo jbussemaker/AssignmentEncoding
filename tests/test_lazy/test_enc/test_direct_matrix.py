@@ -22,6 +22,8 @@ def test_encoding():
     _, mat = encoder.get_matrix([0, 2, 1, 1])
     assert np.all(mat == np.array([[0, 2], [1, 1]]))
 
+    assert encoder.get_imputation_ratio()
+
 
 def test_encoder_excluded():
     encoder = LazyDirectMatrixEncoder(LazyConstraintViolationImputer())

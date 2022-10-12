@@ -3,8 +3,8 @@ import numpy as np
 from typing import *
 from dataclasses import dataclass
 
-__all__ = ['DiscreteDV', 'DesignVector', 'PartialDesignVector', 'MatrixSelectMask', 'EagerImputer', 'EagerEncoder',
-           'filter_design_vectors', 'flatten_matrix']
+__all__ = ['DiscreteDV', 'DesignVector', 'PartialDesignVector', 'MatrixSelectMask', 'EagerImputer', 'Encoder',
+           'EagerEncoder', 'filter_design_vectors', 'flatten_matrix']
 
 
 @dataclass
@@ -65,7 +65,24 @@ class EagerImputer:
         raise NotImplementedError
 
 
-class EagerEncoder:
+class Encoder:
+
+    @property
+    def design_vars(self) -> List[DiscreteDV]:
+        raise NotImplementedError
+
+    def get_random_design_vector(self) -> DesignVector:
+        return [dv.get_random() for dv in self.design_vars]
+
+    def get_n_design_points(self) -> int:
+        return int(np.cumprod([dv.n_opts for dv in self.design_vars])[-1])
+
+    def get_imputation_ratio(self) -> float:
+        """Ratio of the total design space size to the actual amount of possible connections"""
+        raise NotImplementedError
+
+
+class EagerEncoder(Encoder):
     """Base class that encodes assignment matrices to discrete design variables."""
 
     def __init__(self, imputer: EagerImputer, matrix: np.ndarray = None):
@@ -98,8 +115,8 @@ class EagerEncoder:
     def design_vars(self) -> List[DiscreteDV]:
         return self._design_vars
 
-    def get_random_design_vector(self) -> DesignVector:
-        return [dv.get_random() for dv in self.design_vars]
+    def get_imputation_ratio(self) -> float:
+        return self.get_n_design_points()/self.n_mat
 
     def get_matrix(self, vector: DesignVector, matrix_mask: MatrixSelectMask = None) -> Tuple[DesignVector, np.ndarray]:
         """Select a connection matrix (n_src x n_tgt) and impute the design vector if needed."""

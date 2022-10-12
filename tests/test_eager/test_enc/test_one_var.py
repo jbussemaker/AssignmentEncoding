@@ -12,6 +12,8 @@ def test_encoding():
         assert len(enc.design_vars) == 1
         assert enc.design_vars[0].n_opts == n
 
+        assert enc.get_imputation_ratio() == 1.
+
         for i in range(n):
             dv, mat = enc.get_matrix([i])
             assert dv == [i]

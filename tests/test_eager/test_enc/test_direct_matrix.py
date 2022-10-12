@@ -11,6 +11,10 @@ def test_encoding():
 
         assert enc.n_mat == n
         assert len(enc.design_vars) == 3*4
+        n_des_points = np.cumprod([dv.n_opts for dv in enc.design_vars])[-1]
+        assert enc.get_imputation_ratio() == n_des_points/n
+        assert enc.get_imputation_ratio() > 10000
+
         for i in range(n_src):
             for j in range(n_tgt):
                 i_dv = i*n_tgt+j

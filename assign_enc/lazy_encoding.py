@@ -1,3 +1,4 @@
+import itertools
 import numpy as np
 from typing import *
 from assign_enc.matrix import *
@@ -69,9 +70,11 @@ class LazyImputer:
         raise NotImplementedError
 
 
-class LazyEncoder:
+class LazyEncoder(Encoder):
     """Encoder that skips the matrix-generation step (so it might be better suited for large numbers of connections) by
     relying on two-way design variable encoders."""
+
+    _n_mc_imputation_ratio = 10000
 
     def __init__(self, imputer: LazyImputer):
         self._matrix_gen: Optional[AggregateAssignmentMatrixGenerator] = None
@@ -107,8 +110,24 @@ class LazyEncoder:
     def design_vars(self) -> List[DiscreteDV]:
         return self._design_vars
 
-    def get_random_design_vector(self) -> DesignVector:
-        return [dv.get_random() for dv in self.design_vars]
+    def get_imputation_ratio(self) -> float:
+        n_sample = self._n_mc_imputation_ratio
+        n_valid = 0
+
+        if n_sample > self.get_n_design_points():
+            # Exhaustive sampling
+            n_sample = 0
+            for dv in itertools.product(*[list(range(dv.n_opts)) for dv in self.design_vars]):
+                n_sample += 1
+                if self.is_valid_vector(list(dv)):
+                    n_valid += 1
+
+        else:  # Monte Carlo sampling
+            for _ in range(n_sample):
+                if self.is_valid_vector(self.get_random_design_vector()):
+                    n_valid += 1
+
+        return n_sample/n_valid
 
     def get_matrix(self, vector: DesignVector, src_exists: List[bool] = None, tgt_exists: List[bool] = None) \
             -> Tuple[DesignVector, np.ndarray]:
