@@ -397,13 +397,19 @@ def _branch_matrices(i_src, current_matrix, current_sum, n_src_conn, n_tgt_conn,
     # Get number of minimum connections per target in order to be able to distribute all outgoing connections
     # starting from the first target
     reverse_cum_max_conn = np.cumsum(n_tgt_conn_avbl[::-1])[::-1]
-    n_tgt_conn_min = (n_total_conns-reverse_cum_max_conn)[1:]
+    n_tgt_conn_min = np.zeros((n_tgt,), dtype=np.int64)
+    n_tgt_conn_min[:-1] = (n_total_conns-reverse_cum_max_conn)[1:]
+
+    # Initialize connections from minimum connections (check that max is not exceeded)
+    init_tgt_conns = n_tgt_conn_min
+    init_tgt_conns[init_tgt_conns > n_tgt_conn_avbl] = n_tgt_conn_avbl[init_tgt_conns > n_tgt_conn_avbl]
+    init_tgt_conns[init_tgt_conns < 0] = 0
+    n_conn_start = np.sum(init_tgt_conns)
 
     # Loop over different source-to-targets connection patterns
     branched_matrices = []
-    init_tgt_conns = np.zeros((n_tgt,), dtype=np.int64)
     for tgt_conns in _get_branch_tgt_conns(
-            init_tgt_conns, 0, 0, n_total_conns, n_tgt_conn_avbl, n_tgt_conn_min, last_tgt_idx):
+            init_tgt_conns, 0, n_conn_start, n_total_conns, n_tgt_conn_avbl, last_tgt_idx):
         # Modify matrix
         next_matrix = current_matrix.copy()
         next_matrix[i_src, :] = tgt_conns
@@ -425,7 +431,7 @@ def _branch_matrices(i_src, current_matrix, current_sum, n_src_conn, n_tgt_conn,
 
 
 @numba.jit(nopython=True)
-def _get_branch_tgt_conns(tgt_conns, i_tgt, n_conn_set, n_total_conns, n_tgt_conn_avbl, n_tgt_conn_min, last_tgt_idx):
+def _get_branch_tgt_conns(tgt_conns, i_tgt, n_conn_set, n_total_conns, n_tgt_conn_avbl, last_tgt_idx):
     # Check if we already have distributed all connections
     if n_conn_set == n_total_conns:
         return [tgt_conns]
@@ -436,13 +442,13 @@ def _get_branch_tgt_conns(tgt_conns, i_tgt, n_conn_set, n_total_conns, n_tgt_con
         next_tgt_conns = tgt_conns.copy()
         next_tgt_conns[i_tgt] += 1
         for sub_tgt_conn in _get_branch_tgt_conns(
-                next_tgt_conns, i_tgt, n_conn_set+1, n_total_conns, n_tgt_conn_avbl, n_tgt_conn_min, last_tgt_idx):
+                next_tgt_conns, i_tgt, n_conn_set+1, n_total_conns, n_tgt_conn_avbl, last_tgt_idx):
             sub_tgt_conns.append(sub_tgt_conn)
 
-    # Branch: move to next target, if we are not at the end and if we are above the minimum connections
-    if i_tgt < last_tgt_idx and n_conn_set >= n_tgt_conn_min[i_tgt]:
+    # Branch: move to next target if we are not at the end
+    if i_tgt < last_tgt_idx:
         for sub_tgt_conn in _get_branch_tgt_conns(
-                tgt_conns, i_tgt+1, n_conn_set, n_total_conns, n_tgt_conn_avbl, n_tgt_conn_min, last_tgt_idx):
+                tgt_conns, i_tgt+1, n_conn_set, n_total_conns, n_tgt_conn_avbl, last_tgt_idx):
             sub_tgt_conns.append(sub_tgt_conn)
 
     return sub_tgt_conns
