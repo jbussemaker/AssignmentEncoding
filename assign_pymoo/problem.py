@@ -41,6 +41,12 @@ class AssignmentProblem(Problem):
         n_obj, n_con = self.get_n_obj(), self.get_n_con()
         super().__init__(n_var=n_var, n_obj=n_obj, n_ieq_constr=n_con, xl=xl, xu=xu, vars=var_types)
 
+    def get_matrix_count(self):
+        src, tgt = self.get_src_tgt_nodes()
+        excluded = self.get_excluded_edges()
+        matrix_gen = AggregateAssignmentMatrixGenerator(src, tgt, excluded=excluded)
+        return matrix_gen.count_all_matrices()
+
     def get_repair(self):
         return AssignmentRepair()
 

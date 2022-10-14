@@ -12,7 +12,7 @@ class CoefficientProblemBase(AssignmentProblem):
     the sum of the products of the coefficient of each connection.
     The number of possible connections is given by 2^(n_src*n_tgt)."""
 
-    def __init__(self, encoder: EagerEncoder):
+    def __init__(self, encoder):
         self.src_coeff, self.tgt_coeff = self.get_coefficients()
         super().__init__(encoder)
 
@@ -56,19 +56,32 @@ class MediumExpCoeffProblem(SmallExpCoeffProblem):
 if __name__ == '__main__':
     from assign_enc.eager.encodings import *
     from assign_enc.eager.imputation import *
-    enc = DirectMatrixEncoder(FirstImputer())
+    from assign_enc.lazy.encodings import *
+    from assign_enc.lazy.imputation import *
+    # enc = DirectMatrixEncoder(FirstImputer())
+    enc = LazyDirectMatrixEncoder(LazyFirstImputer())
 
     # Strange setup like this for profiling
     import timeit
 
     def _start_comp():
         s = timeit.default_timer()
-        SmallExpCoeffProblem(enc).eval_points()
+        p = SmallExpCoeffProblem(enc)
+        if isinstance(enc, EagerEncoder):
+            print(p.assignment_manager.matrix.shape[0])
+            p.eval_points()
+        else:
+            print(p.get_matrix_count())
         print(f'{timeit.default_timer()-s} sec')
 
     def _do_real():
         s = timeit.default_timer()
-        MediumExpCoeffProblem(enc).eval_points()
+        p = MediumExpCoeffProblem(enc)
+        if isinstance(enc, EagerEncoder):
+            print(p.assignment_manager.matrix.shape[0])
+            p.eval_points()
+        else:
+            print(p.get_matrix_count())
         print(f'{timeit.default_timer()-s} sec')
 
     _start_comp()

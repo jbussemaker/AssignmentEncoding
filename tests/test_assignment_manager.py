@@ -27,6 +27,7 @@ def test_manager():
     manager = AssignmentManager(src, tgt, enc)
     assert manager.matrix is not None
     assert manager.matrix.shape == (6, 2, 2)
+    assert manager._matrix_gen.count_all_matrices() == 6
 
     assert len(manager.design_vars) == 4
 

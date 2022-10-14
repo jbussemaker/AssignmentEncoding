@@ -65,6 +65,10 @@ def test_lazy_encoder():
     assert np.all(dv == [0, 0, 0, 0])
     assert np.all(matrix == -1)
 
+    assert enc._matrix_gen.count_all_matrices() == 7
+    assert enc.get_n_design_points() == 16
+    assert enc.get_imputation_ratio() == (16/7)
+
 
 def test_lazy_imputer_none_exist():
     enc = DummyLazyEncoder(DummyImputer())

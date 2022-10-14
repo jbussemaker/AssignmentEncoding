@@ -8,6 +8,7 @@ def test_encoding():
     encoder = LazyDirectMatrixEncoder(LazyConstraintViolationImputer())
     encoder.set_nodes(src=[Node([0, 1, 2]), Node(min_conn=0)], tgt=[Node([0, 1]), Node(min_conn=1)])
     assert encoder._matrix_gen.max_conn == 3
+    assert encoder._matrix_gen.count_all_matrices() == 21
 
     dv = encoder.design_vars
     assert len(dv) == 4
@@ -22,7 +23,8 @@ def test_encoding():
     _, mat = encoder.get_matrix([0, 2, 1, 1])
     assert np.all(mat == np.array([[0, 2], [1, 1]]))
 
-    assert encoder.get_imputation_ratio()
+    assert encoder.get_n_design_points() == 48
+    assert encoder.get_imputation_ratio() == 48/21
 
 
 def test_encoder_excluded():

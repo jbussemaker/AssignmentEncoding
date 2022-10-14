@@ -86,12 +86,14 @@ def test_iter_permuted_conns(nodes):
     _assert_matrix(gen, gen._iter_matrices([1, 0], [1]), np.array([
         [[1], [0]],
     ]))
+    assert gen.count_matrices([1, 0], [1]) == 1
 
     gen = AggregateAssignmentMatrixGenerator(src=[nodes[0], nodes[1]], tgt=[nodes[2], nodes[3]])
     _assert_matrix(gen, gen._iter_matrices([1, 1], [1, 1]), np.array([
         [[1, 0], [0, 1]],
         [[0, 1], [1, 0]],
     ]))
+    assert gen.count_matrices([1, 1], [1, 1]) == 2
     _assert_matrix(gen, gen._iter_matrices((1, 1), (1, 1)), np.array([
         [[1, 0], [0, 1]],
         [[0, 1], [1, 0]],
@@ -104,6 +106,7 @@ def test_iter_permuted_conns(nodes):
     _assert_matrix(gen, gen._iter_matrices([1, 1], [1, 1]), np.array([
         [[1, 0], [0, 1]],
     ]))
+    assert gen.count_matrices([1, 1], [1, 1]) == 1
     gen.ex = None
 
     for _ in range(20):
@@ -111,6 +114,7 @@ def test_iter_permuted_conns(nodes):
             [[1, 0], [0, 2]],
             [[0, 1], [1, 1]],
         ]))
+        assert gen.count_matrices([1, 2], [1, 2]) == 2
 
 
 def test_iter_matrix_zero_conn():
@@ -118,9 +122,11 @@ def test_iter_matrix_zero_conn():
     _assert_matrix(gen, gen._iter_matrices([1, 0], [1]), np.array([
         [[1], [0]],
     ]))
+    assert gen.count_matrices([1, 0], [1]) == 1
     _assert_matrix(gen, gen._iter_matrices([0, 0], [0]), np.array([
         [[0], [0]],
     ]))
+    assert gen.count_matrices([0, 0], [0]) == 1
 
 
 def test_iter_edges():
@@ -139,6 +145,7 @@ def test_iter_edges():
             [[1, 1], [0, 1]],
             [[0, 2], [1, 0]],
         ]))
+        assert gen.count_all_matrices() == 6
         assert set(gen.iter_conns()) == {
             ((obj1, obj4), (obj2, obj4)),
             ((obj1, obj3), (obj2, obj4)),
@@ -217,6 +224,7 @@ def test_filter_matrices():
         [[1, 1], [0, 1]],
         [[0, 2], [1, 0]],
     ]))
+    assert gen.count_all_matrices() == 6
     matrix = gen.get_agg_matrix()
     all_mask = np.ones((matrix.shape[0],), dtype=bool)
     none_mask = np.zeros((matrix.shape[0],), dtype=bool)
@@ -275,6 +283,7 @@ def test_matrix_all_inf():
         [[1, 1], [1, 1]],
         [[0, 2], [2, 0]],
     ]))
+    assert gen.count_all_matrices() == 26
 
     for matrix in gen:
         assert gen.validate_matrix(matrix)
@@ -306,6 +315,7 @@ def test_matrix_all_inf_no_repeat():
         [[1, 1], [1, 0]],
         [[1, 1], [1, 1]],
     ]))
+    assert gen.count_all_matrices() == 16
 
     for matrix in gen:
         assert gen.validate_matrix(matrix)
@@ -329,15 +339,18 @@ def test_matrix_all_inf_no_repeat_23():
     _assert_matrix(gen, gen._iter_matrices([0, 2], [0, 0, 2]), np.empty((0, 2, 3)))
     _assert_matrix(gen, gen._iter_matrices([0, 2], [0, 2, 0]), np.empty((0, 2, 3)))
     _assert_matrix(gen, gen._iter_matrices([0, 2], [2, 0, 0]), np.empty((0, 2, 3)))
+    assert gen.count_matrices([0, 2], [2, 0, 0]) == 0
     _assert_matrix(gen, gen._iter_matrices([0, 2], [0, 1, 1]), np.array([[[0, 0, 0], [0, 1, 1]]]))
     _assert_matrix(gen, gen._iter_matrices([0, 2], [1, 1, 0]), np.array([[[0, 0, 0], [1, 1, 0]]]))
     _assert_matrix(gen, gen._iter_matrices([0, 2], [1, 0, 1]), np.array([[[0, 0, 0], [1, 0, 1]]]))
+    assert gen.count_matrices([0, 2], [1, 1, 0]) == 1
 
     assert list(gen._iter_conn_slots(gen.tgt, is_src=False, n=3)) == [
         (0, 1, 2), (0, 2, 1), (1, 0, 2), (1, 1, 1), (1, 2, 0), (2, 0, 1), (2, 1, 0),
     ]
     _assert_matrix(gen, gen._iter_matrices([0, 3], [0, 1, 2]), np.empty((0, 2, 3)))
     _assert_matrix(gen, gen._iter_matrices([0, 3], [1, 1, 1]), np.array([[[0, 0, 0], [1, 1, 1]]]))
+    assert gen.count_matrices([0, 3], [1, 1, 1]) == 1
 
     gen0 = AggregateAssignmentMatrixGenerator(src=[Node([0]), Node(min_conn=0, repeated_allowed=False)],
                                               tgt=[Node(min_conn=0, repeated_allowed=False) for _ in range(3)])
@@ -357,3 +370,140 @@ def test_matrix_all_inf_no_repeat_23():
         [[0, 0, 0], [1, 1, 0]],
         [[0, 0, 0], [1, 1, 1]],
     ]))
+    assert gen0.count_all_matrices() == 8
+
+
+def test_count_n_pool_take():
+    def _count_no_dup(n_p, n_t):
+        return count_n_pool_take(n_p, n_t, (0,)*n_p)[0]
+
+    def _count_dup(n_p, n_t, n_dup):
+        return count_n_pool_take(n_p, n_t, n_dup)[0]
+
+    for _ in range(1000):
+        assert _count_no_dup(0, 0) == 1
+        assert _count_no_dup(0, 1) == 0
+        assert _count_no_dup(1, 0) == 1
+        assert _count_no_dup(1, 1) == 1
+
+        assert [_count_no_dup(2, n) for n in range(3)] == [1, 2, 1]
+        assert [_count_no_dup(3, n) for n in range(4)] == [1, 3, 3, 1]
+        assert [_count_no_dup(4, n) for n in range(5)] == [1, 4, 6, 4, 1]
+        assert [_count_no_dup(5, n) for n in range(6)] == [1, 5, 10, 10, 5, 1]
+        assert [_count_no_dup(6, n) for n in range(7)] == [1, 6, 15, 20, 15, 6, 1]
+
+        assert _count_dup(2, 1, (1, 0)) == 1
+        assert _count_dup(2, 2, (1, 0)) == 1
+        assert _count_dup(3, 1, (1, 0, 0)) == 2
+        assert _count_dup(3, 1, (0, 1, 0)) == 2
+        assert _count_dup(3, 1, (2, 0, 0)) == 1
+        assert _count_dup(3, 2, (1, 0, 0)) == 2
+        assert _count_dup(3, 2, (0, 1, 0)) == 2
+        assert _count_dup(3, 2, (2, 0, 0)) == 1
+        assert _count_dup(3, 3, (0, 1, 0)) == 1
+
+        assert _count_dup(4, 1, (1, 0, 0, 0)) == 3
+        assert _count_dup(4, 1, (0, 1, 0, 0)) == 3
+        assert _count_dup(4, 1, (0, 0, 1, 0)) == 3
+        assert _count_dup(4, 1, (2, 0, 0, 0)) == 2
+        assert _count_dup(4, 1, (0, 2, 0, 0)) == 2
+        assert _count_dup(4, 1, (3, 0, 0, 0)) == 1
+        assert _count_dup(4, 2, (1, 0, 0, 0)) == 4
+        assert _count_dup(4, 2, (0, 1, 0, 0)) == 4
+        assert _count_dup(4, 2, (0, 0, 1, 0)) == 4
+        assert _count_dup(4, 2, (2, 0, 0, 0)) == 2
+        assert _count_dup(4, 2, (0, 2, 0, 0)) == 2
+        assert _count_dup(4, 2, (3, 0, 0, 0)) == 1
+        assert _count_dup(4, 3, (1, 0, 0, 0)) == 3
+        assert _count_dup(4, 3, (0, 1, 0, 0)) == 3
+        assert _count_dup(4, 3, (0, 0, 1, 0)) == 3
+        assert _count_dup(4, 3, (2, 0, 0, 0)) == 2
+        assert _count_dup(4, 3, (0, 2, 0, 0)) == 2
+        assert _count_dup(4, 3, (3, 0, 0, 0)) == 1
+        assert _count_dup(4, 4, (1, 0, 0, 0)) == 1
+
+        assert _count_dup(6, 3, (1, 0, 0, 2, 0, 0)) == 6
+
+
+def test_count_n_pool_combs():
+    def _assert_count_no_dup(n_p, n_t, combinations):
+        n, combs = count_n_pool_take(n_p, n_t, (0,)*n_p)
+        assert combinations.shape == (n, n_p)
+        assert np.all(combs == combinations)
+
+    def _assert_count_dup(n_p, n_t, n_dup, combinations):
+        n, combs = count_n_pool_take(n_p, n_t, n_dup)
+        assert combinations.shape == (n, n_p)
+        assert np.all(combs == combinations)
+
+    _assert_count_no_dup(0, 0, np.zeros((1, 0), dtype=bool))
+    _assert_count_no_dup(1, 0, np.array([[0]]))
+    _assert_count_no_dup(1, 1, np.array([[1]]))
+
+    _assert_count_no_dup(3, 3, np.array([[1, 1, 1]]))
+    _assert_count_no_dup(3, 2, np.array([[1, 1, 0], [1, 0, 1], [0, 1, 1]]))
+    _assert_count_no_dup(5, 3, np.array([
+        [1, 1, 1, 0, 0],
+        [1, 1, 0, 1, 0],
+        [1, 1, 0, 0, 1],
+        [1, 0, 1, 1, 0],
+        [1, 0, 1, 0, 1],
+        [1, 0, 0, 1, 1],
+        [0, 1, 1, 1, 0],
+        [0, 1, 1, 0, 1],
+        [0, 1, 0, 1, 1],
+        [0, 0, 1, 1, 1],
+    ]))
+
+    _assert_count_dup(2, 1, (1, 0), np.array([[1, 0]]))
+    _assert_count_dup(2, 2, (1, 0), np.array([[1, 1]]))
+    _assert_count_dup(3, 1, (1, 0, 0), np.array([[1, 0, 0], [0, 0, 1]]))
+    _assert_count_dup(4, 1, (0, 1, 0, 0), np.array([[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 0, 1]]))
+    _assert_count_dup(4, 2, (0, 2, 0, 0), np.array([[1, 1, 0, 0], [0, 1, 1, 0]]))
+
+    _assert_count_dup(6, 2, (1, 0, 0, 2, 0, 0), np.array([
+        [1, 1, 0, 0, 0, 0],
+        [1, 0, 1, 0, 0, 0],
+        [1, 0, 0, 1, 0, 0],
+        [0, 0, 1, 1, 0, 0],
+        [0, 0, 0, 1, 1, 0],
+    ]))
+    _assert_count_dup(6, 3, (1, 0, 0, 2, 0, 0), np.array([
+        [1, 1, 1, 0, 0, 0],
+        [1, 1, 0, 1, 0, 0],
+        [1, 0, 1, 1, 0, 0],
+        [1, 0, 0, 1, 1, 0],
+        [0, 0, 1, 1, 1, 0],
+        [0, 0, 0, 1, 1, 1],
+    ]))
+    _assert_count_dup(6, 4, (1, 0, 0, 2, 0, 0), np.array([
+        [1, 1, 1, 0, 0, 1],
+        [1, 1, 0, 0, 1, 1],
+        [0, 1, 1, 0, 1, 1],
+        [0, 1, 0, 1, 1, 1],
+        [0, 0, 1, 1, 1, 1],
+    ]))
+
+
+def test_count_matrices_from_nodes():
+    src = [Node(min_conn=0, repeated_allowed=False) for _ in range(2)]
+    tgt = [Node(min_conn=0, repeated_allowed=False) for _ in range(3)]
+    gen = AggregateAssignmentMatrixGenerator(src, tgt)
+
+    assert gen.count_matrices((0, 3), (0, 1, 2)) == 0
+
+    assert gen.count_matrices((1, 1), (1, 1, 0)) == 2
+    assert len(list(gen._iter_matrices((1, 1), (1, 1, 0)))) == 2
+
+    assert gen.count_matrices((2, 1), (1, 1, 1)) == 3
+    assert len(list(gen._iter_matrices((2, 1), (1, 1, 1)))) == 3
+
+    for src_nr in gen.iter_sources():  # Iterate over source node nrs
+        for tgt_nr in gen.iter_targets(n_source=sum(src_nr)):  # Iterate over target node nrs
+            n_mat = gen.count_matrices(src_nr, tgt_nr)
+            matrices = np.array(list(gen._iter_matrices(src_nr, tgt_nr)))
+            assert matrices.shape[0] == n_mat
+
+    matrix = gen.get_agg_matrix()
+    assert matrix.shape[0] == 64
+    assert gen.count_all_matrices() == 64
