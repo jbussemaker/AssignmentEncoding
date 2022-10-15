@@ -25,20 +25,16 @@ def filter_design_vectors(design_vectors: np.ndarray, vector: PartialDesignVecto
     return _filter_design_vectors(design_vectors, int_vector)
 
 
-@numba.jit(nopython=True, cache=True)
+@numba.jit(nopython=True)
 def _filter_design_vectors(design_vectors: np.ndarray, vector: np.ndarray) -> MatrixSelectMask:
     """Filter matrices along the first dimension given a design vector. Returns a mask of selected matrices."""
 
-    dv_mask = np.ones(design_vectors.shape, dtype=numba.types.bool_)
+    dv_mask = np.ones((design_vectors.shape[0],), dtype=numba.types.bool_)
     for i, value in enumerate(vector):
         if value != -1:
             # Select design vectors that have the targeted value for this design variable
-            dv_mask[:, i] = design_vectors[:, i] == value
-
-    matrix_mask = np.ones((design_vectors.shape[0],), dtype=numba.types.bool_)
-    for i in range(design_vectors.shape[0]):
-        matrix_mask[i] = np.all(dv_mask[i, :])
-    return matrix_mask
+            dv_mask[dv_mask] = np.bitwise_and(dv_mask[dv_mask], design_vectors[dv_mask, i] == value)
+    return dv_mask
 
 
 class EagerImputer:
@@ -89,6 +85,7 @@ class EagerEncoder(Encoder):
         self._matrix = matrix
         self._n_mat = 0
         self._design_vectors = np.array([])
+        self._design_vector_map = {}
         self._design_vars = []
         self._imputer = imputer
 
@@ -104,6 +101,7 @@ class EagerEncoder(Encoder):
         self._matrix = matrix
         self._n_mat = matrix.shape[0]
         self._design_vectors = self._encode(matrix)
+        self._design_vector_map = {tuple(dv): i for i, dv in enumerate(self._design_vectors)}
         self._design_vars = self._get_design_variables(self._design_vectors)
         self._imputer.initialize(matrix, self._design_vectors, self._design_vars)
 
@@ -145,12 +143,19 @@ class EagerEncoder(Encoder):
             raise RuntimeError('Matrix not set!')
         if matrix_mask is None:
             matrix_mask = np.ones((self._matrix.shape[0],), dtype=bool)
-        i_mat, = np.where(matrix_mask & self._filter_design_variables(vector))
+        i_mat, = np.where(matrix_mask & self._filter_full_design_vector(vector))
         if len(i_mat) > 1:
             raise RuntimeError(f'Design vector maps to more than one matrix: {vector}')
 
         # Only if we find exactly one corresponding matrix, it is indeed a valid design vector
         return i_mat[0] if len(i_mat) == 1 else None
+
+    def _filter_full_design_vector(self, vector: DesignVector) -> MatrixSelectMask:
+        mask = np.zeros((self._n_mat,), dtype=bool)
+        i_mat = self._design_vector_map.get(tuple(vector))
+        if i_mat is not None:
+            mask[i_mat] = True
+        return mask
 
     def _filter_design_variables(self, vector: PartialDesignVector) -> MatrixSelectMask:
         return filter_design_vectors(self._design_vectors, vector)
