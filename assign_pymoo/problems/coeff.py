@@ -58,8 +58,8 @@ if __name__ == '__main__':
     from assign_enc.eager.imputation import *
     from assign_enc.lazy.encodings import *
     from assign_enc.lazy.imputation import *
-    # enc = DirectMatrixEncoder(FirstImputer())
-    enc = LazyDirectMatrixEncoder(LazyFirstImputer())
+    enc = DirectMatrixEncoder(FirstImputer())
+    # enc = LazyDirectMatrixEncoder(LazyFirstImputer())
 
     # Strange setup like this for profiling
     import timeit

@@ -370,6 +370,7 @@ def test_matrix_all_inf_no_repeat_23():
         [[0, 0, 0], [1, 1, 0]],
         [[0, 0, 0], [1, 1, 1]],
     ]))
+    assert gen0.count_matrices((0, 2), (1, 1, 0)) == 1
     assert gen0.count_all_matrices() == 8
 
 
