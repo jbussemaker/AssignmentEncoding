@@ -1,3 +1,4 @@
+import itertools
 import numpy as np
 from assign_enc.encoding import *
 
@@ -18,83 +19,62 @@ class GroupedEncoder(EagerEncoder):
         super().__init__(*args, **kwargs)
 
     def _encode(self, matrix: np.ndarray) -> np.ndarray:
-        # Do any preparations if needed
-        self._prepare_grouping(matrix)
+        return self.group_by_values(
+            self._get_grouping_values(matrix), normalize_within_group=self.normalize_within_group)
 
-        # Determine worst-case scenario of number of design variables as a fail-safe
-        n_dv_max = matrix.shape[1]*matrix.shape[2]*2
+    @classmethod
+    def group_by_values(cls, group_by_values: np.ndarray, normalize_within_group=True) -> np.ndarray:
+        """
+        Get design vectors that uniquely map to different value combinations. Example:
+        [[1 2],      [[0 0],
+         [1 3],  -->  [0 1],
+         [2 2],       [1 0],
+         [3 2],       [2 0],
 
-        # Add design variables until all sub-groups only consist of one matrix
-        matrices = [(matrix, np.arange(0, matrix.shape[0]))]
-        n_mat = matrix.shape[0]
-        des_var_values = []
-        dv_idx = 0
-        normalize_within_group = self.normalize_within_group
-        for _ in range(n_dv_max):
-            # Prepare new design vector column
-            des_var_values_i = np.zeros((n_mat,), dtype=int)
+        Optionally normalize only after determining all groups.
+        """
+        design_vectors = np.empty(group_by_values.shape, dtype=int)
+        row_mask_list = [np.ones((group_by_values.shape[0],), dtype=bool)]
 
-            # For each current sub-matrix
-            next_matrices = []
-            no_grouping_needed = True
-            for sub_matrix, i_sub_matrix in matrices:
-                # Only group sub-matrices that are non unique (i.e. more than 1)
-                if sub_matrix.shape[0] <= 1:
-                    next_matrices.append((sub_matrix, i_sub_matrix))
+        # Loop over columns
+        for i_col in range(group_by_values.shape[1]):
 
-                    # Determine grouping value if we don't normalize within the group
-                    if not normalize_within_group:
-                        grouping_values = self._get_grouping_criteria(dv_idx, sub_matrix, i_sub_matrix)
-                        des_var_values_i[i_sub_matrix] = grouping_values[0]
+            # Loop over current sub-divisions
+            next_row_masks = []
+            grouping_needed = False
+            for row_mask in row_mask_list:
 
-                else:
-                    # Flag that we still have non-unique matrices
-                    no_grouping_needed = False
+                # Loop over unique values in sub-divisions
+                unique_values = np.sort(np.unique(group_by_values[row_mask, i_col]))
+                for value_idx, value in enumerate(unique_values):
 
-                    # Get values to group by
-                    grouping_values = self._get_grouping_criteria(dv_idx, sub_matrix, i_sub_matrix)
+                    # Assign indices for each unique value
+                    next_row_mask = row_mask & (group_by_values[:, i_col] == value)
+                    design_vectors[next_row_mask, i_col] = value_idx if normalize_within_group else value
+                    next_row_masks.append(next_row_mask)
 
-                    # Determine unique values
-                    unique_values = np.sort(np.unique(grouping_values))
-                    dv_values = np.arange(0, len(unique_values)) if normalize_within_group else unique_values
-                    for i_val, unique_value in enumerate(unique_values):
-                        # Map unique values to design variable values
-                        i_value_mask, = np.where(grouping_values == unique_value)
-                        i_value_sub_matrix = i_sub_matrix[i_value_mask]
-                        des_var_values_i[i_value_sub_matrix] = dv_values[i_val]
+                    if len(np.where(next_row_mask)[0]) > 1:
+                        grouping_needed = True
 
-                        # Separate next level of sub matrices
-                        next_matrices.append((sub_matrix[i_value_mask, :, :], i_value_sub_matrix))
-
-            # If all design variable values are the same, we can skip this design variable
-            if len(np.unique(des_var_values_i)) > 1:
-                des_var_values.append(des_var_values_i)
-
-            # If there are no unique values and we did no grouping, we are done
-            elif no_grouping_needed:
+            # Stop grouping if not needed anymore
+            if not grouping_needed:
+                design_vectors = design_vectors[:, :i_col+1]
                 break
 
-            # Prepare next step
-            dv_idx += 1
-            matrices = next_matrices
+            row_mask_list = next_row_masks
 
-        # The loop was finished because it ran out of design variables (not because it reached the status of all-unique)
-        else:
-            raise RuntimeError('Too many design variables!')
+        # Normalize design vectors
+        if not normalize_within_group:
+            design_vectors = cls._normalize_design_vectors(design_vectors)
 
-        # Concatenate design variable values into design vectors and normalize
-        design_vectors = np.column_stack(des_var_values)
-        if normalize_within_group:
-            return design_vectors
-        return self._normalize_design_vectors(design_vectors)
+        # Remove columns where there are no alternatives
+        has_alternatives = np.any(design_vectors > 0, axis=0)
+        design_vectors = design_vectors[:, has_alternatives]
 
-    def _prepare_grouping(self, matrix: np.ndarray):
-        """Implement any logic needed for preparing the grouping process here"""
-        pass
+        return design_vectors
 
-    def _get_grouping_criteria(self, dv_idx: int, sub_matrix: np.ndarray, i_sub_matrix: np.ndarray) -> np.ndarray:
-        """Given a design variable index and associated sub-matrix, return a vector of values corresponding to each
-        matrix to be grouped by"""
+    def _get_grouping_values(self, matrix: np.ndarray) -> np.ndarray:
+        """Get a n_mat x n_dv matrix with values to sub-divide design variables by"""
         raise NotImplementedError
 
 
@@ -105,14 +85,10 @@ class GroupByIndexEncoder(GroupedEncoder):
         self.n_groups = max(n_groups, 2)
         super().__init__(*args, **kwargs)
 
-    def _get_grouping_criteria(self, dv_idx: int, sub_matrix: np.ndarray, i_sub_matrix: np.ndarray) -> np.ndarray:
-        n_matrix = sub_matrix.shape[0]
-        n_per_group = max(n_matrix // self.n_groups, 1)
-
-        i_start = 0
-        grouping_values = np.zeros((n_matrix,), dtype=int)
-        for i in range(self.n_groups):
-            grouping_values[i_start:] = i
-            i_start += n_per_group
-
-        return grouping_values
+    def _get_grouping_values(self, matrix: np.ndarray) -> np.ndarray:
+        n_groups = self.n_groups
+        n_var = int(np.ceil(np.log2(matrix.shape[0])))
+        design_vectors = np.array(list(itertools.product(*[range(n_groups) for _ in range(n_var)]))[:matrix.shape[0]])
+        for i_var in reversed(range(1, n_var)):
+            design_vectors[:, i_var:] += np.array([n_groups*design_vectors[:, i_var-1]]).T
+        return design_vectors

@@ -2,6 +2,7 @@ import numpy as np
 from typing import *
 from assign_enc.lazy_encoding import *
 from assign_enc.lazy.encodings.on_demand_base import *
+from assign_enc.eager.encodings.grouped_base import GroupedEncoder
 
 __all__ = ['LazyAmountFirstEncoder', 'FlatLazyAmountEncoder', 'TotalLazyAmountEncoder', 'SourceLazyAmountEncoder',
            'SourceTargetLazyAmountEncoder', 'FlatLazyConnectionEncoder']
@@ -63,37 +64,7 @@ class LazyAmountFirstEncoder(OnDemandLazyEncoder):
 
     @staticmethod
     def group_by_values(values: np.ndarray) -> np.ndarray:
-        """
-        Get design vectors that uniquely map to different value combinations. Example:
-        [[1 2],      [[0 0],
-         [1 3],  -->  [0 1],
-         [2 2],       [1 0],
-         [3 2],       [2 0],
-        """
-        group_indices = np.empty(values.shape, dtype=int)
-        row_mask_list = [np.ones((values.shape[0],), dtype=bool)]
-
-        # Loop over columns
-        for i_col in range(values.shape[1]):
-
-            # Loop over current sub-divisions
-            next_row_masks = []
-            for row_mask in row_mask_list:
-                # Loop over unique values in sub-divisions
-                unique_values = np.sort(np.unique(values[row_mask, i_col]))
-                for value_idx, value in enumerate(unique_values):
-                    # Assign indices for each unique value
-                    next_row_mask = row_mask & (values[:, i_col] == value)
-                    next_row_masks.append(next_row_mask)
-                    group_indices[next_row_mask, i_col] = value_idx
-
-            row_mask_list = next_row_masks
-
-        # Remove columns where there are no alternatives
-        has_alternatives = np.any(group_indices > 0, axis=0)
-        group_indices = group_indices[:, has_alternatives]
-
-        return group_indices
+        return GroupedEncoder.group_by_values(values)
 
 
 class FlatLazyAmountEncoder(LazyAmountEncoder):
