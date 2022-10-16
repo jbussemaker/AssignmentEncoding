@@ -69,7 +69,7 @@ if __name__ == '__main__':
         p = SmallExpCoeffProblem(enc)
         if isinstance(enc, EagerEncoder):
             print(p.assignment_manager.matrix.shape[0])
-            p.eval_points()
+            # p.eval_points()
         else:
             print(p.get_matrix_count())
         print(f'{timeit.default_timer()-s} sec')
@@ -79,7 +79,7 @@ if __name__ == '__main__':
         p = MediumExpCoeffProblem(enc)
         if isinstance(enc, EagerEncoder):
             print(p.assignment_manager.matrix.shape[0])
-            p.eval_points()
+            # p.eval_points()
         else:
             print(p.get_matrix_count())
         print(f'{timeit.default_timer()-s} sec')

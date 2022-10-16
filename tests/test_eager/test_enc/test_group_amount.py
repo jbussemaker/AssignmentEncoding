@@ -12,8 +12,8 @@ def test_encoder():
         encoder = AmountFirstGroupedEncoder(FirstImputer(), TotalAmountGrouper(), OneVarLocationGrouper())
         encoder.matrix = matrix
 
-        assert len(encoder.design_vars) == 2
-        assert encoder.get_imputation_ratio() > 1.2
+        assert len(encoder.design_vars) <= 2
+        assert encoder.get_imputation_ratio() >= 1.
 
         n_tot_unique = np.unique(n_tot)
         assert encoder.design_vars[0].n_opts == len(n_tot_unique)

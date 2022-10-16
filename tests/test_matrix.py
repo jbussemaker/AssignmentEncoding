@@ -76,6 +76,8 @@ def test_iter_order():
 
 
 def _assert_matrix(gen: AggregateAssignmentMatrixGenerator, matrix_gen, assert_matrix: np.ndarray):
+    if isinstance(matrix_gen, np.ndarray):
+        matrix_gen = [matrix_gen]
     agg_matrix = gen._agg_matrices(matrix_gen)
     assert agg_matrix.shape == assert_matrix.shape
     assert np.all(agg_matrix == assert_matrix)
@@ -285,7 +287,7 @@ def test_matrix_all_inf():
     ]))
     assert gen.count_all_matrices() == 26
 
-    for matrix in gen:
+    for matrix in gen.iter_matrices():
         assert gen.validate_matrix(matrix)
 
 
@@ -317,7 +319,7 @@ def test_matrix_all_inf_no_repeat():
     ]))
     assert gen.count_all_matrices() == 16
 
-    for matrix in gen:
+    for matrix in gen.iter_matrices():
         assert gen.validate_matrix(matrix)
 
 
@@ -376,10 +378,12 @@ def test_matrix_all_inf_no_repeat_23():
 
 def test_count_n_pool_take():
     def _count_no_dup(n_p, n_t):
-        return count_n_pool_take(n_p, n_t, (0,)*n_p)[0]
+        return count_n_pool_take(n_p, n_t, (0,)*n_p)[0]  # For cached
+        # return count_n_pool_take(n_p, n_t, np.zeros((n_p,), dtype=int))[0]  # For numba
 
     def _count_dup(n_p, n_t, n_dup):
-        return count_n_pool_take(n_p, n_t, n_dup)[0]
+        return count_n_pool_take(n_p, n_t, n_dup)[0]  # For cached
+        # return count_n_pool_take(n_p, n_t, np.array(n_dup))[0]
 
     for _ in range(1000):
         assert _count_no_dup(0, 0) == 1
@@ -428,12 +432,14 @@ def test_count_n_pool_take():
 
 def test_count_n_pool_combs():
     def _assert_count_no_dup(n_p, n_t, combinations):
-        n, combs = count_n_pool_take(n_p, n_t, (0,)*n_p)
+        n, combs = count_n_pool_take(n_p, n_t, (0,)*n_p)  # For cached
+        # n, combs = count_n_pool_take(n_p, n_t, np.zeros((n_p,), dtype=np.int64))
         assert combinations.shape == (n, n_p)
         assert np.all(combs == combinations)
 
     def _assert_count_dup(n_p, n_t, n_dup, combinations):
-        n, combs = count_n_pool_take(n_p, n_t, n_dup)
+        n, combs = count_n_pool_take(n_p, n_t, n_dup)  # For cached
+        # n, combs = count_n_pool_take(n_p, n_t, np.array(n_dup))
         assert combinations.shape == (n, n_p)
         assert np.all(combs == combinations)
 
