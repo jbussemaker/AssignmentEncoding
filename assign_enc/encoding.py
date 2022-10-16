@@ -25,7 +25,7 @@ def filter_design_vectors(design_vectors: np.ndarray, vector: PartialDesignVecto
     return _filter_design_vectors(design_vectors, int_vector)
 
 
-@numba.jit(nopython=True)
+@numba.njit()
 def _filter_design_vectors(design_vectors: np.ndarray, vector: np.ndarray) -> MatrixSelectMask:
     """Filter matrices along the first dimension given a design vector. Returns a mask of selected matrices."""
 

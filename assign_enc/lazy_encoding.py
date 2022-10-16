@@ -22,10 +22,10 @@ class LazyImputer:
         self._decode_func = decode_func
         self._impute_cache = {}
 
-    def _decode(self, vector: DesignVector, src_exists: np.ndarray, tgt_exists: np.ndarray) -> np.ndarray:
+    def _decode(self, vector: DesignVector, src_exists: np.ndarray, tgt_exists: np.ndarray) -> Optional[np.ndarray]:
         return self._decode_func(vector, src_exists, tgt_exists)
 
-    def impute(self, vector: DesignVector, matrix: np.ndarray, src_exists: np.ndarray, tgt_exists: np.ndarray,
+    def impute(self, vector: DesignVector, matrix: Optional[np.ndarray], src_exists: np.ndarray, tgt_exists: np.ndarray,
                tried_vectors: set = None) -> Tuple[DesignVector, np.ndarray]:
         """Returns the imputed design vector and associated connection matrix"""
 
@@ -35,19 +35,22 @@ class LazyImputer:
             return self._impute_cache[cache_key]
 
         def _validate(mat):
+            if mat is None:
+                return False
             return self._matrix_gen.validate_matrix(mat, src_exists=src_exists, tgt_exists=tgt_exists)
 
         # If none of the nodes exist, return empty matrix
         if np.all(~src_exists) and np.all(~tgt_exists):
             imputed_vector = [0]*len(vector)
-            imputed_matrix = matrix*0
+            imputed_matrix = np.zeros((len(src_exists), len(tgt_exists)), dtype=int)
 
         else:
             # Try to modify vector such that it adheres to the src and tgt exist masks
-            matrix = matrix.copy()
-            matrix[~src_exists, :] = 0
-            matrix[:, ~tgt_exists] = 0
-            if _validate(matrix):
+            if matrix is not None:
+                matrix = matrix.copy()
+                matrix[~src_exists, :] = 0
+                matrix[:, ~tgt_exists] = 0
+            if matrix is not None and _validate(matrix):
                 imputed_vector, imputed_matrix = vector, matrix
 
             else:  # Custom imputation
@@ -63,8 +66,8 @@ class LazyImputer:
         self._impute_cache[cache_key] = (imputed_vector, imputed_matrix)
         return imputed_vector, imputed_matrix
 
-    def _impute(self, vector: DesignVector, matrix: np.ndarray, src_exists: np.ndarray, tgt_exists: np.ndarray,
-                validate: Callable[[np.ndarray], bool], tried_vectors: Set[Tuple[int, ...]]) \
+    def _impute(self, vector: DesignVector, matrix: Optional[np.ndarray], src_exists: np.ndarray,
+                tgt_exists: np.ndarray, validate: Callable[[np.ndarray], bool], tried_vectors: Set[Tuple[int, ...]]) \
             -> Tuple[DesignVector, np.ndarray]:
         """Returns the imputed design vector and associated connection matrix"""
         raise NotImplementedError
@@ -137,13 +140,16 @@ class LazyEncoder(Encoder):
         matrix, src_exists, tgt_exists = self._decode_vector(vector, src_exists, tgt_exists)
 
         # Validate matrix
-        if self._matrix_gen.validate_matrix(matrix, src_exists=src_exists, tgt_exists=tgt_exists):
+        if matrix is not None and \
+                self._matrix_gen.validate_matrix(matrix, src_exists=src_exists, tgt_exists=tgt_exists):
             return vector, matrix
 
         return self._imputer.impute(vector, matrix, src_exists, tgt_exists)
 
     def is_valid_vector(self, vector: DesignVector, src_exists: List[bool] = None, tgt_exists: List[bool] = None):
         matrix, src_exists, tgt_exists = self._decode_vector(vector, src_exists, tgt_exists)
+        if matrix is None:
+            return False
         return self._matrix_gen.validate_matrix(matrix, src_exists=src_exists, tgt_exists=tgt_exists)
 
     def _decode_vector(self, vector: DesignVector, src_exists: List[bool] = None, tgt_exists: List[bool] = None):
@@ -176,6 +182,6 @@ class LazyEncoder(Encoder):
         """Encode the assignment problem (given by src and tgt nodes) directly to design variables"""
         raise NotImplementedError
 
-    def _decode(self, vector: DesignVector, src_exists: np.ndarray, tgt_exists: np.ndarray) -> np.ndarray:
+    def _decode(self, vector: DesignVector, src_exists: np.ndarray, tgt_exists: np.ndarray) -> Optional[np.ndarray]:
         """Return the connection matrix as would be encoded by the given design vector"""
         raise NotImplementedError

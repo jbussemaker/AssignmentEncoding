@@ -9,7 +9,8 @@ class LazyConstraintViolationImputer(LazyImputer):
     """Does not do imputation, but sends a matrix with -1 as values to indicate an invalid design point.
     The optimization problem should represent this as a violated constraint."""
 
-    def _impute(self, vector: DesignVector, matrix: np.ndarray, src_exists: np.ndarray, tgt_exists: np.ndarray,
-                validate: Callable[[np.ndarray], bool], tried_vectors: Set[Tuple[int, ...]]) -> Tuple[DesignVector, np.ndarray]:
-        invalid_matrix = matrix*0-1
+    def _impute(self, vector: DesignVector, matrix: Optional[np.ndarray], src_exists: np.ndarray,
+                tgt_exists: np.ndarray, validate: Callable[[np.ndarray], bool], tried_vectors: Set[Tuple[int, ...]]) \
+            -> Tuple[DesignVector, np.ndarray]:
+        invalid_matrix = -np.ones((len(src_exists), len(tgt_exists)), dtype=int)
         return vector, invalid_matrix

@@ -27,7 +27,7 @@ class DummyLazyEncoder(LazyEncoder):
         n_dv = len(self.src)*len(self.tgt)
         return [DiscreteDV(n_opts=self._n_opts) for _ in range(n_dv)]
 
-    def _decode(self, vector: DesignVector, src_exists: np.ndarray, tgt_exists: np.ndarray) -> np.ndarray:
+    def _decode(self, vector: DesignVector, src_exists: np.ndarray, tgt_exists: np.ndarray) -> Optional[np.ndarray]:
         return np.reshape(np.array(vector), (self.n_src, self.n_tgt))
 
 
