@@ -59,6 +59,7 @@ if __name__ == '__main__':
     from assign_enc.lazy.encodings import *
     from assign_enc.lazy.imputation import *
     enc = DirectMatrixEncoder(FirstImputer())
+    # enc = OneVarEncoder(FirstImputer())
     # enc = LazyDirectMatrixEncoder(LazyFirstImputer())
 
     # Strange setup like this for profiling
@@ -74,6 +75,9 @@ if __name__ == '__main__':
             print(p.get_matrix_count())
         print(f'{timeit.default_timer()-s} sec')
 
+        print(f'Imputation ratio: {p.get_imputation_ratio()}')
+        print(f'Information error: {p.get_information_error()[0]}')
+
     def _do_real():
         s = timeit.default_timer()
         p = MediumExpCoeffProblem(enc)
@@ -83,6 +87,9 @@ if __name__ == '__main__':
         else:
             print(p.get_matrix_count())
         print(f'{timeit.default_timer()-s} sec')
+
+        print(f'Imputation ratio: {p.get_imputation_ratio()}')
+        print(f'Information error: {p.get_information_error()[0]}')
 
     _start_comp()
     _do_real()

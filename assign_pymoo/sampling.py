@@ -5,10 +5,18 @@ from pymoo.core.variable import Real
 from pymoo.core.problem import Problem
 from pymoo.core.sampling import Sampling
 from pymoo.core.population import Population
+from pymoo.core.initialization import Initialization
 from pymoo.core.duplicate import DefaultDuplicateElimination
 from pymoo.operators.sampling.lhs import LatinHypercubeSampling, sampling_lhs_unit
 
-__all__ = ['RepairedExhaustiveSampling', 'RepairedLatinHypercubeSampling']
+__all__ = ['RepairedExhaustiveSampling', 'RepairedLatinHypercubeSampling', 'get_init_sampler']
+
+
+def get_init_sampler(repair: Repair = None, lhs=True, **kwargs):
+    sampling = RepairedLatinHypercubeSampling(repair=repair, **kwargs) \
+        if lhs else RepairedExhaustiveSampling(repair=repair, **kwargs)
+    # Samples are already repaired because we're using the repaired samplers
+    return Initialization(sampling, eliminate_duplicates=DefaultDuplicateElimination())
 
 
 class RepairedExhaustiveSampling(Sampling):

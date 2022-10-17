@@ -17,6 +17,10 @@ class AssignmentManagerBase:
     def design_vars(self):
         raise NotImplementedError
 
+    def get_imputation_ratio(self) -> float:
+        """Ratio of the total design space size to the actual amount of possible connections"""
+        raise NotImplementedError
+
     def correct_vector(self, vector: DesignVector, src_exists: List[bool] = None, tgt_exists: List[bool] = None) \
             -> DesignVector:
         """Correct the design vector so that it matches an existing connection pattern"""
@@ -65,6 +69,9 @@ class AssignmentManager(AssignmentManagerBase):
     @property
     def design_vars(self):
         return self._encoder.design_vars
+
+    def get_imputation_ratio(self) -> float:
+        return self._encoder.get_imputation_ratio()
 
     def correct_vector(self, vector: DesignVector, src_exists: List[bool] = None, tgt_exists: List[bool] = None) \
             -> DesignVector:
@@ -126,6 +133,9 @@ class LazyAssignmentManager(AssignmentManagerBase):
     @property
     def design_vars(self):
         return self._encoder.design_vars
+
+    def get_imputation_ratio(self) -> float:
+        return self._encoder.get_imputation_ratio()
 
     def correct_vector(self, vector: DesignVector, src_exists: List[bool] = None, tgt_exists: List[bool] = None) \
             -> DesignVector:

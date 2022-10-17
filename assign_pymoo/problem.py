@@ -87,6 +87,9 @@ class AssignmentProblem(Problem):
         if has_g:
             out['G'] = g_out
 
+    def get_init_sampler(self, lhs=True, **kwargs):
+        return get_init_sampler(repair=self.get_repair(), lhs=lhs, **kwargs)
+
     def eval_points(self, n=None) -> Population:
         repair = self.get_repair()
         sampler = RepairedExhaustiveSampling(repair=repair) \
@@ -99,6 +102,16 @@ class AssignmentProblem(Problem):
         if pop is None:
             pop = self.eval_points(n=n)
         Scatter().add(pop.get('F')).show()
+
+    def get_information_error(self, n_samples: int = None, n_leave_out: int = None, **kwargs) -> np.ndarray:
+        from assign_pymoo.information_content import InformationContentAnalyzer
+        if n_samples is None:
+            n_samples = self.n_var*5
+            n_leave_out = 10
+        return InformationContentAnalyzer(self, **kwargs).get_information_error(n_samples, n_leave_out=n_leave_out)
+
+    def get_imputation_ratio(self):
+        return self.assignment_manager.get_imputation_ratio()
 
     # !! IMPLEMENT BELOW THIS LINE !! #
 
