@@ -171,7 +171,12 @@ class EagerEncoder(Encoder):
         if np.min(design_vectors) != 0:
             raise RuntimeError('Design variables should start at zero!')
 
-        return [DiscreteDV(n_opts=np.max(design_vectors[:, i])+1) for i in range(design_vectors.shape[1])]
+        # Check number of options
+        n_opts = np.max(design_vectors, axis=0)+1
+        if min(n_opts) <= 1:
+            raise RuntimeError('All design variables must have at least two options')
+
+        return [DiscreteDV(n_opts=n) for n in n_opts]
 
     @staticmethod
     def flatten_matrix(matrix: np.ndarray) -> np.ndarray:
@@ -183,15 +188,21 @@ class EagerEncoder(Encoder):
 
         # Move to zero
         if not remove_gaps:
-            return design_vectors-np.min(design_vectors, axis=0)
+            design_vectors -= np.min(design_vectors, axis=0)
 
-        # Remove gaps
-        design_vectors = design_vectors.copy()
-        for i_dv in range(design_vectors.shape[1]):
-            des_var = design_vectors[:, i_dv].copy()
-            unique_values = np.sort(np.unique(des_var))
-            for i_unique, value in enumerate(unique_values):
-                design_vectors[des_var == value, i_dv] = i_unique
+        # Remove gaps (also moves to zero)
+        else:
+            design_vectors = design_vectors.copy()
+            for i_dv in range(design_vectors.shape[1]):
+                des_var = design_vectors[:, i_dv].copy()
+                unique_values = np.sort(np.unique(des_var))
+                for i_unique, value in enumerate(unique_values):
+                    design_vectors[des_var == value, i_dv] = i_unique
+
+        # Remove design variables with not enough options
+        no_opts_mask = np.max(design_vectors, axis=0) == 0
+        design_vectors = design_vectors[:, ~no_opts_mask]
+
         return design_vectors
 
     def _encode(self, matrix: np.ndarray) -> np.ndarray:

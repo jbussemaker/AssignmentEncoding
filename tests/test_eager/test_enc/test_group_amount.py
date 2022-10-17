@@ -18,7 +18,8 @@ def test_encoder():
         n_tot_unique = np.unique(n_tot)
         assert encoder.design_vars[0].n_opts == len(n_tot_unique)
         n_tot_max = max([np.sum(n_tot == n_val) for n_val in n_tot_unique])
-        assert encoder.design_vars[1].n_opts == n_tot_max
+        if len(encoder.design_vars) == 2:
+            assert encoder.design_vars[1].n_opts == n_tot_max
 
 
 def test_source_amount_grouper():
