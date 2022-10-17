@@ -113,7 +113,11 @@ class LazyEncoder(Encoder):
     def design_vars(self) -> List[DiscreteDV]:
         return self._design_vars
 
-    def get_imputation_ratio(self) -> float:
+    def get_imputation_ratio(self, use_real_matrix=True) -> float:
+        if use_real_matrix:
+            n_matrix = self._matrix_gen.count_all_matrices()
+            return self.get_n_design_points()/n_matrix
+
         n_sample = self._n_mc_imputation_ratio
         n_valid = 0
 
