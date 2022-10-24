@@ -61,3 +61,9 @@ class AutoModImputer(EagerImputer):
 
         # Only happens if there are duplicate design vectors
         raise RuntimeError('Multiple possible design vectors found! Check if there are any duplicates')
+
+    def __repr__(self):
+        return f'{self.__class__.__name__}(reverse={self.reverse})'
+
+    def __str__(self):
+        return f'Auto Mod Imp'

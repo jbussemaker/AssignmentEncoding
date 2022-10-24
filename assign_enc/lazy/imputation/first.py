@@ -29,3 +29,9 @@ class LazyFirstImputer(LazyImputer):
 
         # Otherwise, continue imputation
         return self.impute(vector, matrix, src_exists, tgt_exists, tried_vectors)
+
+    def __repr__(self):
+        return f'{self.__class__.__name__}()'
+
+    def __str__(self):
+        return f'First Imp'

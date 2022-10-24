@@ -59,3 +59,9 @@ class OnDemandLazyEncoder(LazyEncoder):
     def _decode(self, vector: DesignVector, src_exists: np.ndarray, tgt_exists: np.ndarray) -> Optional[np.ndarray]:
         """Return the connection matrix as would be encoded by the given design vector"""
         raise NotImplementedError
+
+    def __repr__(self):
+        raise NotImplementedError
+
+    def __str__(self):
+        raise NotImplementedError

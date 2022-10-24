@@ -48,3 +48,9 @@ class LazyClosestImputer(LazyImputer):
     @staticmethod
     def _calc_dist_manhattan(deltas: np.ndarray) -> np.ndarray:
         return np.sum(np.abs(deltas), axis=1)
+
+    def __repr__(self):
+        return f'{self.__class__.__name__}(euclidean={self.euclidean})'
+
+    def __str__(self):
+        return f'Closest {"Euc" if self.euclidean else "Mht"} Imp'

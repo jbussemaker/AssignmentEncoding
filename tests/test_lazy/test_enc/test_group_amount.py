@@ -104,3 +104,23 @@ def test_source_target_amount_encoder():
     assert encoder.design_vars[0].n_opts == 3
     assert encoder.design_vars[1].n_opts == 4
     assert encoder.design_vars[2].n_opts == 2
+
+
+def test_filter_dvs():
+    encoder = LazyAmountFirstEncoder(LazyConstraintViolationImputer(), FlatLazyAmountEncoder(), FlatLazyConnectionEncoder())
+    encoder.set_nodes(src=[Node([1], repeated_allowed=False), Node([1], repeated_allowed=False)],
+                      tgt=[Node([1], repeated_allowed=False), Node([1], repeated_allowed=False)])
+
+    n_tgt_n_src = list(encoder.iter_n_src_n_tgt())
+    assert len(n_tgt_n_src) == 1
+
+    assert len(encoder.design_vars) == 1
+    assert encoder.design_vars[0].n_opts == 2
+
+    dv, matrix = encoder.get_matrix([0])
+    assert np.all(dv == [0])
+    assert np.all(matrix == np.array([[1, 0], [0, 1]]))
+
+    dv, matrix = encoder.get_matrix([1])
+    assert np.all(dv == [1])
+    assert np.all(matrix == np.array([[0, 1], [1, 0]]))

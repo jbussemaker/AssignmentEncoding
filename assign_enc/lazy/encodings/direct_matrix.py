@@ -58,3 +58,9 @@ class LazyDirectMatrixEncoder(LazyEncoder):
             matrix[i, j] = vector[i_dv]
 
         return matrix
+
+    def __repr__(self):
+        return f'{self.__class__.__name__}({self._imputer!r})'
+
+    def __str__(self):
+        return f'Lazy Direct Matrix + {self._imputer!s}'

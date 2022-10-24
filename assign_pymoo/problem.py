@@ -19,13 +19,16 @@ __all__ = ['AssignmentProblem', 'AssignmentRepair']
 class AssignmentProblem(Problem):
     """class representing an assignment optimization problem."""
 
-    def __init__(self, encoder: Union[EagerEncoder, LazyEncoder]):
+    def __init__(self, encoder: Encoder, **_):
+        self._encoder = encoder
         src, tgt = self.get_src_tgt_nodes()
         excluded = self.get_excluded_edges()
         if isinstance(encoder, LazyEncoder):
             assignment_manager = LazyAssignmentManager(src, tgt, encoder, excluded=excluded)
-        else:
+        elif isinstance(encoder, EagerEncoder):
             assignment_manager = AssignmentManager(src, tgt, encoder, excluded=excluded)
+        else:
+            raise RuntimeError(f'Unknown encoder type: {encoder}')
         self.assignment_manager = assignment_manager
         design_vars = assignment_manager.design_vars
 
@@ -40,6 +43,9 @@ class AssignmentProblem(Problem):
 
         n_obj, n_con = self.get_n_obj(), self.get_n_con()
         super().__init__(n_var=n_var, n_obj=n_obj, n_ieq_constr=n_con, xl=xl, xu=xu, vars=var_types)
+
+    def get_for_encoder(self, encoder: Encoder):
+        return self.__class__(encoder, **self.get_init_kwargs())
 
     def get_matrix_count(self):
         src, tgt = self.get_src_tgt_nodes()
@@ -115,6 +121,9 @@ class AssignmentProblem(Problem):
 
     # !! IMPLEMENT BELOW THIS LINE !! #
 
+    def get_init_kwargs(self) -> dict:
+        raise NotImplementedError
+
     def get_n_obj(self) -> int:
         return 1
 
@@ -137,6 +146,12 @@ class AssignmentProblem(Problem):
 
     def _do_evaluate(self, conns: List[Tuple[int, int]], x_aux: Optional[DesignVector]) -> Tuple[List[float], List[float]]:
         """Returns [objectives, constraints]"""
+        raise NotImplementedError
+
+    def __repr__(self):
+        raise NotImplementedError
+
+    def __str__(self):
         raise NotImplementedError
 
 

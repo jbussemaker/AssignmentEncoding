@@ -14,3 +14,9 @@ class LazyConstraintViolationImputer(LazyImputer):
             -> Tuple[DesignVector, np.ndarray]:
         invalid_matrix = -np.ones((len(src_exists), len(tgt_exists)), dtype=int)
         return vector, invalid_matrix
+
+    def __repr__(self):
+        return f'{self.__class__.__name__}()'
+
+    def __str__(self):
+        return f'Constr Vio Imp'

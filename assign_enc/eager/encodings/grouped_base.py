@@ -77,6 +77,12 @@ class GroupedEncoder(EagerEncoder):
         """Get a n_mat x n_dv matrix with values to sub-divide design variables by"""
         raise NotImplementedError
 
+    def __repr__(self):
+        raise NotImplementedError
+
+    def __str__(self):
+        raise NotImplementedError
+
 
 class GroupByIndexEncoder(GroupedEncoder):
     """Grouping encoder that recursively separates the remaining matrices in n groups."""
@@ -92,3 +98,9 @@ class GroupByIndexEncoder(GroupedEncoder):
         for i_var in reversed(range(1, n_var)):
             design_vectors[:, i_var:] += np.array([n_groups*design_vectors[:, i_var-1]]).T
         return design_vectors
+
+    def __repr__(self):
+        return f'{self.__class__.__name__}({self._imputer!r}, n_groups={self.n_groups})'
+
+    def __str__(self):
+        return f'Group By Index ({self.n_groups} groups) + {self._imputer!s}'

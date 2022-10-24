@@ -12,3 +12,9 @@ class ConstraintViolationImputer(EagerImputer):
     def impute(self, vector: DesignVector, matrix_mask: MatrixSelectMask) -> Tuple[DesignVector, np.ndarray]:
         invalid_matrix = self._matrix[0, :, :]*0-1
         return vector, invalid_matrix
+
+    def __repr__(self):
+        return f'{self.__class__.__name__}()'
+
+    def __str__(self):
+        return f'Constr Vio Imp'

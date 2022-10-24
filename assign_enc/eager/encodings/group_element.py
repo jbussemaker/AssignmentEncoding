@@ -9,3 +9,9 @@ class ElementGroupedEncoder(GroupedEncoder):
 
     def _get_grouping_values(self, matrix: np.ndarray) -> np.ndarray:
         return self.flatten_matrix(matrix)
+
+    def __repr__(self):
+        return f'{self.__class__.__name__}({self._imputer!r})'
+
+    def __str__(self):
+        return f'Group By Element + {self._imputer!s}'

@@ -72,6 +72,12 @@ class LazyImputer:
         """Returns the imputed design vector and associated connection matrix"""
         raise NotImplementedError
 
+    def __repr__(self):
+        raise NotImplementedError
+
+    def __str__(self):
+        raise NotImplementedError
+
 
 class LazyEncoder(Encoder):
     """Encoder that skips the matrix-generation step (so it might be better suited for large numbers of connections) by
@@ -86,7 +92,11 @@ class LazyEncoder(Encoder):
 
     def set_nodes(self, src: List[Node], tgt: List[Node], excluded: List[Tuple[Node, Node]] = None):
         self._matrix_gen = AggregateAssignmentMatrixGenerator(src, tgt, excluded=excluded)
-        self._design_vars = self._encode()
+        self._design_vars = dvs = self._encode()
+        for i, dv in enumerate(dvs):
+            if dv.n_opts < 2:
+                raise RuntimeError(f'All design variables must have at least 2 options: {i} has {dv.n_opts} opts')
+
         self._imputer.initialize(self._matrix_gen, self._design_vars, self._decode)
 
     @property
@@ -182,10 +192,35 @@ class LazyEncoder(Encoder):
                     edges.append((src, tgt))
         return edges
 
+    @staticmethod
+    def _filter_dvs(dvs: List[DiscreteDV]) -> Tuple[List[DiscreteDV], np.ndarray, int]:
+        """Return design variables that have at least 2 options"""
+        i_valid_dv = []
+        valid_dv = []
+        for i, dv in enumerate(dvs):
+            if dv.n_opts >= 2:
+                i_valid_dv.append(i)
+                valid_dv.append(dv)
+
+        i_valid_dv = np.array(i_valid_dv, dtype=int)
+        return valid_dv, i_valid_dv, len(dvs)
+
+    @staticmethod
+    def _unfilter_dvs(vector: DesignVector, i_valid_dv: np.ndarray, n: int) -> DesignVector:
+        all_vector = np.zeros((n,), dtype=int)
+        all_vector[i_valid_dv] = vector
+        return all_vector
+
     def _encode(self) -> List[DiscreteDV]:
         """Encode the assignment problem (given by src and tgt nodes) directly to design variables"""
         raise NotImplementedError
 
     def _decode(self, vector: DesignVector, src_exists: np.ndarray, tgt_exists: np.ndarray) -> Optional[np.ndarray]:
         """Return the connection matrix as would be encoded by the given design vector"""
+        raise NotImplementedError
+
+    def __repr__(self):
+        raise NotImplementedError
+
+    def __str__(self):
         raise NotImplementedError

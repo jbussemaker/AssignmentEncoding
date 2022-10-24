@@ -10,3 +10,9 @@ class OneVarEncoder(EagerEncoder):
     def _encode(self, matrix: np.ndarray) -> np.ndarray:
         n_mat = matrix.shape[0]
         return np.array([np.arange(0, n_mat)]).T
+
+    def __repr__(self):
+        return f'{self.__class__.__name__}({self._imputer!r})'
+
+    def __str__(self):
+        return f'One Var + {self._imputer!s}'

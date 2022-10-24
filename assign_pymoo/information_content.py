@@ -30,7 +30,8 @@ class InformationContentAnalyzer:
         return model
 
     def get_information_error(self, n_samples: int, n_leave_out: int = None) -> np.ndarray:
-        """Calculate information error (LOOCV metric) for each problem output (f and g)."""
+        """Calculate information error (LOOCV metric) for each problem output (f and g).
+        Returns 2 x n_out array, where first row is mean, second row is std dev."""
 
         # Get and evaluate sampling points
         init_sampler = self._problem.get_init_sampler()
@@ -41,6 +42,9 @@ class InformationContentAnalyzer:
         y_train = pop.get('F')
         if pop.get('G') is not None:
             y_train = np.column_stack([y_train, pop.get('G')])
+
+        if x_train.shape[0] <= 1:
+            return np.ones((2, y_train.shape[1]))
 
         # Calculate LOOCV
         return self.cross_validate(x_train, y_train, n_leave_out=n_leave_out)
@@ -61,7 +65,8 @@ class InformationContentAnalyzer:
 
         # Get RMSE over all errors
         rmse = np.sqrt(np.mean(errors**2, axis=0))
-        return rmse
+        rmse_std_dev = np.sqrt(np.std(errors**2, axis=0))
+        return np.array([rmse, rmse_std_dev])
 
     def _get_error(self, x_train: np.ndarray, y_train: np.ndarray, i_leave_out: int) -> np.ndarray:
         # Separate samples

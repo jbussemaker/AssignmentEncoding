@@ -33,3 +33,9 @@ class LazyDeltaImputer(LazyImputer):
                 return dv, matrix
 
         raise RuntimeError('No valid design vector found!')
+
+    def __repr__(self):
+        return f'{self.__class__.__name__}()'
+
+    def __str__(self):
+        return f'Delta Imp'

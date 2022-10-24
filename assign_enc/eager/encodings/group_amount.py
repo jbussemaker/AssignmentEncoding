@@ -15,11 +15,23 @@ class AmountGrouper:
     def get_grouping_values(self, matrix: np.ndarray) -> np.ndarray:
         raise NotImplementedError
 
+    def __repr__(self):
+        raise NotImplementedError
+
+    def __str__(self):
+        raise NotImplementedError
+
 
 class LocationGrouper:
     """Base class for grouping by connection location."""
 
     def get_grouping_values(self, matrix: np.ndarray) -> np.ndarray:
+        raise NotImplementedError
+
+    def __repr__(self):
+        raise NotImplementedError
+
+    def __str__(self):
         raise NotImplementedError
 
 
@@ -38,6 +50,12 @@ class AmountFirstGroupedEncoder(GroupedEncoder):
             self.loc_grouper.get_grouping_values(matrix),
         ])
 
+    def __repr__(self):
+        return f'{self.__class__.__name__}({self._imputer!r}, {self.amount_grouper!r}, {self.loc_grouper!r})'
+
+    def __str__(self):
+        return f'Amount First + {self._imputer!s}: {self.amount_grouper!s}; {self.loc_grouper!s}'
+
 
 class TotalAmountGrouper(AmountGrouper):
     """Group by total amount of connections"""
@@ -45,12 +63,24 @@ class TotalAmountGrouper(AmountGrouper):
     def get_grouping_values(self, matrix: np.ndarray) -> np.ndarray:
         return np.sum(flatten_matrix(matrix), axis=1)
 
+    def __repr__(self):
+        return f'{self.__class__.__name__}()'
+
+    def __str__(self):
+        return f'Total Amount'
+
 
 class SourceAmountGrouper(AmountGrouper):
     """Group by number of connections from source nodes"""
 
     def get_grouping_values(self, matrix: np.ndarray) -> np.ndarray:
         return np.sum(matrix, axis=2)
+
+    def __repr__(self):
+        return f'{self.__class__.__name__}()'
+
+    def __str__(self):
+        return f'Source Amount'
 
 
 class SourceAmountFlattenedGrouper(AmountGrouper):
@@ -61,12 +91,24 @@ class SourceAmountFlattenedGrouper(AmountGrouper):
         _, unique_indices = np.unique(n_src, return_inverse=True, axis=0)
         return np.array([unique_indices]).T
 
+    def __repr__(self):
+        return f'{self.__class__.__name__}()'
+
+    def __str__(self):
+        return f'Source Amount Flat'
+
 
 class TargetAmountGrouper(AmountGrouper):
     """Group by number of connections to target nodes"""
 
     def get_grouping_values(self, matrix: np.ndarray) -> np.ndarray:
         return np.sum(matrix, axis=1)
+
+    def __repr__(self):
+        return f'{self.__class__.__name__}()'
+
+    def __str__(self):
+        return f'Target Amount'
 
 
 class TargetAmountFlattenedGrouper(AmountGrouper):
@@ -77,12 +119,24 @@ class TargetAmountFlattenedGrouper(AmountGrouper):
         _, unique_indices = np.unique(n_src, return_inverse=True, axis=0)
         return np.array([unique_indices]).T
 
+    def __repr__(self):
+        return f'{self.__class__.__name__}()'
+
+    def __str__(self):
+        return f'Target Amount Flat'
+
 
 class OneVarLocationGrouper(LocationGrouper):
     """One design variable for each remaining matrix after selecting the amounts"""
 
     def get_grouping_values(self, matrix: np.ndarray) -> np.ndarray:
         return np.arange(matrix.shape[0])
+
+    def __repr__(self):
+        return f'{self.__class__.__name__}()'
+
+    def __str__(self):
+        return f'One Var Amount'
 
 
 class FlatIndexLocationGrouper(LocationGrouper):
@@ -112,6 +166,12 @@ class FlatIndexLocationGrouper(LocationGrouper):
                 idx += 1
         return np.array(loc_idx)
 
+    def __repr__(self):
+        return f'{self.__class__.__name__}()'
+
+    def __str__(self):
+        return f'Flat Idx Loc'
+
 
 class RelFlatIndexLocationGrouper(FlatIndexLocationGrouper):
     """Group by relative connection location indices"""
@@ -120,6 +180,12 @@ class RelFlatIndexLocationGrouper(FlatIndexLocationGrouper):
     def _get_loc_indices(cls, conn_arr: np.ndarray) -> np.ndarray:
         abs_loc_idx = super()._get_loc_indices(conn_arr)
         return np.diff(np.concatenate([[0], abs_loc_idx]))
+
+    def __repr__(self):
+        return f'{self.__class__.__name__}()'
+
+    def __str__(self):
+        return f'Rel Flat Idx Loc'
 
 
 class CoordIndexLocationGrouper(LocationGrouper):
@@ -150,6 +216,12 @@ class CoordIndexLocationGrouper(LocationGrouper):
                 idx += 1
         return np.array([idx for (i_src, i_tgt) in loc_idx for idx in [i_src, i_tgt]])
 
+    def __repr__(self):
+        return f'{self.__class__.__name__}()'
+
+    def __str__(self):
+        return f'Coord Idx Loc'
+
 
 class RelCoordIndexLocationGrouper(CoordIndexLocationGrouper):
     """Group by relative connection location indices (encoded as i_src, i_tgt)"""
@@ -161,3 +233,9 @@ class RelCoordIndexLocationGrouper(CoordIndexLocationGrouper):
         rel_loc_idx[0::2] = np.diff(np.concatenate([[0], abs_loc_idx[0::2]]))
         rel_loc_idx[1::2] = np.diff(np.concatenate([[0], abs_loc_idx[1::2]]))
         return rel_loc_idx
+
+    def __repr__(self):
+        return f'{self.__class__.__name__}()'
+
+    def __str__(self):
+        return f'Rel Coord Idx Loc'

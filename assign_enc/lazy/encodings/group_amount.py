@@ -20,6 +20,12 @@ class LazyAmountEncoder:
     def decode(self, vector: DesignVector) -> Optional[Tuple[Tuple[int, ...], Tuple[int, ...]]]:
         raise NotImplementedError
 
+    def __repr__(self):
+        raise NotImplementedError
+
+    def __str__(self):
+        raise NotImplementedError
+
 
 class LazyConnectionEncoder:
     """Base class for encoding connection selection"""
@@ -32,6 +38,12 @@ class LazyConnectionEncoder:
                src_exists: np.ndarray, tgt_exists: np.ndarray) -> Optional[np.ndarray]:
         raise NotImplementedError
 
+    def __repr__(self):
+        raise NotImplementedError
+
+    def __str__(self):
+        raise NotImplementedError
+
 
 class LazyAmountFirstEncoder(OnDemandLazyEncoder):
     """Base class for an encoder that first defines one or more design variables for selecting the amount of
@@ -41,30 +53,44 @@ class LazyAmountFirstEncoder(OnDemandLazyEncoder):
         super().__init__(imputer)
         self.amount_encoder = amount_encoder
         self.conn_encoder = conn_encoder
+        self._i_dv_amount = None
+        self._n_dv_amount_expand = None
         self._n_dv_amount = None
+        self._i_dv_conn = None
+        self._n_dv_conn_expand = None
 
     def _encode(self) -> List[DiscreteDV]:
         n_src_n_tgt = list(self.iter_n_src_n_tgt())
         dv_amount = self.amount_encoder.encode(self.n_src, self.tgt, n_src_n_tgt)
+        dv_amount, self._i_dv_amount, self._n_dv_amount_expand = self._filter_dvs(dv_amount)
         self._n_dv_amount = len(dv_amount)
 
         dv_conn = self.conn_encoder.encode(n_src_n_tgt, self)
+        dv_conn, self._i_dv_conn, self._n_dv_conn_expand = self._filter_dvs(dv_conn)
 
         return dv_amount+dv_conn
 
     def _decode(self, vector: DesignVector, src_exists: np.ndarray, tgt_exists: np.ndarray) -> Optional[np.ndarray]:
         amount_vector = vector[:self._n_dv_amount]
-        n_src_tgt_conn = self.amount_encoder.decode(amount_vector)
+        amount_vector_expanded = self._unfilter_dvs(amount_vector, self._i_dv_amount, self._n_dv_amount_expand)
+        n_src_tgt_conn = self.amount_encoder.decode(amount_vector_expanded)
         if n_src_tgt_conn is None:
             return
         n_src_conn, n_tgt_conn = n_src_tgt_conn
 
         conn_vector = vector[self._n_dv_amount:]
-        return self.conn_encoder.decode(n_src_conn, n_tgt_conn, conn_vector, self, src_exists, tgt_exists)
+        conn_vector_expanded = self._unfilter_dvs(conn_vector, self._i_dv_conn, self._n_dv_conn_expand)
+        return self.conn_encoder.decode(n_src_conn, n_tgt_conn, conn_vector_expanded, self, src_exists, tgt_exists)
 
     @staticmethod
     def group_by_values(values: np.ndarray) -> np.ndarray:
         return GroupedEncoder.group_by_values(values)
+
+    def __repr__(self):
+        return f'{self.__class__.__name__}({self._imputer!r}, {self.amount_encoder!r}, {self.conn_encoder!r})'
+
+    def __str__(self):
+        return f'Lazy Amount First + {self._imputer!s}: {self.amount_encoder!s}; {self.conn_encoder!s}'
 
 
 class FlatLazyAmountEncoder(LazyAmountEncoder):
@@ -78,6 +104,12 @@ class FlatLazyAmountEncoder(LazyAmountEncoder):
 
     def decode(self, vector: DesignVector) -> Optional[Tuple[Tuple[int, ...], Tuple[int, ...]]]:
         return self._n_src_n_tgt[vector[0]]
+
+    def __repr__(self):
+        return f'{self.__class__.__name__}()'
+
+    def __str__(self):
+        return f'Flat Amount'
 
 
 class GroupedLazyAmountEncoder(LazyAmountEncoder):
@@ -101,6 +133,12 @@ class GroupedLazyAmountEncoder(LazyAmountEncoder):
     def _get_dv_group_values(self, n_src, n_tgt, n_src_tgt_arr: np.ndarray) -> np.ndarray:
         raise NotImplementedError
 
+    def __repr__(self):
+        return f'{self.__class__.__name__}()'
+
+    def __str__(self):
+        raise NotImplementedError
+
 
 class TotalLazyAmountEncoder(GroupedLazyAmountEncoder):
 
@@ -109,6 +147,9 @@ class TotalLazyAmountEncoder(GroupedLazyAmountEncoder):
             np.sum(n_src_tgt_arr[:, :n_src], axis=1),
             np.arange(n_src_tgt_arr.shape[0]),
         ])
+
+    def __str__(self):
+        return 'Total Amount'
 
 
 class SourceLazyAmountEncoder(GroupedLazyAmountEncoder):
@@ -119,11 +160,17 @@ class SourceLazyAmountEncoder(GroupedLazyAmountEncoder):
             np.arange(n_src_tgt_arr.shape[0]),
         ])
 
+    def __str__(self):
+        return 'Source Amount'
+
 
 class SourceTargetLazyAmountEncoder(GroupedLazyAmountEncoder):
 
     def _get_dv_group_values(self, n_src, n_tgt, n_src_tgt_arr: np.ndarray) -> np.ndarray:
         return n_src_tgt_arr
+
+    def __str__(self):
+        return 'Source Target Amount'
 
 
 class FlatLazyConnectionEncoder(LazyConnectionEncoder):
@@ -142,8 +189,16 @@ class FlatLazyConnectionEncoder(LazyConnectionEncoder):
 
         matrices = encoder.get_matrices(n_src_conn, n_tgt_conn, src_exists, tgt_exists)
         if len(vector) == 0:
+            if matrices.shape[0] == 0:
+                return np.zeros((len(n_src_conn), len(n_tgt_conn)), dtype=int)
             return matrices[0, :, :]
 
         i_conn = vector[0]
         if i_conn < matrices.shape[0]:
             return matrices[i_conn, :, :]
+
+    def __repr__(self):
+        return f'{self.__class__.__name__}()'
+
+    def __str__(self):
+        return f'Flat Conn'

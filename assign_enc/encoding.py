@@ -60,6 +60,12 @@ class EagerImputer:
         """Return a new design vector and associated assignment matrix (n_src x n_tgt)"""
         raise NotImplementedError
 
+    def __repr__(self):
+        raise NotImplementedError
+
+    def __str__(self):
+        raise NotImplementedError
+
 
 class Encoder:
 
@@ -75,6 +81,12 @@ class Encoder:
 
     def get_imputation_ratio(self) -> float:
         """Ratio of the total design space size to the actual amount of possible connections"""
+        raise NotImplementedError
+
+    def __repr__(self):
+        raise NotImplementedError
+
+    def __str__(self):
         raise NotImplementedError
 
 
@@ -211,6 +223,12 @@ class EagerEncoder(Encoder):
         Returns the list of design vectors for each matrix in a n_patterns x n_dv array.
         Assumes values range between 0 and the number of options per design variable.
         """
+        raise NotImplementedError
+
+    def __repr__(self):
+        raise NotImplementedError
+
+    def __str__(self):
         raise NotImplementedError
 
 
