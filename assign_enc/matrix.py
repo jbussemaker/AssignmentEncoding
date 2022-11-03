@@ -22,16 +22,15 @@ class Node:
         # Flag whether repeated connections to the same opposite node is allowed
         self.rep = repeated_allowed
 
+        # Flat whether this node exists conditionally
+        self.conditional = exists_conditionally
+
         # Determine whether we have a set list of connections or only a lower bound
         conns, min_conns = None, None
         if nr_conn_list is not None:
             conns = nr_conn_list
-            if exists_conditionally and 0 not in conns:
-                conns = [0]+conns
 
         elif min_conn is not None:
-            if exists_conditionally:
-                min_conn = 0
             if max_conn == math.inf:
                 min_conns = min_conn
             else:
@@ -51,7 +50,8 @@ class Node:
         return f'({",".join([str(i) for i in self.conns])})'
 
     def __repr__(self):
-        return f'{self.__class__.__name__}(conns={self.conns!r}, min_conns={self.min_conns})'
+        return f'{self.__class__.__name__}(conns={self.conns!r}, min_conns={self.min_conns}, rep={self.rep}, ' \
+               f'cond={self.conditional})'
 
 
 class AggregateAssignmentMatrixGenerator:
@@ -187,20 +187,28 @@ class AggregateAssignmentMatrixGenerator:
                         tgt_exists: Union[np.ndarray, List[bool]] = None) -> np.ndarray:
         """Only keep matrices where non-existent nodes have no connections"""
         matrix_mask = np.ones((matrix.shape[0],), dtype=bool)
-        if src_exists is None and tgt_exists is None:
-            return matrix_mask
 
         # Deselect matrices where non-existing src nodes have one or more connections
-        if src_exists is not None:
-            for i, src_exists in enumerate(src_exists):
-                if not src_exists:
-                    matrix_mask &= np.sum(matrix[:, i, :], axis=1) == 0
+        src = self.src
+        for i, src_exist in enumerate(src_exists if src_exists is not None else [True]*len(src)):
+            conn_sum = np.sum(matrix[:, i, :], axis=1)
+            if src_exist:
+                min_conns = self._get_min_conns(src[i])
+                if min_conns > 0:
+                    matrix_mask &= conn_sum >= min_conns
+            else:
+                matrix_mask &= conn_sum == 0
 
         # Deselect matrices where non-existing tgt nodes have one or more connections
-        if tgt_exists is not None:
-            for i, tgt_exists in enumerate(tgt_exists):
-                if not tgt_exists:
-                    matrix_mask &= np.sum(matrix[:, :, i], axis=1) == 0
+        tgt = self.tgt
+        for i, tgt_exist in enumerate(tgt_exists if tgt_exists is not None else [True]*len(tgt)):
+            tgt_sum = np.sum(matrix[:, :, i], axis=1)
+            if tgt_exist:
+                min_conns = self._get_min_conns(tgt[i])
+                if min_conns > 0:
+                    matrix_mask &= tgt_sum >= min_conns
+            else:
+                matrix_mask &= tgt_sum == 0
 
         return matrix_mask
 
@@ -280,16 +288,22 @@ class AggregateAssignmentMatrixGenerator:
         # Check number of source connections
         max_conn = self.max_src_appear
         for i, n_src in enumerate(np.sum(matrix, axis=1)):
-            if src_exists is not None and not src_exists[i] and n_src > 0:
-                return False
+            if src_exists is not None and not src_exists[i]:
+                if n_src > 0:
+                    return False
+                else:
+                    continue
             if not self._check_conns(n_src, self.src[i], max_conn):
                 return False
 
         # Check number of target connections
         max_conn = self.max_tgt_appear
         for i, n_tgt in enumerate(np.sum(matrix, axis=0)):
-            if tgt_exists is not None and not tgt_exists[i] and n_tgt > 0:
-                return False
+            if tgt_exists is not None and not tgt_exists[i]:
+                if n_tgt > 0:
+                    return False
+                else:
+                    continue
             if not self._check_conns(n_tgt, self.tgt[i], max_conn):
                 return False
 
@@ -307,8 +321,13 @@ class AggregateAssignmentMatrixGenerator:
     def _get_conns(node: Node, max_conn: int):
         if node.max_inf:
             slot_max_conn = max_conn
-            return list(range(node.min_conns, slot_max_conn + 1))
-        return [c for c in node.conns if c <= max_conn]
+            min_conns = 0 if node.conditional else node.min_conns
+            return list(range(min_conns, slot_max_conn+1))
+
+        conns = [c for c in node.conns if c <= max_conn]
+        if node.conditional and 0 not in conns:
+            conns = [0]+conns
+        return conns
 
     def count_all_matrices(self) -> int:
         count = 0
@@ -382,15 +401,19 @@ class AggregateAssignmentMatrixGenerator:
 
         return max([_max(self.src), _max(self.tgt)])
 
-    @staticmethod
-    def _get_min_appear(conn_tgt_nodes: List[Node]) -> int:
+    @classmethod
+    def _get_min_appear(cls, conn_tgt_nodes: List[Node]) -> int:
         n_appear = 0
         for tgt_node in conn_tgt_nodes:
-            if tgt_node.max_inf:
-                n_appear += tgt_node.min_conns
-            else:
-                n_appear += tgt_node.conns[0]
+            if not tgt_node.conditional:
+                n_appear += cls._get_min_conns(tgt_node)
         return n_appear
+
+    @staticmethod
+    def _get_min_conns(node: Node) -> int:
+        if node.max_inf:
+            return node.min_conns
+        return node.conns[0]
 
     def _get_max_appear(self, conn_tgt_nodes: List[Node]) -> int:
         """

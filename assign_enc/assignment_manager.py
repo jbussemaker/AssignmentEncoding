@@ -77,10 +77,8 @@ class AssignmentManager(AssignmentManagerBase):
             -> DesignVector:
         """Correct the design vector so that it matches an existing connection pattern"""
 
-        # Pre-filter matrices if (potentially) not all nodes exist
-        matrix_mask = None
-        if src_exists is not None or tgt_exists is not None:
-            matrix_mask = self._matrix_gen.filter_matrices(self.matrix, src_exists=src_exists, tgt_exists=tgt_exists)
+        # Pre-filter matrices based on node existence
+        matrix_mask = self._matrix_gen.filter_matrices(self.matrix, src_exists=src_exists, tgt_exists=tgt_exists)
 
         # Get matrix and impute design vector
         imputed_vector, _ = self._encoder.get_matrix(vector, matrix_mask=matrix_mask)
@@ -90,10 +88,8 @@ class AssignmentManager(AssignmentManagerBase):
             -> Tuple[DesignVector, np.ndarray]:
         """Get connection matrix from a given design vector"""
 
-        # Pre-filter matrices if (potentially) not all nodes exist
-        matrix_mask = None
-        if src_exists is not None or tgt_exists is not None:
-            matrix_mask = self._matrix_gen.filter_matrices(self.matrix, src_exists=src_exists, tgt_exists=tgt_exists)
+        # Pre-filter matrices based on node existence
+        matrix_mask = self._matrix_gen.filter_matrices(self.matrix, src_exists=src_exists, tgt_exists=tgt_exists)
 
         # Get matrix and impute design vector
         return self._encoder.get_matrix(vector, matrix_mask=matrix_mask)

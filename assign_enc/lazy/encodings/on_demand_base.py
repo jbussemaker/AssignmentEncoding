@@ -40,17 +40,14 @@ class OnDemandLazyEncoder(LazyEncoder):
             self._matrix_cache[cache_key] = matrices = self._matrix_gen.get_matrices_by_n_conn(n_src_conn, n_tgt_conn)
 
         # Filter by src or tgt node existence
-        if src_exists is not None or tgt_exists is not None:
-            cache_key_src_tgt = (cache_key, tuple(src_exists if src_exists is not None else []),
-                                 tuple(tgt_exists if tgt_exists is not None else []))
-            if cache_key_src_tgt in self._filtered_matrix_cache:
-                return self._filtered_matrix_cache[cache_key_src_tgt]
+        cache_key_src_tgt = (cache_key, tuple(src_exists if src_exists is not None else []),
+                             tuple(tgt_exists if tgt_exists is not None else []))
+        if cache_key_src_tgt in self._filtered_matrix_cache:
+            return self._filtered_matrix_cache[cache_key_src_tgt]
 
-            matrix_mask = self._matrix_gen.filter_matrices(matrices, src_exists=src_exists, tgt_exists=tgt_exists)
-            self._filtered_matrix_cache[cache_key_src_tgt] = filtered_matrices = matrices[matrix_mask, :, :]
-            return filtered_matrices
-
-        return matrices
+        matrix_mask = self._matrix_gen.filter_matrices(matrices, src_exists=src_exists, tgt_exists=tgt_exists)
+        self._filtered_matrix_cache[cache_key_src_tgt] = filtered_matrices = matrices[matrix_mask, :, :]
+        return filtered_matrices
 
     def _encode(self) -> List[DiscreteDV]:
         """Encode the assignment problem (given by src and tgt nodes) directly to design variables"""

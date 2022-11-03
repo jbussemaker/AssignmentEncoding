@@ -514,3 +514,50 @@ def test_count_matrices_from_nodes():
     matrix = gen.get_agg_matrix()
     assert matrix.shape[0] == 64
     assert gen.count_all_matrices() == 64
+
+
+def test_conditional_existence():
+    src = [Node(min_conn=1, repeated_allowed=False, exists_conditionally=True) for _ in range(2)]
+    tgt = [Node([1], repeated_allowed=False, exists_conditionally=True) for _ in range(2)]
+    gen = AggregateAssignmentMatrixGenerator(src, tgt)
+    assert gen.max_conn == 2
+
+    src_tgt_conns = list(gen.iter_n_sources_targets())
+    assert len(src_tgt_conns) == 8
+
+    matrix = gen.get_agg_matrix()
+    assert np.all(matrix == np.array([
+        [[0, 0], [0, 0]],
+        [[0, 0], [0, 1]],
+        [[0, 0], [1, 0]],
+        [[0, 0], [1, 1]],
+        [[0, 1], [0, 0]],
+        [[1, 0], [0, 0]],
+        [[1, 0], [0, 1]],
+        [[0, 1], [1, 0]],
+        [[1, 1], [0, 0]],
+    ]))
+
+    def _assert_mask(src_exists, tgt_exists, check_matrix):
+        matrix_mask = gen.filter_matrices(matrix, src_exists=src_exists, tgt_exists=tgt_exists)
+        matrix_filtered = matrix[matrix_mask, :, :]
+        assert matrix_filtered.shape[0] == check_matrix.shape[0]
+        assert np.all(matrix_filtered == check_matrix)
+        assert np.all([gen.validate_matrix(matrix[i, :, :], src_exists=src_exists, tgt_exists=tgt_exists)
+                       for i in range(matrix.shape[0])] == matrix_mask)
+
+    _assert_mask(None, None, np.array([
+        [[1, 0], [0, 1]],
+        [[0, 1], [1, 0]],
+    ]))
+    _assert_mask([True, True], [True, True], np.array([
+        [[1, 0], [0, 1]],
+        [[0, 1], [1, 0]],
+    ]))
+    _assert_mask([True, True], [True, False], np.empty((0, 2, 2)))
+    _assert_mask([True, False], [True, False], np.array([
+        [[1, 0], [0, 0]],
+    ]))
+    _assert_mask([False, False], [False, False], np.array([
+        [[0, 0], [0, 0]],
+    ]))
