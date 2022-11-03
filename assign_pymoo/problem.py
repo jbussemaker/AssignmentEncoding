@@ -7,6 +7,7 @@ from assign_enc.lazy_encoding import *
 from assign_enc.assignment_manager import *
 
 from pymoo.core.repair import Repair
+from pymoo.core.variable import Real
 from pymoo.core.problem import Problem
 from pymoo.core.variable import Integer
 from pymoo.core.evaluator import Evaluator
@@ -33,7 +34,7 @@ class AssignmentProblem(Problem):
         design_vars = assignment_manager.design_vars
 
         aux_des_vars = self.get_aux_des_vars() or []
-        self.n_aux = len(aux_des_vars) > 0
+        self.n_aux = len(aux_des_vars)
         design_vars = aux_des_vars+design_vars
 
         n_var = len(design_vars)
@@ -93,14 +94,29 @@ class AssignmentProblem(Problem):
         if has_g:
             out['G'] = g_out
 
+    def get_n_design_points(self, n_cont=5) -> int:
+        n = 1
+        xl, xu = self.bounds()
+        for i, var in enumerate(self.vars):
+            n *= n_cont if isinstance(var, Real) else int(xu[i]-xl[i]+1)
+        return n
+
     def get_init_sampler(self, lhs=True, **kwargs):
         return get_init_sampler(repair=self.get_repair(), lhs=lhs, **kwargs)
 
-    def eval_points(self, n=None) -> Population:
+    def sample_points(self, n=None, n_cont=5, remove_duplicates=True) -> Population:
+        if n is not None:
+            n_des_points = self.get_n_design_points(n_cont=n_cont)
+            if n > n_des_points:
+                n = None
+
         repair = self.get_repair()
-        sampler = RepairedExhaustiveSampling(repair=repair) \
+        sampler = RepairedExhaustiveSampling(repair=repair, n_cont=n_cont, remove_duplicates=remove_duplicates) \
             if n is None else RepairedLatinHypercubeSampling(repair=repair)
-        pop = sampler.do(self, n or 100)
+        return sampler.do(self, n or 100)
+
+    def eval_points(self, n=None) -> Population:
+        pop = self.sample_points(n=n)
         print(f'Points sampled (n={n!r}): {len(pop)}')
         return Evaluator().eval(self, pop)
 
@@ -116,8 +132,13 @@ class AssignmentProblem(Problem):
             n_leave_out = 10
         return InformationContentAnalyzer(self, **kwargs).get_information_error(n_samples, n_leave_out=n_leave_out)
 
-    def get_imputation_ratio(self):
-        return self.assignment_manager.get_imputation_ratio()
+    def get_imputation_ratio(self, n_sample: Optional[int] = 10000):
+        # return self.assignment_manager.get_imputation_ratio()
+        pop = self.sample_points(n=n_sample, remove_duplicates=False)
+        x = pop.get('X')
+        n = x.shape[0]
+        n_unique = np.unique(x, axis=0).shape[0]
+        return n/n_unique
 
     # !! IMPLEMENT BELOW THIS LINE !! #
 

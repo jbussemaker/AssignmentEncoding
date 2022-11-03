@@ -6,7 +6,8 @@ from assign_pymoo.problem import *
 
 __all__ = ['AnalyticalProblemBase', 'AnalyticalCombinationProblem', 'AnalyticalAssignmentProblem',
            'AnalyticalPartitioningProblem', 'AnalyticalDownselectingProblem', 'AnalyticalConnectingProblem',
-           'AnalyticalPermutingProblem']
+           'AnalyticalPermutingProblem', 'AnalyticalIterCombinationsProblem',
+           'AnalyticalIterCombinationsReplacementProblem']
 
 
 class AnalyticalProblemBase(AssignmentProblem):
@@ -200,6 +201,38 @@ class AnalyticalPermutingProblem(AnalyticalProblemBase):
         return f'An Perm Prob {self._n_src} -> {self._n_tgt}'
 
 
+class AnalyticalIterCombinationsProblem(AnalyticalProblemBase):
+    """Itertools combinations function (select n_take elements from n_tgt targets):
+    1 source has n_take connections to n_tgt targets, no repetition"""
+
+    def __init__(self, encoder, n_take: int = 2, n_tgt: int = 3):
+        self._n_take = min(n_take, n_tgt)
+        super().__init__(encoder, n_src=1, n_tgt=n_tgt)
+
+    def get_init_kwargs(self) -> dict:
+        return {'n_take': self._n_take, 'n_tgt': self._n_tgt}
+
+    def _get_node(self, src: bool, idx: int) -> Node:
+        return Node([self._n_take], repeated_allowed=False) if src else Node([0, 1], repeated_allowed=False)
+
+    def __repr__(self):
+        return f'{self.__class__.__name__}({self._encoder}, n_take={self._n_take}, n_tgt={self._n_tgt})'
+
+    def __str__(self):
+        return f'An Iter Comb Prob {self._n_take} from {self._n_tgt}'
+
+
+class AnalyticalIterCombinationsReplacementProblem(AnalyticalIterCombinationsProblem):
+    """Itertools combinations_with_replacement function (select n_take elements from n_tgt targets):
+    1 source has n_take connections to n_tgt targets, repetition allowed"""
+
+    def _get_node(self, src: bool, idx: int) -> Node:
+        return Node([self._n_take]) if src else Node(min_conn=0)
+
+    def __str__(self):
+        return f'An Iter Comb Repl Prob {self._n_take} from {self._n_tgt}'
+
+
 if __name__ == '__main__':
     from assign_enc.eager.encodings import *
     from assign_enc.eager.imputation import *
@@ -222,7 +255,7 @@ if __name__ == '__main__':
             print(p.get_matrix_count())
         print(f'{timeit.default_timer()-s} sec')
 
-        print(f'Imputation ratio: {p.get_imputation_ratio()}')
+        print(f'Imputation ratio: {p.get_imputation_ratio(n_sample=None)}')
         print(f'Information error: {p.get_information_error()[0, 0]}')
 
     def _do_real():
@@ -235,11 +268,11 @@ if __name__ == '__main__':
             print(p.get_matrix_count())
         print(f'{timeit.default_timer()-s} sec')
 
-        print(f'Imputation ratio: {p.get_imputation_ratio()}')
+        print(f'Imputation ratio: {p.get_imputation_ratio(n_sample=None)}')
         print(f'Information error: {p.get_information_error()[0, 0]}')
 
     # _start_comp()
-    # _do_real()
+    # _do_real(), exit()
 
     from assign_experiments.encoders import *
     from assign_pymoo.metrics_compare import *
@@ -249,6 +282,8 @@ if __name__ == '__main__':
     # p = AnalyticalDownselectingProblem(DEFAULT_EAGER_ENCODER())
     # p = AnalyticalConnectingProblem(DEFAULT_EAGER_ENCODER())
     # p = AnalyticalPermutingProblem(DEFAULT_EAGER_ENCODER())
+    # p = AnalyticalIterCombinationsProblem(DEFAULT_EAGER_ENCODER())
+    # p = AnalyticalIterCombinationsReplacementProblem(DEFAULT_EAGER_ENCODER(), n_take=3, n_tgt=3)
     enc = []
     enc += [e(DEFAULT_EAGER_IMPUTER()) for e in EAGER_ENCODERS]
     enc += [e(DEFAULT_LAZY_IMPUTER()) for e in LAZY_ENCODERS]

@@ -19,6 +19,7 @@ class MetricsComparer:
         for i, encoder in enumerate(encoders):
             print(f'Evaluating {encoder!s} ({i+1}/{len(encoders)})')
             points[i, :] = self.get_metrics(problem, encoder)
+            print(f'           imp ratio = {points[i, 0]:.2f}; inf err = {points[i, 2]:.2f}')
             labels.append(str(encoder))
 
         if plot:

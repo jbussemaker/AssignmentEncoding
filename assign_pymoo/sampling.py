@@ -21,10 +21,11 @@ def get_init_sampler(repair: Repair = None, lhs=True, **kwargs):
 
 class RepairedExhaustiveSampling(Sampling):
 
-    def __init__(self, repair: Repair = None, n_cont=5):
+    def __init__(self, repair: Repair = None, n_cont=5, remove_duplicates=True):
         super().__init__()
         self._repair = repair
         self._n_cont = n_cont
+        self._remove_duplicates = remove_duplicates
 
     def _do(self, problem: Problem, n_samples, **kwargs):
         xl, xu = problem.bounds()
@@ -40,7 +41,12 @@ class RepairedExhaustiveSampling(Sampling):
 
         pop = Population.new(X=x)
         pop = self._repair.do(problem, pop)
-        pop = DefaultDuplicateElimination().do(pop)
+
+        if self._remove_duplicates:
+            gb_needed = ((len(pop)**2)*8)/(1024**3)
+            if gb_needed < 2:
+                pop = DefaultDuplicateElimination().do(pop)
+
         return pop.get('X')
 
 
