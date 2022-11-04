@@ -278,7 +278,7 @@ if __name__ == '__main__':
     from assign_pymoo.metrics_compare import *
     # p = AnalyticalCombinationProblem(DEFAULT_EAGER_ENCODER())
     # p = AnalyticalAssignmentProblem(DEFAULT_EAGER_ENCODER())
-    p = AnalyticalPartitioningProblem(DEFAULT_EAGER_ENCODER())  # imp ratios lower than 1!
+    p = AnalyticalPartitioningProblem(DEFAULT_EAGER_ENCODER())
     # p = AnalyticalDownselectingProblem(DEFAULT_EAGER_ENCODER())
     # p = AnalyticalConnectingProblem(DEFAULT_EAGER_ENCODER())
     # p = AnalyticalPermutingProblem(DEFAULT_EAGER_ENCODER())

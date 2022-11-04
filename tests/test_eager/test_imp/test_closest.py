@@ -13,7 +13,7 @@ def test_imputer():
         [[1, 1, 1, 2]],
     ])
     encoder = DirectMatrixEncoder(ClosestImputer(), matrix)
-    dvs = encoder._design_vectors
+    dvs = list(encoder._design_vectors.values())[0]
     assert dvs.shape == (6, 4)
 
     assert np.all(ClosestImputer._calc_dist_manhattan(dvs, np.array([0, 0, 0, 0])) == np.array([0, 1, 1, 2, 4, 5]))

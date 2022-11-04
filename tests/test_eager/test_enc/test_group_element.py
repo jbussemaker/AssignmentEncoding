@@ -18,7 +18,7 @@ def test_element_grouper():
     encoder = ElementGroupedEncoder(FirstImputer(), matrix)
     encoder.matrix = matrix
 
-    assert np.all(encoder._design_vectors == np.array([
+    assert np.all(list(encoder._design_vectors.values())[0] == np.array([
         [0, 0],
         [2, 0],
         [1, 0],
@@ -31,7 +31,7 @@ def test_element_grouper():
 
     encoder.normalize_within_group = False
     encoder.matrix = matrix
-    assert np.all(encoder._design_vectors == np.array([
+    assert np.all(list(encoder._design_vectors.values())[0] == np.array([
         [0, 1, 0],
         [2, 0, 0],
         [1, 1, 0],

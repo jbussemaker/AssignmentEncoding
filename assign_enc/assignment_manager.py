@@ -21,22 +21,20 @@ class AssignmentManagerBase:
         """Ratio of the total design space size to the actual amount of possible connections"""
         raise NotImplementedError
 
-    def correct_vector(self, vector: DesignVector, src_exists: List[bool] = None, tgt_exists: List[bool] = None) \
-            -> DesignVector:
+    def correct_vector(self, vector: DesignVector, existence: NodeExistence = None) -> DesignVector:
         """Correct the design vector so that it matches an existing connection pattern"""
         raise NotImplementedError
 
-    def get_matrix(self, vector: DesignVector, src_exists: List[bool] = None, tgt_exists: List[bool] = None) \
-            -> Tuple[DesignVector, np.ndarray]:
+    def get_matrix(self, vector: DesignVector, existence: NodeExistence = None) -> Tuple[DesignVector, np.ndarray]:
         """Get connection matrix from a given design vector"""
         raise NotImplementedError
 
-    def get_conn_idx(self, vector: DesignVector, src_exists: List[bool] = None, tgt_exists: List[bool] = None) \
+    def get_conn_idx(self, vector: DesignVector, existence: NodeExistence = None) \
             -> Tuple[DesignVector, List[Tuple[int, int]]]:
         """Get node connections for a given design vector"""
         raise NotImplementedError
 
-    def get_conns(self, vector: DesignVector, src_exists: List[bool] = None, tgt_exists: List[bool] = None) \
+    def get_conns(self, vector: DesignVector, existence: NodeExistence = None) \
             -> Tuple[DesignVector, List[Tuple[Node, Node]]]:
         """Get node connections for a given design vector"""
         raise NotImplementedError
@@ -48,8 +46,10 @@ class AssignmentManager(AssignmentManagerBase):
     """
 
     def __init__(self, src: List[Node], tgt: List[Node], encoder: EagerEncoder,
-                 excluded: List[Tuple[Node, Node]] = None, cache=True):
-        self._matrix_gen = gen = AggregateAssignmentMatrixGenerator(src, tgt, excluded=excluded)
+                 excluded: List[Tuple[Node, Node]] = None, existence_patterns: NodeExistencePatterns = None,
+                 cache=True):
+        self._matrix_gen = gen = AggregateAssignmentMatrixGenerator(
+            src, tgt, excluded=excluded, existence_patterns=existence_patterns)
         self._encoder = encoder
 
         encoder.matrix = gen.get_agg_matrix(cache=cache)
@@ -63,7 +63,7 @@ class AssignmentManager(AssignmentManagerBase):
         return self._encoder
 
     @property
-    def matrix(self) -> np.ndarray:
+    def matrix(self) -> Dict[NodeExistence, np.ndarray]:
         return self._encoder.matrix
 
     @property
@@ -73,45 +73,33 @@ class AssignmentManager(AssignmentManagerBase):
     def get_imputation_ratio(self) -> float:
         return self._encoder.get_imputation_ratio()
 
-    def correct_vector(self, vector: DesignVector, src_exists: List[bool] = None, tgt_exists: List[bool] = None) \
-            -> DesignVector:
+    def correct_vector(self, vector: DesignVector, existence: NodeExistence = None) -> DesignVector:
         """Correct the design vector so that it matches an existing connection pattern"""
-
-        # Pre-filter matrices based on node existence
-        matrix_mask = self._matrix_gen.filter_matrices(self.matrix, src_exists=src_exists, tgt_exists=tgt_exists)
-
-        # Get matrix and impute design vector
-        imputed_vector, _ = self._encoder.get_matrix(vector, matrix_mask=matrix_mask)
+        imputed_vector, _ = self._encoder.get_matrix(vector, existence=existence)
         return imputed_vector
 
-    def get_matrix(self, vector: DesignVector, src_exists: List[bool] = None, tgt_exists: List[bool] = None) \
-            -> Tuple[DesignVector, np.ndarray]:
+    def get_matrix(self, vector: DesignVector, existence: NodeExistence = None) -> Tuple[DesignVector, np.ndarray]:
         """Get connection matrix from a given design vector"""
+        return self._encoder.get_matrix(vector, existence=existence)
 
-        # Pre-filter matrices based on node existence
-        matrix_mask = self._matrix_gen.filter_matrices(self.matrix, src_exists=src_exists, tgt_exists=tgt_exists)
-
-        # Get matrix and impute design vector
-        return self._encoder.get_matrix(vector, matrix_mask=matrix_mask)
-
-    def get_conn_idx(self, vector: DesignVector, src_exists: List[bool] = None, tgt_exists: List[bool] = None) \
+    def get_conn_idx(self, vector: DesignVector, existence: NodeExistence = None) \
             -> Tuple[DesignVector, List[Tuple[int, int]]]:
         """Get node connections for a given design vector"""
 
         # Get matrix and impute design vector
-        imputed_vector, matrix = self.get_matrix(vector, src_exists=src_exists, tgt_exists=tgt_exists)
+        imputed_vector, matrix = self.get_matrix(vector, existence=existence)
 
         # Get connections from matrix
         edges_idx = self._matrix_gen.get_conn_idx(matrix)
 
         return imputed_vector, edges_idx
 
-    def get_conns(self, vector: DesignVector, src_exists: List[bool] = None, tgt_exists: List[bool] = None) \
+    def get_conns(self, vector: DesignVector, existence: NodeExistence = None) \
             -> Tuple[DesignVector, List[Tuple[Node, Node]]]:
         """Get node connections for a given design vector"""
 
         # Get matrix and impute design vector
-        imputed_vector, matrix = self.get_matrix(vector, src_exists=src_exists, tgt_exists=tgt_exists)
+        imputed_vector, matrix = self.get_matrix(vector, existence=existence)
 
         # Get connections from matrix
         edges = self._matrix_gen.get_conns(matrix)
@@ -122,9 +110,9 @@ class AssignmentManager(AssignmentManagerBase):
 class LazyAssignmentManager(AssignmentManagerBase):
 
     def __init__(self, src: List[Node], tgt: List[Node], encoder: LazyEncoder,
-                 excluded: List[Tuple[Node, Node]] = None):
+                 excluded: List[Tuple[Node, Node]] = None, existence_patterns: NodeExistencePatterns = None):
         self._encoder = encoder
-        encoder.set_nodes(src, tgt, excluded=excluded)
+        encoder.set_nodes(src, tgt, excluded=excluded, existence_patterns=existence_patterns)
 
     @property
     def design_vars(self):
@@ -133,30 +121,28 @@ class LazyAssignmentManager(AssignmentManagerBase):
     def get_imputation_ratio(self) -> float:
         return self._encoder.get_imputation_ratio()
 
-    def correct_vector(self, vector: DesignVector, src_exists: List[bool] = None, tgt_exists: List[bool] = None) \
-            -> DesignVector:
+    def correct_vector(self, vector: DesignVector, existence: NodeExistence = None) -> DesignVector:
         """Correct the design vector so that it matches an existing connection pattern"""
-        imputed_vector, _ = self._encoder.get_matrix(vector, src_exists=src_exists, tgt_exists=tgt_exists)
+        imputed_vector, _ = self._encoder.get_matrix(vector, existence=existence)
         return imputed_vector
 
-    def get_matrix(self, vector: DesignVector, src_exists: List[bool] = None, tgt_exists: List[bool] = None) \
-            -> Tuple[DesignVector, np.ndarray]:
+    def get_matrix(self, vector: DesignVector, existence: NodeExistence = None) -> Tuple[DesignVector, np.ndarray]:
         """Get connection matrix from a given design vector"""
-        return self._encoder.get_matrix(vector, src_exists=src_exists, tgt_exists=tgt_exists)
+        return self._encoder.get_matrix(vector, existence=existence)
 
-    def get_conn_idx(self, vector: DesignVector, src_exists: List[bool] = None, tgt_exists: List[bool] = None) \
+    def get_conn_idx(self, vector: DesignVector, existence: NodeExistence = None) \
             -> Tuple[DesignVector, List[Tuple[int, int]]]:
         """Get node connections for a given design vector"""
-        imputed_vector, matrix = self._encoder.get_matrix(vector, src_exists=src_exists, tgt_exists=tgt_exists)
+        imputed_vector, matrix = self._encoder.get_matrix(vector, existence=existence)
 
         # Get connections from matrix
         edges_idx = self._encoder.get_conn_idx(matrix)
         return imputed_vector, edges_idx
 
-    def get_conns(self, vector: DesignVector, src_exists: List[bool] = None, tgt_exists: List[bool] = None) \
+    def get_conns(self, vector: DesignVector, existence: NodeExistence = None) \
             -> Tuple[DesignVector, List[Tuple[Node, Node]]]:
         """Get node connections for a given design vector"""
-        imputed_vector, matrix = self._encoder.get_matrix(vector, src_exists=src_exists, tgt_exists=tgt_exists)
+        imputed_vector, matrix = self._encoder.get_matrix(vector, existence=existence)
 
         # Get connections from matrix
         edges = self._encoder.get_conns(matrix)

@@ -1,13 +1,16 @@
 import os
 import math
 import numba
+import pickle
 import hashlib
 import itertools
 import functools
 import numpy as np
 from typing import *
+from dataclasses import dataclass
 
-__all__ = ['Node', 'AggregateAssignmentMatrixGenerator', 'count_n_pool_take']
+__all__ = ['Node', 'NodeExistence', 'NodeExistencePatterns', 'AggregateAssignmentMatrixGenerator', 'count_n_pool_take',
+           'MatrixMap', 'MatrixMapOptional']
 
 
 class Node:
@@ -17,13 +20,13 @@ class Node:
     """
 
     def __init__(self, nr_conn_list: List[int] = None, min_conn: int = None, max_conn: int = math.inf,
-                 repeated_allowed: bool = True, exists_conditionally=False):
+                 repeated_allowed: bool = True):
 
         # Flag whether repeated connections to the same opposite node is allowed
         self.rep = repeated_allowed
 
-        # Flat whether this node exists conditionally
-        self.conditional = exists_conditionally
+        # Flag whether this node exists conditionally (set by existence patterns)
+        self.conditional = False
 
         # Determine whether we have a set list of connections or only a lower bound
         conns, min_conns = None, None
@@ -54,6 +57,123 @@ class Node:
                f'cond={self.conditional})'
 
 
+@dataclass(frozen=False)
+class NodeExistence:
+    """
+    Defines a specific src/tgt node existence pattern.
+    """
+    src_exists: Union[List[bool], np.ndarray] = None
+    tgt_exists: Union[List[bool], np.ndarray] = None
+
+    def has_src(self, i):
+        return self.src_exists[i] if self.src_exists is not None else True
+
+    def has_tgt(self, i):
+        return self.tgt_exists[i] if self.tgt_exists is not None else True
+
+    def src_exists_mask(self, n_src: int):
+        if self.src_exists is None:
+            return np.ones((n_src,), dtype=bool)
+        return np.array(self.src_exists)
+
+    def tgt_exists_mask(self, n_tgt: int):
+        if self.tgt_exists is None:
+            return np.ones((n_tgt,), dtype=bool)
+        return np.array(self.tgt_exists)
+
+    def src_all_exists(self):
+        return self.src_exists is None or all(self.src_exists)
+
+    def tgt_all_exists(self):
+        return self.tgt_exists is None or all(self.tgt_exists)
+
+    def none_exists(self):
+        if self.src_exists is None or self.tgt_exists is None:
+            return False
+        return not any(self.src_exists) and not any(self.tgt_exists)
+
+    def __hash__(self):
+        return hash((-1 if self.src_all_exists() else tuple(self.src_exists),
+                     -1 if self.tgt_all_exists() else tuple(self.tgt_exists)))
+
+    def __eq__(self, other):
+        return hash(self) == hash(other)
+
+
+@dataclass(frozen=False)
+class NodeExistencePatterns:
+    patterns: List[NodeExistence]
+
+    @classmethod
+    def always_exists(cls) -> 'NodeExistencePatterns':
+        return cls([NodeExistence()])
+
+    @classmethod
+    def get_all_combinations(cls, src_is_conditional: List[bool], tgt_is_conditional: List[bool]):
+        """
+        Gets patterns for all combination of conditional existence, e.g.:
+        is_conditional = [False, True, True]
+        exists = [True, False, False]
+        exists = [True, True , False]
+        exists = [True, False, True ]
+        exists = [True, True , True ]
+        """
+        src_exist_opts = [[True, False] if is_conditional else [True] for is_conditional in src_is_conditional]
+        tgt_exist_opts = [[True, False] if is_conditional else [True] for is_conditional in tgt_is_conditional]
+
+        patterns = []
+        for src_exists in itertools.product(*src_exist_opts):
+            for tgt_exists in itertools.product(*tgt_exist_opts):
+                patterns.append(NodeExistence(src_exists=list(src_exists), tgt_exists=list(tgt_exists)))
+        return cls(patterns)
+
+    @classmethod
+    def get_increasing(cls, src_is_conditional: List[bool], tgt_is_conditional: List[bool]):
+        """
+        Gets patterns for conditional existence combinations where node existence is monotonically increasing, e.g.:
+        is_conditional = [False, True, True]
+        exists = [True, False, False]
+        exists = [True, True , False]
+        exists = [True, True , True ]
+        """
+
+        def _get_exist_opts(is_conditional: List[bool]) -> List[List[bool]]:
+            n_cond = sum([is_cond for is_cond in is_conditional])
+            exist_opts = []
+            for n_cond_exists in range(n_cond+1):
+                n_exists = 0
+                exist_opt = []
+                for is_cond in is_conditional:
+                    if is_cond:
+                        exist_opt.append(n_exists < n_cond_exists)
+                        n_exists += 1
+                    else:
+                        exist_opt.append(True)
+                exist_opts.append(exist_opt)
+            return exist_opts
+
+        src_exist_opts = _get_exist_opts(src_is_conditional)
+        tgt_exist_opts = _get_exist_opts(tgt_is_conditional)
+        return cls([NodeExistence(src_exists=list(src_exists), tgt_exists=list(tgt_exists))
+                    for src_exists, tgt_exists in itertools.product(src_exist_opts, tgt_exist_opts)])
+
+    def src_is_conditional(self, i):
+        for pattern in self.patterns:
+            if not pattern.has_src(i):
+                return True
+        return False
+
+    def tgt_is_conditional(self, i):
+        for pattern in self.patterns:
+            if not pattern.has_tgt(i):
+                return True
+        return False
+
+
+MatrixMap = Dict[NodeExistence, np.ndarray]
+MatrixMapOptional = Union[np.ndarray, Dict[NodeExistence, np.ndarray]]
+
+
 class AggregateAssignmentMatrixGenerator:
     """
     Generator that iterates over all connection possibilities between two sets of objects, with various constraints:
@@ -67,12 +187,15 @@ class AggregateAssignmentMatrixGenerator:
     lower bound is 0).
     """
 
-    def __init__(self, src: List[Node], tgt: List[Node], excluded: List[tuple] = None, max_conn: int = None):
+    def __init__(self, src: List[Node], tgt: List[Node], excluded: List[tuple] = None,
+                 existence_patterns: NodeExistencePatterns = None, max_conn: int = None):
 
         self.src = src
         self.tgt = tgt
         self._ex = None
         self.ex = excluded
+        self._exist = None
+        self.existence_patterns = existence_patterns
         self._max_conn = max_conn
         self._min_src_appear = None
         self._max_src_appear = None
@@ -95,6 +218,24 @@ class AggregateAssignmentMatrixGenerator:
             if len(self._ex) == 0:
                 self._ex = None
         self._conn_blocked_mat = None
+
+    @property
+    def existence_patterns(self) -> NodeExistencePatterns:
+        return self._exist
+
+    @existence_patterns.setter
+    def existence_patterns(self, existence_patterns: NodeExistencePatterns = None):
+        if existence_patterns is None:
+            existence_patterns = NodeExistencePatterns.always_exists()
+        self._exist = existence_patterns
+
+        # Set conditional flags
+        for i, src in enumerate(self.src):
+            src.conditional = existence_patterns.src_is_conditional(i)
+        for i, tgt in enumerate(self.tgt):
+            tgt.conditional = existence_patterns.tgt_is_conditional(i)
+
+        self._min_src_appear = None
 
     @property
     def max_conn(self):
@@ -143,23 +284,25 @@ class AggregateAssignmentMatrixGenerator:
                 blocked[i_src, j_tgt] = True
         return self._conn_blocked_mat
 
-    def __iter__(self) -> Generator[np.array, None, None]:
-        for n_src_conn, n_tgt_conn in self.iter_n_sources_targets():
-            yield self._iter_matrices(n_src_conn, n_tgt_conn)  # Iterate over assignment matrices
+    def __iter__(self) -> Generator[Tuple[np.array, NodeExistence], None, None]:
+        for n_src_conn, n_tgt_conn, existence in self.iter_n_sources_targets():
+            yield self._iter_matrices(n_src_conn, n_tgt_conn), existence  # Iterate over assignment matrices
 
-    def iter_matrices(self):
-        for matrices in self:
-            for matrix in matrices:
-                yield matrix
+    def iter_matrices(self, existence: NodeExistence = None):
+        for n_src_conn, n_tgt_conn, exist in self.iter_n_sources_targets(existence=existence):
+            for matrix in self._iter_matrices(n_src_conn, n_tgt_conn):
+                yield matrix, exist
 
-    def get_agg_matrix(self, cache=False):
-        cache_path = self._cache_path(f'{self._get_cache_key()}.npy')
+    def get_agg_matrix(self, cache=False) -> MatrixMap:
+        cache_path = self._cache_path(f'{self._get_cache_key()}.pkl')
         if cache and os.path.exists(cache_path):
-            return np.load(cache_path)
+            with open(cache_path, 'rb') as fp:
+                return pickle.load(fp)
 
         agg_matrix = self._agg_matrices(self)
         os.makedirs(os.path.dirname(cache_path), exist_ok=True)
-        np.save(cache_path, agg_matrix, allow_pickle=False)
+        with open(cache_path, 'wb') as fp:
+            pickle.dump(agg_matrix, fp)
         return agg_matrix
 
     def _get_cache_key(self):
@@ -175,46 +318,38 @@ class AggregateAssignmentMatrixGenerator:
         return cache_folder if sub_path is None else os.path.join(cache_folder, sub_path)
 
     def _agg_matrices(self, matrix_gen):
-        """Aggregate generated matrices into one big matrix"""
-        matrices = list(matrix_gen)
-        if len(matrices) == 0:
-            return np.zeros((0, len(self.src), len(self.tgt)), dtype=int)
-        if len(matrices) == 1:
-            return matrices[0]
-        return np.row_stack(matrices)
-
-    def filter_matrices(self, matrix: np.ndarray, src_exists: Union[np.ndarray, List[bool]] = None,
-                        tgt_exists: Union[np.ndarray, List[bool]] = None) -> np.ndarray:
-        """Only keep matrices where non-existent nodes have no connections"""
-        matrix_mask = np.ones((matrix.shape[0],), dtype=bool)
-
-        # Deselect matrices where non-existing src nodes have one or more connections
-        src = self.src
-        for i, src_exist in enumerate(src_exists if src_exists is not None else [True]*len(src)):
-            conn_sum = np.sum(matrix[:, i, :], axis=1)
-            if src_exist:
-                min_conns = self._get_min_conns(src[i])
-                if min_conns > 0:
-                    matrix_mask &= conn_sum >= min_conns
+        """Aggregate generated matrices into one big matrix, one per existence pattern"""
+        matrices_by_existence = {}
+        for matrix_data in list(matrix_gen):
+            if isinstance(matrix_data, np.ndarray):
+                matrices, existence = matrix_data, NodeExistence()
             else:
-                matrix_mask &= conn_sum == 0
+                matrices, existence = matrix_data
 
-        # Deselect matrices where non-existing tgt nodes have one or more connections
-        tgt = self.tgt
-        for i, tgt_exist in enumerate(tgt_exists if tgt_exists is not None else [True]*len(tgt)):
-            tgt_sum = np.sum(matrix[:, :, i], axis=1)
-            if tgt_exist:
-                min_conns = self._get_min_conns(tgt[i])
-                if min_conns > 0:
-                    matrix_mask &= tgt_sum >= min_conns
+            if existence not in matrices_by_existence:
+                matrices_by_existence[existence] = []
+            matrices_by_existence[existence].append(matrices)
+
+        agg_matrices_by_existence = {}
+        for existence, matrices in matrices_by_existence.items():
+            if len(matrices) == 0:
+                agg_matrices_by_existence[existence] = np.zeros((0, len(self.src), len(self.tgt)), dtype=int)
+            elif len(matrices) == 1:
+                agg_matrices_by_existence[existence] = matrices[0]
             else:
-                matrix_mask &= tgt_sum == 0
+                agg_matrices_by_existence[existence] = np.row_stack(matrices)
+        return agg_matrices_by_existence
 
-        return matrix_mask
+    def get_matrix_for_existence(self, matrix: MatrixMapOptional, existence: NodeExistence = None) -> np.ndarray:
+        if isinstance(matrix, np.ndarray):
+            return matrix
+        if existence not in matrix:
+            return np.empty((0, len(self.src), len(self.tgt)), dtype=int)
+        return matrix[existence]
 
     def iter_conns(self) -> Generator[List[Tuple[Node, Node]], None, None]:
         """Generate lists of edges from matrices"""
-        for matrix in self.iter_matrices():
+        for matrix, _ in self.iter_matrices():
             yield tuple(self.get_conns(matrix))
 
     def get_conn_idx(self, matrix: np.ndarray) -> List[Tuple[int, int]]:
@@ -237,25 +372,32 @@ class AggregateAssignmentMatrixGenerator:
                     edges.append((src, tgt))
         return edges
 
-    def iter_n_sources_targets(self):
-        for n_src_conn in self.iter_sources():
-            for n_tgt_conn in self.iter_targets(n_source=sum(n_src_conn)):
-                yield n_src_conn, n_tgt_conn
+    def iter_n_sources_targets(self, existence: NodeExistence = None):
+        for exist in (self.iter_existence() if existence is None else [existence]):
+            for n_src_conn in self.iter_sources(existence=exist):
+                for n_tgt_conn in self.iter_targets(n_source=sum(n_src_conn), existence=exist):
+                    yield n_src_conn, n_tgt_conn, exist
 
-    def iter_sources(self):
-        yield from self._iter_conn_slots(self.src)
+    def iter_existence(self):
+        yield from self.existence_patterns.patterns
 
-    def iter_targets(self, n_source):
-        yield from self._iter_conn_slots(self.tgt, is_src=False, n=n_source)
+    def iter_sources(self, existence: NodeExistence = None):
+        exists_mask = existence.src_exists_mask(len(self.src)) if existence is not None else None
+        yield from self._iter_conn_slots(self.src, exists_mask=exists_mask)
 
-    def _iter_conn_slots(self, nodes: List[Node], is_src=True, n=None):
+    def iter_targets(self, n_source, existence: NodeExistence = None):
+        exists_mask = existence.tgt_exists_mask(len(self.tgt)) if existence is not None else None
+        yield from self._iter_conn_slots(self.tgt, is_src=False, n=n_source, exists_mask=exists_mask)
+
+    def _iter_conn_slots(self, nodes: List[Node], is_src=True, n=None, exists_mask: np.ndarray = None):
         """Iterate over all combinations of number of connections per nodes."""
 
         max_conn = self.max_src_appear if is_src else self.max_tgt_appear
         min_conn = self.min_src_appear if is_src else 0
 
         # Get all possible number of connections for each node
-        n_conns = [self._get_conns(node, max_conn) for node in nodes]
+        n_conns = [[0] if exists_mask is not None and not exists_mask[i] else self._get_conns(node, max_conn)
+                   for i, node in enumerate(nodes)]
 
         # Iterate over all combinations of number of connections
         for n_conn_nodes in itertools.product(*n_conns):
@@ -268,8 +410,7 @@ class AggregateAssignmentMatrixGenerator:
 
             yield tuple(n_conn_nodes)
 
-    def validate_matrix(self, matrix: np.ndarray, src_exists: Union[List[bool], np.ndarray] = None,
-                        tgt_exists: Union[List[bool], np.ndarray] = None) -> bool:
+    def validate_matrix(self, matrix: np.ndarray, existence: NodeExistence = None) -> bool:
         """Checks whether a connection matrix is valid"""
 
         # Check if any connections have repetitions that are not allowed
@@ -286,9 +427,11 @@ class AggregateAssignmentMatrixGenerator:
             return False
 
         # Check number of source connections
+        if existence is None:
+            existence = NodeExistence()
         max_conn = self.max_src_appear
         for i, n_src in enumerate(np.sum(matrix, axis=1)):
-            if src_exists is not None and not src_exists[i]:
+            if not existence.has_src(i):
                 if n_src > 0:
                     return False
                 else:
@@ -299,7 +442,7 @@ class AggregateAssignmentMatrixGenerator:
         # Check number of target connections
         max_conn = self.max_tgt_appear
         for i, n_tgt in enumerate(np.sum(matrix, axis=0)):
-            if tgt_exists is not None and not tgt_exists[i]:
+            if not existence.has_tgt(i):
                 if n_tgt > 0:
                     return False
                 else:
@@ -321,19 +464,20 @@ class AggregateAssignmentMatrixGenerator:
     def _get_conns(node: Node, max_conn: int):
         if node.max_inf:
             slot_max_conn = max_conn
-            min_conns = 0 if node.conditional else node.min_conns
-            return list(range(min_conns, slot_max_conn+1))
+            return list(range(node.min_conns, slot_max_conn+1))
 
-        conns = [c for c in node.conns if c <= max_conn]
-        if node.conditional and 0 not in conns:
-            conns = [0]+conns
-        return conns
+        return [c for c in node.conns if c <= max_conn]
 
-    def count_all_matrices(self) -> int:
-        count = 0
-        for n_src_conn, n_tgt_conn in self.iter_n_sources_targets():
-            count += self.count_matrices(n_src_conn, n_tgt_conn)
-        return count
+    def count_all_matrices(self, max_by_existence=True) -> int:
+        count_by_existence = {}
+        for n_src_conn, n_tgt_conn, existence in self.iter_n_sources_targets():
+            if existence not in count_by_existence:
+                count_by_existence[existence] = 0
+            count_by_existence[existence] += self.count_matrices(n_src_conn, n_tgt_conn)
+
+        if max_by_existence:
+            return max(count_by_existence.values())
+        return sum(count_by_existence.values())
 
     def get_matrices_by_n_conn(self, n_src_conn, n_tgt_conn):
         return self._iter_matrices(n_src_conn, n_tgt_conn)

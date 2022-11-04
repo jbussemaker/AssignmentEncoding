@@ -9,7 +9,7 @@ __all__ = ['LazyDeltaImputer']
 class LazyDeltaImputer(LazyImputer):
     """Imputes by looking for the first valid design vector created by iterating over delta values."""
 
-    def _impute(self, vector: DesignVector, matrix: np.ndarray, src_exists: np.ndarray, tgt_exists: np.ndarray,
+    def _impute(self, vector: DesignVector, matrix: Optional[np.ndarray], existence: NodeExistence,
                 validate: Callable[[np.ndarray], bool], tried_vectors: Set[Tuple[int, ...]]) -> Tuple[DesignVector, np.ndarray]:
 
         # Determine delta values to try out
@@ -28,7 +28,7 @@ class LazyDeltaImputer(LazyImputer):
             dv = vector+np.array(dv_delta)
 
             # Validate associated matrix
-            matrix = self._decode(dv, src_exists, tgt_exists)
+            matrix = self._decode(dv, existence)
             if validate(matrix):
                 return dv, matrix
 

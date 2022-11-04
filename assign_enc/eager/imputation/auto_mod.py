@@ -21,7 +21,7 @@ class AutoModImputer(EagerImputer):
         super().__init__()
         self.reverse = reverse
 
-    def impute(self, vector: DesignVector, matrix_mask: MatrixSelectMask) -> Tuple[DesignVector, np.ndarray]:
+    def impute(self, vector: DesignVector, existence: NodeExistence, matrix_mask: MatrixSelectMask) -> Tuple[DesignVector, np.ndarray]:
         mask = matrix_mask
         partial_vector: PartialDesignVector = [None for _ in range(len(vector))]
         for i_dv in (reversed(range(len(vector))) if self.reverse else range(len(vector))):
@@ -29,7 +29,7 @@ class AutoModImputer(EagerImputer):
             dv_partial_vector[i_dv] = vector[i_dv]
 
             # Find design vectors that match the new partial design vector
-            dv_mask = self._filter_design_vectors(dv_partial_vector) & mask
+            dv_mask = self._filter_design_vectors(dv_partial_vector, existence) & mask
             i_mask, = np.where(dv_mask)
 
             # If we have found no valid design vectors for this partial vector, modify the value until we have found one
@@ -41,7 +41,7 @@ class AutoModImputer(EagerImputer):
 
                     # Find design vectors that match the modified partial design vector
                     dv_partial_vector[i_dv] = dv_value
-                    dv_mask = self._filter_design_vectors(dv_partial_vector) & mask
+                    dv_mask = self._filter_design_vectors(dv_partial_vector, existence) & mask
                     i_mask, = np.where(dv_mask)
 
                     if len(i_mask) > 0:
@@ -52,7 +52,7 @@ class AutoModImputer(EagerImputer):
 
             # If we have found exactly one vector, we can stop searching and return this one
             if len(i_mask) == 1:
-                return self._return_imputation(i_mask[0])
+                return self._return_imputation(i_mask[0], existence)
 
             # Otherwise, continue with the next design variable
             else:

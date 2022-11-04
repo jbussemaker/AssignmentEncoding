@@ -61,3 +61,34 @@ def test_encoder_no_repeat():
 
     _, mat = encoder.get_matrix([0, 2, 0, 1])
     assert np.all(mat == np.array([[0, 2], [0, 1]]))
+
+
+def test_encoder_existence():
+    encoder = LazyDirectMatrixEncoder(LazyConstraintViolationImputer())
+    src = [Node([0, 1, 2]), Node(min_conn=0, repeated_allowed=False)]
+    tgt = [Node([0, 1], repeated_allowed=False), Node(min_conn=1)]
+    exist = NodeExistencePatterns([
+        NodeExistence(),
+        NodeExistence(tgt_exists=[True, False]),
+    ])
+    encoder.set_nodes(src, tgt, existence_patterns=exist)
+
+    assert len(encoder._existence_design_vars) == 2
+    assert len(encoder._existence_design_vars[exist.patterns[0]]) == 4
+    assert len(encoder._existence_design_vars[exist.patterns[1]]) == 2
+
+    dv = encoder.design_vars
+    assert len(dv) == 4
+    assert [d.n_opts for d in dv] == [2, 3, 2, 2]
+
+    _, mat = encoder.get_matrix([0, 1, 0, 0])
+    assert np.all(mat == np.array([[0, 1], [0, 0]]))
+    _, mat = encoder.get_matrix([0, 1, 0, 0], existence=NodeExistence())
+    assert np.all(mat == np.array([[0, 1], [0, 0]]))
+    _, mat = encoder.get_matrix([0, 1, 0, 0], existence=exist.patterns[0])
+    assert np.all(mat == np.array([[0, 1], [0, 0]]))
+
+    _, mat = encoder.get_matrix([1, 0, 0, 0], existence=exist.patterns[0])
+    assert np.all(mat == np.array([[-1, -1], [-1, -1]]))
+    _, mat = encoder.get_matrix([1, 0, 0, 0], existence=exist.patterns[1])
+    assert np.all(mat == np.array([[1, 0], [0, 0]]))

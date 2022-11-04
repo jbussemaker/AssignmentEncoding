@@ -13,8 +13,8 @@ def test_imputer():
         if not encoder.is_valid_vector(dv):
             n_imp += 1
             dv_imp, mat = encoder.get_matrix(dv)
-            assert np.all(dv_imp == encoder._design_vectors[0, :])
-            assert np.all(mat == encoder._matrix[0, :, :])
+            assert np.all(dv_imp == list(encoder._design_vectors.values())[0][0, :])
+            assert np.all(mat == list(encoder._matrix.values())[0][0, :, :])
 
     assert n_imp > 0
 
@@ -35,7 +35,7 @@ def test_imputer_masked():
             if not encoder.is_valid_vector(dv, matrix_mask=mask):
                 n_imp += 1
                 dv_imp, mat = encoder.get_matrix(dv, matrix_mask=mask)
-                assert np.all(dv_imp == encoder._design_vectors[i_first_valid, :])
-                assert np.all(mat == encoder._matrix[i_first_valid, :, :])
+                assert np.all(dv_imp == list(encoder._design_vectors.values())[0][i_first_valid, :])
+                assert np.all(mat == list(encoder._matrix.values())[0][i_first_valid, :, :])
 
         assert n_imp > 0

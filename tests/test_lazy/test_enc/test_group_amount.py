@@ -5,7 +5,8 @@ from assign_enc.lazy.imputation.constraint_violation import *
 
 
 def test_flat_amount_encoder():
-    dvs = FlatLazyAmountEncoder().encode(2, 2, [((0, 1), (0, 1)), ((1, 1), (0, 2)), ((1, 1), (2, 0)), ((1, 2), (2, 1))])
+    dvs = FlatLazyAmountEncoder().encode(2, 2, [((0, 1), (0, 1)), ((1, 1), (0, 2)), ((1, 1), (2, 0)), ((1, 2), (2, 1))],
+                                         NodeExistence())
     assert len(dvs) == 1
     assert dvs[0].n_opts == 4
 
@@ -16,7 +17,7 @@ def test_flat_connection_encoder():
 
     n_tgt_n_src = list(encoder.iter_n_src_n_tgt())
     assert len(n_tgt_n_src) == 16
-    assert ((2, 2), (1, 3)) in n_tgt_n_src
+    assert ((2, 2), (1, 3), NodeExistence()) in n_tgt_n_src
 
     assert len(encoder.design_vars) == 2
     assert encoder.design_vars[0].n_opts == 16
@@ -39,12 +40,13 @@ def test_flat_connection_encoder():
 
 
 def test_total_amount_encoder():
-    dvs = TotalLazyAmountEncoder().encode(2, 2, [((0, 1), (0, 1)), ((1, 1), (0, 2)), ((1, 1), (2, 0)), ((1, 2), (2, 1))])
+    dvs = TotalLazyAmountEncoder().encode(2, 2, [((0, 1), (0, 1)), ((1, 1), (0, 2)), ((1, 1), (2, 0)), ((1, 2), (2, 1))],
+                                          NodeExistence())
     assert len(dvs) == 2
     assert dvs[0].n_opts == 3
     assert dvs[1].n_opts == 2
 
-    dvs = TotalLazyAmountEncoder().encode(2, 2, [((0, 1), (0, 1)), ((1, 1), (0, 2))])
+    dvs = TotalLazyAmountEncoder().encode(2, 2, [((0, 1), (0, 1)), ((1, 1), (0, 2))], NodeExistence())
     assert len(dvs) == 1
     assert dvs[0].n_opts == 2
 
@@ -66,7 +68,8 @@ def test_total_amount_encoder():
 
 
 def test_source_amount_encoder():
-    dvs = SourceLazyAmountEncoder().encode(2, 2, [((0, 1), (0, 1)), ((1, 1), (0, 2)), ((1, 1), (2, 0)), ((1, 2), (2, 1))])
+    dvs = SourceLazyAmountEncoder().encode(2, 2, [((0, 1), (0, 1)), ((1, 1), (0, 2)), ((1, 1), (2, 0)), ((1, 2), (2, 1))],
+                                           NodeExistence())
     assert len(dvs) == 3
     assert dvs[0].n_opts == 2
     assert dvs[1].n_opts == 2
@@ -89,7 +92,7 @@ def test_source_amount_encoder():
 
 def test_source_target_amount_encoder():
     dvs = SourceTargetLazyAmountEncoder().encode(
-        2, 2, [((0, 1), (0, 1)), ((1, 1), (0, 2)), ((1, 1), (2, 0)), ((1, 2), (2, 1))])
+        2, 2, [((0, 1), (0, 1)), ((1, 1), (0, 2)), ((1, 1), (2, 0)), ((1, 2), (2, 1))], NodeExistence())
     assert len(dvs) == 3
     assert dvs[0].n_opts == 2
     assert dvs[1].n_opts == 2

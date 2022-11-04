@@ -4,7 +4,7 @@ from typing import *
 from assign_enc.matrix import *
 from assign_enc.encoding import *
 
-__all__ = ['LazyImputer', 'LazyEncoder', 'DesignVector', 'DiscreteDV']
+__all__ = ['LazyImputer', 'LazyEncoder', 'DesignVector', 'DiscreteDV', 'NodeExistence']
 
 
 class LazyImputer:
@@ -12,44 +12,49 @@ class LazyImputer:
 
     def __init__(self):
         self._matrix_gen: Optional[AggregateAssignmentMatrixGenerator] = None
+        self._existence_des_vars: Optional[Dict[NodeExistence, List[DiscreteDV]]] = None
         self._des_vars: Optional[List[DiscreteDV]] = None
         self._decode_func = None
         self._impute_cache = {}
 
-    def initialize(self, matrix_gen: AggregateAssignmentMatrixGenerator, design_vars: List[DiscreteDV], decode_func):
+    def initialize(self, matrix_gen: AggregateAssignmentMatrixGenerator,
+                   existence_des_vars: Dict[NodeExistence, List[DiscreteDV]], design_vars: List[DiscreteDV],
+                   decode_func):
         self._matrix_gen = matrix_gen
+        self._existence_des_vars = existence_des_vars
         self._des_vars = design_vars
         self._decode_func = decode_func
         self._impute_cache = {}
 
-    def _decode(self, vector: DesignVector, src_exists: np.ndarray, tgt_exists: np.ndarray) -> Optional[np.ndarray]:
-        return self._decode_func(vector, src_exists, tgt_exists)
+    def _decode(self, vector: DesignVector, existence: NodeExistence) -> Optional[np.ndarray]:
+        return self._decode_func(vector, existence)
 
-    def impute(self, vector: DesignVector, matrix: Optional[np.ndarray], src_exists: np.ndarray, tgt_exists: np.ndarray,
+    def impute(self, vector: DesignVector, matrix: Optional[np.ndarray], existence: NodeExistence,
                tried_vectors: set = None) -> Tuple[DesignVector, np.ndarray]:
         """Returns the imputed design vector and associated connection matrix"""
 
         # Check in cache
-        cache_key = hash((tuple(vector), tuple(src_exists), tuple(tgt_exists)))
+        cache_key = hash((tuple(vector), hash(existence)))
         if cache_key in self._impute_cache:
             return self._impute_cache[cache_key]
 
         def _validate(mat):
             if mat is None:
                 return False
-            return self._matrix_gen.validate_matrix(mat, src_exists=src_exists, tgt_exists=tgt_exists)
+            return self._matrix_gen.validate_matrix(mat, existence=existence)
 
         # If none of the nodes exist, return empty matrix
-        if np.all(~src_exists) and np.all(~tgt_exists):
+        n_src, n_tgt = len(self._matrix_gen.src), len(self._matrix_gen.tgt)
+        if existence.none_exists():
             imputed_vector = [0]*len(vector)
-            imputed_matrix = np.zeros((len(src_exists), len(tgt_exists)), dtype=int)
+            imputed_matrix = np.zeros((n_src, n_tgt), dtype=int)
 
         else:
             # Try to modify vector such that it adheres to the src and tgt exist masks
             if matrix is not None:
                 matrix = matrix.copy()
-                matrix[~src_exists, :] = 0
-                matrix[:, ~tgt_exists] = 0
+                matrix[~existence.src_exists_mask(n_src), :] = 0
+                matrix[:, ~existence.tgt_exists_mask(n_tgt)] = 0
             if matrix is not None and _validate(matrix):
                 imputed_vector, imputed_matrix = vector, matrix
 
@@ -59,15 +64,14 @@ class LazyImputer:
                 tried_vectors.add(tuple(vector))
 
                 vector = np.array(vector)
-                imputed_vector, imputed_matrix = \
-                    self._impute(vector, matrix, src_exists, tgt_exists, _validate, tried_vectors)
+                imputed_vector, imputed_matrix = self._impute(vector, matrix, existence, _validate, tried_vectors)
 
         # Update cache
         self._impute_cache[cache_key] = (imputed_vector, imputed_matrix)
         return imputed_vector, imputed_matrix
 
-    def _impute(self, vector: DesignVector, matrix: Optional[np.ndarray], src_exists: np.ndarray,
-                tgt_exists: np.ndarray, validate: Callable[[np.ndarray], bool], tried_vectors: Set[Tuple[int, ...]]) \
+    def _impute(self, vector: DesignVector, matrix: Optional[np.ndarray], existence: NodeExistence,
+                validate: Callable[[np.ndarray], bool], tried_vectors: Set[Tuple[int, ...]]) \
             -> Tuple[DesignVector, np.ndarray]:
         """Returns the imputed design vector and associated connection matrix"""
         raise NotImplementedError
@@ -87,17 +91,24 @@ class LazyEncoder(Encoder):
 
     def __init__(self, imputer: LazyImputer):
         self._matrix_gen: Optional[AggregateAssignmentMatrixGenerator] = None
+        self._existence_design_vars: Optional[Dict[NodeExistence, List[DiscreteDV]]] = None
         self._design_vars: Optional[List[DiscreteDV]] = None
         self._imputer = imputer
 
-    def set_nodes(self, src: List[Node], tgt: List[Node], excluded: List[Tuple[Node, Node]] = None):
-        self._matrix_gen = AggregateAssignmentMatrixGenerator(src, tgt, excluded=excluded)
-        self._design_vars = dvs = self._encode()
+    def set_nodes(self, src: List[Node], tgt: List[Node], excluded: List[Tuple[Node, Node]] = None,
+                  existence_patterns: NodeExistencePatterns = None):
+        self._matrix_gen = gen = AggregateAssignmentMatrixGenerator(
+            src, tgt, excluded=excluded, existence_patterns=existence_patterns)
+
+        self._encode_prepare()
+        self._existence_design_vars = existence_dvs = \
+            {existence: self._encode(existence) for existence in gen.iter_existence()}
+        self._design_vars = dvs = self._merge_design_vars(list(existence_dvs.values()))
         for i, dv in enumerate(dvs):
             if dv.n_opts < 2:
                 raise RuntimeError(f'All design variables must have at least 2 options: {i} has {dv.n_opts} opts')
 
-        self._imputer.initialize(self._matrix_gen, self._design_vars, self._decode)
+        self._imputer.initialize(self._matrix_gen, self._existence_design_vars, self._design_vars, self._decode)
 
     @property
     def src(self):
@@ -125,7 +136,7 @@ class LazyEncoder(Encoder):
 
     def get_imputation_ratio(self, use_real_matrix=True) -> float:
         if use_real_matrix:
-            n_matrix = self._matrix_gen.count_all_matrices()
+            n_matrix = self._matrix_gen.count_all_matrices(max_by_existence=False)
             return self.get_n_design_points()/n_matrix
 
         n_sample = self._n_mc_imputation_ratio
@@ -146,31 +157,29 @@ class LazyEncoder(Encoder):
 
         return n_sample/n_valid
 
-    def get_matrix(self, vector: DesignVector, src_exists: List[bool] = None, tgt_exists: List[bool] = None) \
-            -> Tuple[DesignVector, np.ndarray]:
+    def get_matrix(self, vector: DesignVector, existence: NodeExistence = None) -> Tuple[DesignVector, np.ndarray]:
         """Select a connection matrix (n_src x n_tgt) and impute the design vector if needed."""
 
         # Decode matrix
-        matrix, src_exists, tgt_exists = self._decode_vector(vector, src_exists, tgt_exists)
+        matrix, existence = self._decode_vector(vector, existence)
 
         # Validate matrix
-        if matrix is not None and \
-                self._matrix_gen.validate_matrix(matrix, src_exists=src_exists, tgt_exists=tgt_exists):
+        if matrix is not None and self._matrix_gen.validate_matrix(matrix, existence=existence):
             return vector, matrix
 
-        return self._imputer.impute(vector, matrix, src_exists, tgt_exists)
+        return self._imputer.impute(vector, matrix, existence)
 
-    def is_valid_vector(self, vector: DesignVector, src_exists: List[bool] = None, tgt_exists: List[bool] = None):
-        matrix, src_exists, tgt_exists = self._decode_vector(vector, src_exists, tgt_exists)
+    def is_valid_vector(self, vector: DesignVector, existence: NodeExistence = None):
+        matrix, existence = self._decode_vector(vector, existence)
         if matrix is None:
             return False
-        return self._matrix_gen.validate_matrix(matrix, src_exists=src_exists, tgt_exists=tgt_exists)
+        return self._matrix_gen.validate_matrix(matrix, existence=existence)
 
-    def _decode_vector(self, vector: DesignVector, src_exists: List[bool] = None, tgt_exists: List[bool] = None):
-        src_exists = np.array([True for _ in range(self.n_src)] if src_exists is None else src_exists)
-        tgt_exists = np.array([True for _ in range(self.n_tgt)] if tgt_exists is None else tgt_exists)
-        matrix = self._decode(vector, src_exists=src_exists, tgt_exists=tgt_exists)
-        return matrix, src_exists, tgt_exists
+    def _decode_vector(self, vector: DesignVector, existence: NodeExistence = None):
+        if existence is None:
+            existence = NodeExistence()
+        matrix = self._decode(vector, existence=existence)
+        return matrix, existence
 
     def get_conn_idx(self, matrix: np.ndarray) -> List[Tuple[int, int]]:
         """Convert matrix to edge tuples"""
@@ -211,11 +220,24 @@ class LazyEncoder(Encoder):
         all_vector[i_valid_dv] = vector
         return all_vector
 
-    def _encode(self) -> List[DiscreteDV]:
+    @staticmethod
+    def _merge_design_vars(design_vars_list: List[List[DiscreteDV]]) -> List[DiscreteDV]:
+        n_dv_max = max([len(dvs) for dvs in design_vars_list])
+        n_opts = np.zeros((len(design_vars_list), n_dv_max), dtype=int)
+        for i, dvs in enumerate(design_vars_list):
+            n_opts[i, :len(dvs)] = [dv.n_opts for dv in dvs]
+
+        n_opts_max = np.max(n_opts, axis=0)
+        return [DiscreteDV(n_opts=n) for n in n_opts_max]
+
+    def _encode_prepare(self):
+        pass
+
+    def _encode(self, existence: NodeExistence) -> List[DiscreteDV]:
         """Encode the assignment problem (given by src and tgt nodes) directly to design variables"""
         raise NotImplementedError
 
-    def _decode(self, vector: DesignVector, src_exists: np.ndarray, tgt_exists: np.ndarray) -> Optional[np.ndarray]:
+    def _decode(self, vector: DesignVector, existence: NodeExistence) -> Optional[np.ndarray]:
         """Return the connection matrix as would be encoded by the given design vector"""
         raise NotImplementedError
 

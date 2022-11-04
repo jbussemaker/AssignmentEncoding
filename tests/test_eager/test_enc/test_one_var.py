@@ -8,7 +8,7 @@ def test_encoding():
         matrix = np.random.randint(0, 3, (n, 3, 4))
         enc = OneVarEncoder(FirstImputer(), matrix)
 
-        assert enc.n_mat == n
+        assert enc.n_mat_max == n
         assert len(enc.design_vars) == 1
         assert enc.design_vars[0].n_opts == n
 

@@ -50,11 +50,15 @@ class GNCProblem(AssignmentProblem):
         aux_des_vars = []
 
         # Design variables for choosing the number of sensors and computers
+        aux_node_existence_pattern = None
         if self.choose_nr:
             aux_des_vars += [
                 DiscreteDV(n_opts=self.n_max),  # Nr of sensors
                 DiscreteDV(n_opts=self.n_max),  # Nr of computers
             ]
+
+            aux_node_existence_pattern = NodeExistencePatterns.get_increasing(
+                src_is_conditional=[False], tgt_is_conditional=[i > 0 for i in range(self.n_max)])
 
         # Design variables for choosing the type of each element: A, B, C
         # Here, we cannot just give three choices per element, because this would lead to architecture redundancies:
@@ -65,11 +69,11 @@ class GNCProblem(AssignmentProblem):
         if self.choose_type:
             from assign_enc.eager.imputation.closest import ClosestImputer
             from assign_enc.eager.encodings.group_element import ElementGroupedEncoder
-            cond = self.choose_nr
             self._choose_type_manager = manager = AssignmentManager(
                 src=[Node([self.n_max])],  # Make n_max connections
                 # To n_max nodes, repetitions allowed
-                tgt=[Node(min_conn=0, exists_conditionally=cond if i > 1 else False) for i in range(self.n_max)],
+                tgt=[Node(min_conn=0) for _ in range(self.n_max)],
+                existence_patterns=aux_node_existence_pattern,
                 encoder=ElementGroupedEncoder(ClosestImputer()))
 
             aux_des_vars += [DiscreteDV(n_opts=dv.n_opts) for i, dv in enumerate(manager.design_vars)]  # Sensor types
@@ -79,20 +83,30 @@ class GNCProblem(AssignmentProblem):
 
     def get_src_tgt_nodes(self) -> Tuple[List[Node], List[Node]]:
         cond, n = self.choose_nr, self.n_max
-        sensor_conn = [Node(min_conn=1, repeated_allowed=False, exists_conditionally=cond if i > 0 else False) for i in range(n)]
-        comp_conn = [Node(min_conn=1, repeated_allowed=False, exists_conditionally=cond if i > 0 else False) for i in range(n)]
+        sensor_conn = [Node(min_conn=1, repeated_allowed=False) for _ in range(n)]
+        comp_conn = [Node(min_conn=1, repeated_allowed=False) for _ in range(n)]
         return sensor_conn, comp_conn
 
-    def correct_x_aux(self, x_aux: DesignVector) -> Tuple[DesignVector, Optional[List[bool]], Optional[List[bool]]]:
+    def get_existence_patterns(self) -> Optional[NodeExistencePatterns]:
+        if not self.choose_nr:
+            return
+
+        src_is_conditional = [i > 0 for i in range(self.n_max)]
+        tgt_is_conditional = [i > 0 for i in range(self.n_max)]
+        return NodeExistencePatterns.get_increasing(src_is_conditional, tgt_is_conditional)
+
+    def correct_x_aux(self, x_aux: DesignVector) -> Tuple[DesignVector, Optional[NodeExistence]]:
         # Determine which target nodes exist
         choose_type, n = self.choose_type, self.n_max
         if self.choose_nr:
             n_src, n_tgt = x_aux[0]+1, x_aux[1]+1
-            src_exists = [i < n_src for i in range(n)]
-            tgt_exists = [i < n_tgt for i in range(n)]
+            existence = NodeExistence(src_exists=[i < n_src for i in range(n)],
+                                      tgt_exists=[i < n_tgt for i in range(n)])
+            src_existence = NodeExistence(tgt_exists=existence.src_exists)
+            tgt_existence = NodeExistence(tgt_exists=existence.tgt_exists)
             x_nr = x_aux[:2]
         else:
-            src_exists = tgt_exists = None
+            existence = src_existence = tgt_existence = None
             x_nr = []
 
         # Correct type selection design variables
@@ -102,23 +116,23 @@ class GNCProblem(AssignmentProblem):
             n_dv = len(manager.design_vars)
 
             x_type_src = x_aux[i0:i0+n_dv]
-            x_type_src = manager.correct_vector(x_type_src, tgt_exists=src_exists)
+            x_type_src = manager.correct_vector(x_type_src, existence=src_existence)
 
             x_type_tgt = x_aux[i0+n_dv:]
-            x_type_tgt = manager.correct_vector(x_type_tgt, tgt_exists=tgt_exists)
+            x_type_tgt = manager.correct_vector(x_type_tgt, existence=tgt_existence)
         else:
             x_type_src = x_type_tgt = []
 
         x_corrected = list(x_nr)+list(x_type_src)+list(x_type_tgt)
-        return x_corrected, src_exists, tgt_exists
+        return x_corrected, existence
 
     def _do_evaluate(self, conns: List[Tuple[int, int]], x_aux: Optional[DesignVector]) -> Tuple[List[float], List[float]]:
         # Get number of sensors and computers
         choose_type, n = self.choose_type, self.n_max
         if self.choose_nr:
             n_sensors, n_computers = x_aux[0]+1, x_aux[1]+1
-            src_exists = [i < n_sensors for i in range(n)]
-            tgt_exists = [i < n_computers for i in range(n)]
+            src_existence = NodeExistence(tgt_exists=[i < n_sensors for i in range(n)])
+            tgt_existence = NodeExistence(tgt_exists=[i < n_computers for i in range(n)])
 
             src_idx = {i for i, _ in conns}
             assert len(src_idx) == n_sensors
@@ -126,7 +140,7 @@ class GNCProblem(AssignmentProblem):
             assert len(tgt_idx) == n_computers
         else:
             n_sensors = n_computers = self.n_max
-            src_exists = tgt_exists = None
+            src_existence = tgt_existence = None
 
         # Get sensor and computer types
         types = ['A', 'B', 'C']
@@ -135,10 +149,10 @@ class GNCProblem(AssignmentProblem):
             manager = self._choose_type_manager
             n_dv = len(manager.design_vars)
 
-            _, conn_idx = manager.get_conn_idx(x_aux[i0:i0+n_dv], tgt_exists=src_exists)
+            _, conn_idx = manager.get_conn_idx(x_aux[i0:i0+n_dv], existence=src_existence)
             sensor_types = sorted([types[i_type] for _, i_type in conn_idx])[:n_sensors]
 
-            _, conn_idx = manager.get_conn_idx(x_aux[i0+n_dv:], tgt_exists=tgt_exists)
+            _, conn_idx = manager.get_conn_idx(x_aux[i0+n_dv:], existence=tgt_existence)
             comp_types = sorted([types[i_type] for _, i_type in conn_idx])[:n_computers]
         else:
             sensor_types = (types*int(np.ceil(n_sensors/len(types))))[:n_sensors]
@@ -213,8 +227,8 @@ if __name__ == '__main__':
     from assign_pymoo.metrics_compare import *
     # p = GNCProblem(DEFAULT_EAGER_ENCODER(), choose_nr=False, n_max=3, choose_type=False)
     # p = GNCProblem(DEFAULT_EAGER_ENCODER(), choose_nr=False, n_max=3, choose_type=True)
-    # p = GNCProblem(DEFAULT_EAGER_ENCODER(), choose_nr=True, n_max=3, choose_type=False)
-    p = GNCProblem(DEFAULT_EAGER_ENCODER(), choose_nr=True, n_max=3, choose_type=True)
+    p = GNCProblem(DEFAULT_EAGER_ENCODER(), choose_nr=True, n_max=3, choose_type=False)
+    # p = GNCProblem(DEFAULT_EAGER_ENCODER(), choose_nr=True, n_max=3, choose_type=True)
 
     print(f'Design space size: {p.get_n_design_points()}')
     print(f'Imputation ratio: {p.get_imputation_ratio():.2f}')

@@ -1,5 +1,6 @@
 import pytest
 import numpy as np
+from assign_enc.matrix import *
 from assign_enc.encoding import *
 from assign_enc.eager.imputation.first import *
 
@@ -40,10 +41,14 @@ def test_encoder():
 
     matrix = np.random.randint(0, 3, (10, 2, 3), dtype=int)
     enc = DirectEncoder(EagerImputer(), matrix)
-    assert enc.matrix is matrix
-    assert enc.n_mat == 10
+    exist = NodeExistence()
+    assert enc.matrix is not matrix
+    assert list(enc.matrix.values())[0] is matrix
+    assert exist in enc.matrix
+    assert enc.matrix[exist] is matrix
+    assert enc.n_mat_max == 10
 
-    assert enc._design_vectors.shape == (10, 1)
+    assert enc._design_vectors[exist].shape == (10, 1)
     assert len(enc.design_vars) == 1
     assert enc.design_vars[0].n_opts == 10
 
@@ -60,7 +65,7 @@ def test_encoder():
         assert dv[0] >= 0
         assert dv[0] < 10
 
-    assert enc.get_matrix_index([0]) == 0
+    assert enc.get_matrix_index([0]) == (0, exist)
     assert enc.is_valid_vector([0])
     dv, mat = enc.get_matrix([0])
     assert dv == [0]
@@ -85,20 +90,70 @@ def test_encoder_impute():
     matrix = np.random.randint(0, 3, (10, 2, 3), dtype=int)
     enc = DirectEncoder(FirstImputer())
     enc.matrix = matrix
-    assert enc.matrix is matrix
-    assert enc.n_mat == 10
+    exist = NodeExistence()
+    assert enc.matrix[exist] is matrix
+    assert enc.n_mat_max == 10
 
     assert not enc.is_valid_vector([10])
-    assert enc.get_matrix_index([10]) is None
+    assert enc.get_matrix_index([10])[0] is None
     dv, mat = enc.get_matrix([10])
-    assert dv == enc._design_vectors[0, :]
+    assert dv == enc._design_vectors[exist][0, :]
     assert np.all(mat == matrix[0, :, :])
 
     matrix_mask = np.ones((10,), dtype=bool)
     matrix_mask[0] = False
     dv, mat = enc.get_matrix([0], matrix_mask=matrix_mask)
-    assert dv == enc._design_vectors[1, :]
+    assert dv == enc._design_vectors[exist][1, :]
     assert np.all(mat == matrix[1, :, :])
+
+
+class TwoEncoder(EagerEncoder):
+
+    def _encode(self, matrix: np.ndarray) -> np.ndarray:
+        n_mat = matrix.shape[0]
+        if n_mat <= 4:
+            return np.array([np.arange(0, n_mat)]).T
+
+        n_mat_half = int(np.ceil(n_mat/2))
+        dv1 = np.tile(np.arange(0, n_mat_half), 2)[:n_mat]
+        dv2 = np.repeat([0, 1], n_mat_half)[:n_mat]
+        return np.column_stack([dv1, dv2])
+
+
+def test_encoder_existence():
+    exist1 = NodeExistence()
+    exist2 = NodeExistence(src_exists=[True, False])
+    matrix_map = {
+        exist1: np.random.random((10, 3, 2)),
+        exist2: np.random.random((4, 3, 2)),
+    }
+    enc = TwoEncoder(FirstImputer())
+    enc.matrix = matrix_map
+    assert enc.n_mat_max == 10
+
+    assert len(enc.design_vars) == 2
+    assert enc.design_vars[0].n_opts == 5
+    assert enc.design_vars[1].n_opts == 2
+
+    assert enc.is_valid_vector([0, 0], existence=exist1)
+    assert enc.is_valid_vector([0, 1], existence=exist1)
+    assert enc.is_valid_vector([2, 1], existence=exist1)
+
+    assert enc.get_matrix([0, 0], existence=exist1)
+
+    assert enc.is_valid_vector([0, 0], existence=exist2)
+    assert enc.is_valid_vector([2, 0], existence=exist2)
+    assert not enc.is_valid_vector([0, 1], existence=exist2)
+
+    assert enc._has_existence(exist1)
+    assert not enc._has_existence(NodeExistence(tgt_exists=[True, False]))
+
+    assert enc.get_matrix_index([0, 0], existence=exist1)[0] == 0
+    assert enc.get_matrix_index([1, 0], existence=exist2)[0] == 1
+
+    dv, mat = enc.get_matrix([1, 1], existence=exist2)
+    assert dv == [1, 0]
+    assert np.all(mat == enc._matrix[exist2][1, :, :])
 
 
 class DuplicateEncoder(EagerEncoder):
@@ -161,3 +216,38 @@ def test_normalize_dvs():
         [1, 1, 2, 0, 1],
         [2, 2, 1, 0, 2],
     ]))
+
+
+class DirectZeroEncoder(EagerEncoder):
+
+    def _encode(self, matrix: np.ndarray) -> np.ndarray:
+        n_mat = matrix.shape[0]
+        if n_mat == 1:
+            return np.empty((0, 0), dtype=int)
+        return np.array([np.arange(0, n_mat)]).T
+
+
+def test_encoder_zero_dvs():
+    src = [Node([1], repeated_allowed=False) for _ in range(2)]
+    tgt = [Node([1], repeated_allowed=False) for _ in range(2)]
+    exist = NodeExistencePatterns([
+        NodeExistence(),
+        NodeExistence(src_exists=[True, False], tgt_exists=[True, False]),
+    ])
+    gen = AggregateAssignmentMatrixGenerator(src, tgt, existence_patterns=exist)
+    matrix_map = gen.get_agg_matrix()
+    assert len(matrix_map) == 2
+    assert matrix_map[exist.patterns[1]].shape[0] == 1
+
+    encoder = DirectZeroEncoder(EagerImputer())
+    encoder.matrix = matrix_map
+
+    assert len(encoder.design_vars) == 1
+    assert encoder.design_vars[0].n_opts == 2
+
+    dv, mat = encoder.get_matrix([0], existence=exist.patterns[0])
+    assert dv == [0]
+    assert np.all(mat == np.array([[1, 0], [0, 1]]))
+    dv, mat = encoder.get_matrix([0], existence=exist.patterns[1])
+    assert dv == [0]
+    assert np.all(mat == np.array([[1, 0], [0, 0]]))

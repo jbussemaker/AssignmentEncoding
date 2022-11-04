@@ -8,7 +8,7 @@ from assign_enc.assignment_manager import *
 
 class DummyImputer(LazyImputer):
 
-    def _impute(self, vector: DesignVector, matrix: np.ndarray, src_exists: np.ndarray, tgt_exists: np.ndarray,
+    def _impute(self, vector: DesignVector, matrix: Optional[np.ndarray], existence: NodeExistence,
                 validate: Callable[[np.ndarray], bool], tried_vectors: Set[Tuple[int, ...]]) -> Tuple[DesignVector, np.ndarray]:
         assert not validate(matrix)
         assert tuple(vector) in tried_vectors
@@ -23,11 +23,11 @@ class DummyLazyEncoder(LazyEncoder):
         self._n_opts = n_opts
         super().__init__(imputer)
 
-    def _encode(self) -> List[DiscreteDV]:
+    def _encode(self, existence: NodeExistence) -> List[DiscreteDV]:
         n_dv = len(self.src)*len(self.tgt)
         return [DiscreteDV(n_opts=self._n_opts) for _ in range(n_dv)]
 
-    def _decode(self, vector: DesignVector, src_exists: np.ndarray, tgt_exists: np.ndarray) -> Optional[np.ndarray]:
+    def _decode(self, vector: DesignVector, existence: NodeExistence) -> Optional[np.ndarray]:
         return np.reshape(np.array(vector), (self.n_src, self.n_tgt))
 
 
@@ -45,9 +45,9 @@ def test_lazy_encoder():
     assert len(dv) == 4
     assert all([d.n_opts == 2 for d in dv])
 
-    assert np.all(enc._decode([0, 1, 1, 1], np.array([True]*2), np.array([True]*2)) == np.array([[0, 1], [1, 1]]))
+    assert np.all(enc._decode([0, 1, 1, 1], NodeExistence(np.array([True]*2), np.array([True]*2))) == np.array([[0, 1], [1, 1]]))
 
-    matrix, _, _ = enc._decode_vector([0, 1, 1, 1])
+    matrix, _ = enc._decode_vector([0, 1, 1, 1])
     assert np.all(matrix == np.array([[0, 1], [1, 1]]))
 
     assert not enc.is_valid_vector([0, 1, 1, 1])
@@ -74,14 +74,15 @@ def test_lazy_imputer_none_exist():
     enc = DummyLazyEncoder(DummyImputer())
     enc.set_nodes(src=[Node([0, 1]), Node([0, 1])], tgt=[Node([0, 1]), Node([0, 1])])
 
-    matrix, _, _ = enc._decode_vector([0, 1, 1, 0])
+    matrix, _ = enc._decode_vector([0, 1, 1, 0])
     assert np.all(matrix == np.array([[0, 1], [1, 0]]))
 
-    dv, matrix = enc.get_matrix([0, 1, 1, 0], src_exists=[False, False], tgt_exists=[False, False])
+    dv, matrix = enc.get_matrix([0, 1, 1, 0], NodeExistence(src_exists=[False, False], tgt_exists=[False, False]))
     assert np.all(dv == [0, 0, 0, 0])
     assert np.all(matrix == 0)
 
-    dv, matrix = enc.get_matrix(np.array([0, 1, 1, 0]), src_exists=[False, False], tgt_exists=[False, False])
+    dv, matrix = enc.get_matrix(np.array([0, 1, 1, 0]),
+                                NodeExistence(src_exists=[False, False], tgt_exists=[False, False]))
     assert np.all(dv == [0, 0, 0, 0])
     assert np.all(matrix == 0)
 
@@ -90,11 +91,11 @@ def test_lazy_imputer_no_exist_correct():
     enc = DummyLazyEncoder(DummyImputer())
     enc.set_nodes(src=[Node([0, 1]), Node([0, 1])], tgt=[Node([0, 1]), Node([0, 1])])
 
-    dv, matrix = enc.get_matrix([0, 1, 1, 1], src_exists=[True, False])
+    dv, matrix = enc.get_matrix([0, 1, 1, 1], NodeExistence(src_exists=[True, False]))
     assert np.all(dv == [0, 1, 1, 1])
     assert np.all(matrix == np.array([[0, 1], [0, 0]]))
 
-    dv, matrix = enc.get_matrix([0, 1, 1, 1], tgt_exists=[True, False])
+    dv, matrix = enc.get_matrix([0, 1, 1, 1], NodeExistence(tgt_exists=[True, False]))
     assert np.all(dv == [0, 1, 1, 1])
     assert np.all(matrix == np.array([[0, 0], [1, 0]]))
 

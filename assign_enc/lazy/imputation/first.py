@@ -9,7 +9,7 @@ __all__ = ['LazyFirstImputer']
 class LazyFirstImputer(LazyImputer):
     """Imputer that chooses the first possible matrix."""
 
-    def _impute(self, vector: DesignVector, matrix: np.ndarray, src_exists: np.ndarray, tgt_exists: np.ndarray,
+    def _impute(self, vector: DesignVector, matrix: Optional[np.ndarray], existence: NodeExistence,
                 validate: Callable[[np.ndarray], bool], tried_vectors: Set[Tuple[int, ...]]) -> Tuple[DesignVector, np.ndarray]:
 
         # Loop through possible design vectors until one is found that has not been tried yet
@@ -23,12 +23,12 @@ class LazyFirstImputer(LazyImputer):
 
         # Validate this design vector and associated matrix
         vector = np.array(dv)
-        matrix = self._decode(vector, src_exists, tgt_exists)
+        matrix = self._decode(vector, existence)
         if validate(matrix):
             return vector, matrix
 
         # Otherwise, continue imputation
-        return self.impute(vector, matrix, src_exists, tgt_exists, tried_vectors)
+        return self.impute(vector, matrix, existence, tried_vectors)
 
     def __repr__(self):
         return f'{self.__class__.__name__}()'

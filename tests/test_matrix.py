@@ -78,7 +78,7 @@ def test_iter_order():
 def _assert_matrix(gen: AggregateAssignmentMatrixGenerator, matrix_gen, assert_matrix: np.ndarray):
     if isinstance(matrix_gen, np.ndarray):
         matrix_gen = [matrix_gen]
-    agg_matrix = gen._agg_matrices(matrix_gen)
+    agg_matrix = list(gen._agg_matrices(matrix_gen).values())[0]
     assert agg_matrix.shape == assert_matrix.shape
     assert np.all(agg_matrix == assert_matrix)
 
@@ -211,12 +211,16 @@ def test_iter_edges_no_repeat():
         }
 
 
-def test_filter_matrices():
+def test_node_existence():
     obj1 = Node(nr_conn_list=[1, 2])
     obj2 = Node(nr_conn_list=[1])
     obj3 = Node(nr_conn_list=[0, 1])
     obj4 = Node(min_conn=1)
-    gen = AggregateAssignmentMatrixGenerator(src=[obj1, obj2], tgt=[obj3, obj4])
+    exist = NodeExistencePatterns([
+        NodeExistence(),
+        NodeExistence([True, True], [False, True]),
+    ])
+    gen = AggregateAssignmentMatrixGenerator(src=[obj1, obj2], tgt=[obj3, obj4], existence_patterns=exist)
 
     _assert_matrix(gen, gen, np.array([
         [[0, 1], [0, 1]],
@@ -227,28 +231,22 @@ def test_filter_matrices():
         [[0, 2], [1, 0]],
     ]))
     assert gen.count_all_matrices() == 6
-    matrix = gen.get_agg_matrix()
-    all_mask = np.ones((matrix.shape[0],), dtype=bool)
-    none_mask = np.zeros((matrix.shape[0],), dtype=bool)
-    for i in range(matrix.shape[0]):
-        assert gen.validate_matrix(matrix[i, :, :])
+    assert gen.count_all_matrices(max_by_existence=False) == 8
 
-    assert np.all(gen.filter_matrices(matrix, [True, True], [True, True]) == all_mask)
-    assert np.all(gen.filter_matrices(matrix) == all_mask)
-    assert np.all(gen.filter_matrices(matrix, tgt_exists=[True, True]) == all_mask)
-    assert np.all(gen.filter_matrices(matrix, [True, False], [True, True]) == none_mask)
-    assert np.all(gen.filter_matrices(matrix, src_exists=[True, False]) == none_mask)
+    matrix = list(gen.get_agg_matrix().values())[0]
+    assert gen.validate_matrix(matrix[0, :, :], NodeExistence(tgt_exists=[False, True]))
+    assert not gen.validate_matrix(matrix[1, :, :], NodeExistence(tgt_exists=[False, True]))
 
-    assert np.all(gen.filter_matrices(matrix, [True, True], [False, True]) ==
-                  np.array([True, False, False, True, False, False], dtype=bool))
-    assert np.all(gen.filter_matrices(matrix, tgt_exists=[False, True]) ==
-                  np.array([True, False, False, True, False, False], dtype=bool))
-
-    assert gen.validate_matrix(matrix[0, :, :], tgt_exists=[False, True])
-    assert not gen.validate_matrix(matrix[1, :, :], tgt_exists=[False, True])
-
-    matrix2 = gen.get_agg_matrix(cache=True)
+    matrix2 = list(gen.get_agg_matrix(cache=True).values())[0]
     assert np.all(matrix == matrix2)
+
+    assert NodeExistence() == NodeExistence()
+    assert NodeExistence(src_exists=[True, False]) != NodeExistence(tgt_exists=[True, False])
+    assert NodeExistence(src_exists=[True, False]) == NodeExistence(src_exists=[True, False])
+    d = {NodeExistence(): 1, NodeExistence(src_exists=[True, False]): 6}
+    assert NodeExistence() in d
+    assert NodeExistence(src_exists=[True, False]) in d
+    assert NodeExistence(tgt_exists=[True, False]) not in d
 
 
 def test_matrix_all_inf():
@@ -287,7 +285,7 @@ def test_matrix_all_inf():
     ]))
     assert gen.count_all_matrices() == 26
 
-    for matrix in gen.iter_matrices():
+    for matrix, _ in gen.iter_matrices():
         assert gen.validate_matrix(matrix)
 
 
@@ -319,7 +317,7 @@ def test_matrix_all_inf_no_repeat():
     ]))
     assert gen.count_all_matrices() == 16
 
-    for matrix in gen.iter_matrices():
+    for matrix, _ in gen.iter_matrices():
         assert gen.validate_matrix(matrix)
 
 
@@ -511,40 +509,78 @@ def test_count_matrices_from_nodes():
             matrices = np.array(list(gen._iter_matrices(src_nr, tgt_nr)))
             assert matrices.shape[0] == n_mat
 
-    matrix = gen.get_agg_matrix()
+    matrix = list(gen.get_agg_matrix().values())[0]
     assert matrix.shape[0] == 64
     assert gen.count_all_matrices() == 64
 
 
-def test_conditional_existence():
-    src = [Node(min_conn=1, repeated_allowed=False, exists_conditionally=True) for _ in range(2)]
-    tgt = [Node([1], repeated_allowed=False, exists_conditionally=True) for _ in range(2)]
+def test_conditional_existence_n_conns():
+    src = [Node(min_conn=1, repeated_allowed=False) for _ in range(2)]
+    tgt = [Node([1], repeated_allowed=False) for _ in range(2)]
     gen = AggregateAssignmentMatrixGenerator(src, tgt)
+
+    assert list(gen.iter_n_sources_targets()) == [
+        ((1, 1), (1, 1), NodeExistence()),
+    ]
+
+    gen.existence_patterns = pat = NodeExistencePatterns([
+        NodeExistence(src_exists=[False, False], tgt_exists=[False, False]),
+        NodeExistence(src_exists=[True, False], tgt_exists=[True, False]),
+        NodeExistence(),
+    ])
+    assert all([n.conditional for n in gen.src])
+    assert all([n.conditional for n in gen.tgt])
+
+    assert list(gen.iter_n_sources_targets()) == [
+        ((0, 0), (0, 0), pat.patterns[0]),
+        ((1, 0), (1, 0), pat.patterns[1]),
+        ((1, 1), (1, 1), pat.patterns[2]),
+    ]
+
+    existence_patterns = NodeExistencePatterns.get_all_combinations(
+        src_is_conditional=[True, True], tgt_is_conditional=[True, True])
+    assert len(existence_patterns.patterns) == 16
+
+    existence_patterns = NodeExistencePatterns.get_increasing(
+        src_is_conditional=[True, True], tgt_is_conditional=[True, True])
+    assert len(existence_patterns.patterns) == 9
+
+
+def test_conditional_existence():
+    src = [Node(min_conn=1, repeated_allowed=False) for _ in range(2)]
+    tgt = [Node([1], repeated_allowed=False) for _ in range(2)]
+    existence_patterns = NodeExistencePatterns.get_all_combinations(
+        src_is_conditional=[True, True], tgt_is_conditional=[True, True])
+    assert len(existence_patterns.patterns) == 16
+
+    gen = AggregateAssignmentMatrixGenerator(src, tgt, existence_patterns=existence_patterns)
     assert gen.max_conn == 2
 
     src_tgt_conns = list(gen.iter_n_sources_targets())
     assert len(src_tgt_conns) == 8
 
-    matrix = gen.get_agg_matrix()
-    assert np.all(matrix == np.array([
-        [[0, 0], [0, 0]],
-        [[0, 0], [0, 1]],
-        [[0, 0], [1, 0]],
-        [[0, 0], [1, 1]],
-        [[0, 1], [0, 0]],
-        [[1, 0], [0, 0]],
+    matrix_map = gen.get_agg_matrix()
+    assert len(matrix_map) == 8
+    all_arrays = list(matrix_map.values())
+    assert np.all(np.row_stack(all_arrays) == np.array([
         [[1, 0], [0, 1]],
         [[0, 1], [1, 0]],
         [[1, 1], [0, 0]],
+        [[1, 0], [0, 0]],
+        [[0, 1], [0, 0]],
+        [[0, 0], [1, 1]],
+        [[0, 0], [1, 0]],
+        [[0, 0], [0, 1]],
+        [[0, 0], [0, 0]],
     ]))
 
     def _assert_mask(src_exists, tgt_exists, check_matrix):
-        matrix_mask = gen.filter_matrices(matrix, src_exists=src_exists, tgt_exists=tgt_exists)
-        matrix_filtered = matrix[matrix_mask, :, :]
-        assert matrix_filtered.shape[0] == check_matrix.shape[0]
-        assert np.all(matrix_filtered == check_matrix)
-        assert np.all([gen.validate_matrix(matrix[i, :, :], src_exists=src_exists, tgt_exists=tgt_exists)
-                       for i in range(matrix.shape[0])] == matrix_mask)
+        existence = NodeExistence(src_exists=src_exists, tgt_exists=tgt_exists)
+        matrix = gen.get_matrix_for_existence(matrix_map, existence)
+        assert matrix.shape[0] == check_matrix.shape[0]
+        assert np.all(matrix == check_matrix)
+        assert np.all([gen.validate_matrix(matrix[i, :, :], NodeExistence(src_exists=src_exists, tgt_exists=tgt_exists))
+                       for i in range(matrix.shape[0])])
 
     _assert_mask(None, None, np.array([
         [[1, 0], [0, 1]],

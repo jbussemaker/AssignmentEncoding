@@ -24,10 +24,13 @@ class AssignmentProblem(Problem):
         self._encoder = encoder
         src, tgt = self.get_src_tgt_nodes()
         excluded = self.get_excluded_edges()
+        existence_patterns = self.get_existence_patterns()
         if isinstance(encoder, LazyEncoder):
-            assignment_manager = LazyAssignmentManager(src, tgt, encoder, excluded=excluded)
+            assignment_manager = LazyAssignmentManager(src, tgt, encoder, excluded=excluded,
+                                                       existence_patterns=existence_patterns)
         elif isinstance(encoder, EagerEncoder):
-            assignment_manager = AssignmentManager(src, tgt, encoder, excluded=excluded)
+            assignment_manager = AssignmentManager(src, tgt, encoder, excluded=excluded,
+                                                   existence_patterns=existence_patterns)
         else:
             raise RuntimeError(f'Unknown encoder type: {encoder}')
         self.assignment_manager = assignment_manager
@@ -51,7 +54,9 @@ class AssignmentProblem(Problem):
     def get_matrix_count(self):
         src, tgt = self.get_src_tgt_nodes()
         excluded = self.get_excluded_edges()
-        matrix_gen = AggregateAssignmentMatrixGenerator(src, tgt, excluded=excluded)
+        existence_patterns = self.get_existence_patterns()
+        matrix_gen = AggregateAssignmentMatrixGenerator(
+            src, tgt, excluded=excluded, existence_patterns=existence_patterns)
         return matrix_gen.count_all_matrices()
 
     def get_repair(self):
@@ -61,11 +66,10 @@ class AssignmentProblem(Problem):
         n_aux = self.n_aux
         x_corr = x.copy().astype(np.int)
         for i_dv in range(x_corr.shape[0]):
-            src_exists, tgt_exists = None, None
+            existence = None
             if n_aux > 0:
-                x_corr[i_dv, :n_aux], src_exists, tgt_exists = self.correct_x_aux(x_corr[i_dv, :n_aux])
-            x_corr[i_dv, n_aux:] = self.assignment_manager.correct_vector(
-                x_corr[i_dv, n_aux:], src_exists=src_exists, tgt_exists=tgt_exists)
+                x_corr[i_dv, :n_aux], existence = self.correct_x_aux(x_corr[i_dv, :n_aux])
+            x_corr[i_dv, n_aux:] = self.assignment_manager.correct_vector(x_corr[i_dv, n_aux:], existence=existence)
         return x_corr
 
     def _evaluate(self, x, out, *args, **kwargs):
@@ -78,13 +82,12 @@ class AssignmentProblem(Problem):
 
         n_aux = self.n_aux
         for i in range(n):
-            x_aux, src_exists, tgt_exists = None, None, None
+            x_aux, existence = None, None
             if n_aux > 0:
-                x_aux, src_exists, tgt_exists = self.correct_x_aux(x[i, :n_aux])
+                x_aux, existence = self.correct_x_aux(x[i, :n_aux])
                 x_out[i, :n_aux] = x_aux
 
-            x_out[i, n_aux:], conn_idx = self.assignment_manager.get_conn_idx(
-                x[i, n_aux:], src_exists=src_exists, tgt_exists=tgt_exists)
+            x_out[i, n_aux:], conn_idx = self.assignment_manager.get_conn_idx(x[i, n_aux:], existence=existence)
             f_out[i, :], g_i = self._do_evaluate(conn_idx, x_aux=x_aux)
             if has_g:
                 g_out[i, :] = g_i
@@ -161,7 +164,10 @@ class AssignmentProblem(Problem):
     def get_excluded_edges(self) -> Optional[List[Tuple[Node, Node]]]:
         pass
 
-    def correct_x_aux(self, x_aux: DesignVector) -> Tuple[DesignVector, Optional[List[bool]], Optional[List[bool]]]:
+    def get_existence_patterns(self) -> Optional[NodeExistencePatterns]:
+        pass
+
+    def correct_x_aux(self, x_aux: DesignVector) -> Tuple[DesignVector, Optional[NodeExistence]]:
         """Correct auxiliary design vector and additionally return whether src or tgt nodes exist"""
         raise RuntimeError
 

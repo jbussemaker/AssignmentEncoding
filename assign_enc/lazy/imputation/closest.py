@@ -14,7 +14,7 @@ class LazyClosestImputer(LazyImputer):
         self.euclidean = euclidean
         super().__init__()
 
-    def _impute(self, vector: DesignVector, matrix: np.ndarray, src_exists: np.ndarray, tgt_exists: np.ndarray,
+    def _impute(self, vector: DesignVector, matrix: Optional[np.ndarray], existence: NodeExistence,
                 validate: Callable[[np.ndarray], bool], tried_vectors: Set[Tuple[int, ...]]) -> Tuple[DesignVector, np.ndarray]:
 
         # Determine delta values to try out
@@ -35,7 +35,7 @@ class LazyClosestImputer(LazyImputer):
             dv = vector+dv_deltas[i_dv]
 
             # Validate associated matrix
-            matrix = self._decode(dv, src_exists, tgt_exists)
+            matrix = self._decode(dv, existence)
             if validate(matrix):
                 return dv, matrix
 

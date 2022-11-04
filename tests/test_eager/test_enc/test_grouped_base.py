@@ -18,7 +18,7 @@ class ProductEncoder(GroupedEncoder):
 def test_half_grouped_encoder():
     matrix = np.random.randint(0, 3, (11, 4, 3))
     encoder = ProductEncoder(FirstImputer(), matrix)
-    assert np.all(encoder._design_vectors == np.array([
+    assert np.all(list(encoder._design_vectors.values())[0] == np.array([
         [0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1],
         [0, 0, 0, 0, 1, 1, 1, 1, 0, 0, 0],
         [0, 0, 1, 1, 0, 0, 1, 1, 0, 0, 1],
@@ -31,7 +31,7 @@ def test_half_grouped_encoder():
 def test_no_group_normalize():
     matrix = np.random.randint(0, 3, (11, 4, 3))
     encoder = ProductEncoder(FirstImputer(), matrix, normalize_within_group=False)
-    assert np.all(encoder._design_vectors == np.array([
+    assert np.all(list(encoder._design_vectors.values())[0] == np.array([
         [0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1],
         [0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2],
         [0, 0, 1, 1, 2, 2, 3, 3, 2, 2, 3],
@@ -57,7 +57,7 @@ class EvenNonUniqueGrouper(GroupedEncoder):
 def test_skip_des_var():
     matrix = np.random.randint(0, 3, (11, 4, 3))
     encoder = EvenNonUniqueGrouper(FirstImputer(), matrix=matrix)
-    assert np.all(encoder._design_vectors == np.array([
+    assert np.all(list(encoder._design_vectors.values())[0] == np.array([
         [0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1],
         [0, 0, 0, 0, 1, 1, 1, 1, 0, 0, 0],
         [0, 0, 1, 1, 0, 0, 1, 1, 0, 0, 1],
@@ -68,7 +68,7 @@ def test_skip_des_var():
 def test_index_grouped_encoder():
     matrix = np.random.randint(0, 3, (11, 4, 3))
     encoder = GroupByIndexEncoder(FirstImputer(), n_groups=2, matrix=matrix)
-    assert np.all(encoder._design_vectors == np.array([
+    assert np.all(list(encoder._design_vectors.values())[0] == np.array([
         [0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1],
         [0, 0, 0, 0, 1, 1, 1, 1, 0, 0, 0],
         [0, 0, 1, 1, 0, 0, 1, 1, 0, 0, 1],
@@ -76,14 +76,14 @@ def test_index_grouped_encoder():
     ]).T)
 
     encoder = GroupByIndexEncoder(FirstImputer(), n_groups=3, matrix=matrix)
-    assert np.all(encoder._design_vectors == np.array([
+    assert np.all(list(encoder._design_vectors.values())[0] == np.array([
         [0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1],
         [0, 0, 0, 1, 1, 1, 2, 2, 2, 0, 0],
         [0, 1, 2, 0, 1, 2, 0, 1, 2, 0, 1],
     ]).T)
 
     encoder = GroupByIndexEncoder(FirstImputer(), n_groups=4, matrix=matrix)
-    assert np.all(encoder._design_vectors == np.array([
+    assert np.all(list(encoder._design_vectors.values())[0] == np.array([
         [0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2],
         [0, 1, 2, 3, 0, 1, 2, 3, 0, 1, 2],
     ]).T)
@@ -106,7 +106,7 @@ class PreprocessedIndexGroupedEncoder(GroupedEncoder):
 def test_grouped_encoder_by_sub_matrix_idx():
     matrix = np.random.randint(0, 3, (11, 4, 3))
     encoder = PreprocessedIndexGroupedEncoder(FirstImputer(), matrix)
-    assert np.all(encoder._design_vectors == np.array([
+    assert np.all(list(encoder._design_vectors.values())[0] == np.array([
         [0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1],
         [0, 1, 2, 3, 4, 0, 1, 2, 3, 4, 5],
     ]).T)

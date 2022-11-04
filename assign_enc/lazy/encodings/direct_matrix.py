@@ -18,21 +18,28 @@ class LazyDirectMatrixEncoder(LazyEncoder):
     """
 
     def __init__(self, imputer: LazyImputer):
-        self._dv_idx_map = []
+        self._dv_idx_map = {}
         super().__init__(imputer)
 
-    def _encode(self) -> List[DiscreteDV]:
+    def _encode_prepare(self):
+        self._dv_idx_map = {}
+
+    def _encode(self, existence: NodeExistence) -> List[DiscreteDV]:
         matrix_gen = self._matrix_gen
         overall_max = matrix_gen.max_conn
         blocked_mask = matrix_gen.conn_blocked_mask
         no_repeat_mask = matrix_gen.no_repeat_mask
 
         dvs = []
-        self._dv_idx_map = dv_idx_map = []
+        self._dv_idx_map[existence] = dv_idx_map = []
         src, tgt = self.src, self.tgt
         for i in range(self.n_src):
+            if not existence.has_src(i):
+                continue
             src_max = np.inf if src[i].max_inf else src[i].conns[-1]
             for j in range(self.n_tgt):
+                if not existence.has_tgt(i):
+                    continue
                 # Check if connection is blocked
                 if blocked_mask[i, j]:
                     continue
@@ -52,9 +59,9 @@ class LazyDirectMatrixEncoder(LazyEncoder):
 
         return dvs
 
-    def _decode(self, vector: DesignVector, src_exists: np.ndarray, tgt_exists: np.ndarray) -> Optional[np.ndarray]:
+    def _decode(self, vector: DesignVector, existence: NodeExistence) -> Optional[np.ndarray]:
         matrix = np.zeros((self.n_src, self.n_tgt), dtype=int)
-        for i_dv, (i, j) in enumerate(self._dv_idx_map):
+        for i_dv, (i, j) in enumerate(self._dv_idx_map.get(existence, [])):
             matrix[i, j] = vector[i_dv]
 
         return matrix
