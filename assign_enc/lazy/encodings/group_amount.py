@@ -100,6 +100,8 @@ class LazyAmountFirstEncoder(OnDemandLazyEncoder):
         amount_vector = vector[:n_dv_amt]
         amount_vector_expanded = self._unfilter_dvs(
             amount_vector, self._i_dv_amount[existence], self._n_dv_amount_expand[existence])
+        if amount_vector_expanded is None:
+            return
         n_src_tgt_conn = self.amount_encoder.decode(amount_vector_expanded, existence)
         if n_src_tgt_conn is None:
             return
@@ -108,6 +110,8 @@ class LazyAmountFirstEncoder(OnDemandLazyEncoder):
         conn_vector = vector[n_dv_amt:]
         conn_vector_expanded = self._unfilter_dvs(
             conn_vector, self._i_dv_conn[existence], self._n_dv_conn_expand[existence])
+        if conn_vector_expanded is None:
+            return
         return self.conn_encoder.decode(n_src_conn, n_tgt_conn, conn_vector_expanded, self, existence)
 
     @staticmethod

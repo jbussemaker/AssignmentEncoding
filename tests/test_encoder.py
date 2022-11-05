@@ -67,12 +67,31 @@ def test_encoder():
 
     assert enc.get_matrix_index([0]) == (0, exist)
     assert enc.is_valid_vector([0])
+    assert enc.is_valid_vector([0, 0])
+    assert not enc.is_valid_vector([0, 1])
+
     dv, mat = enc.get_matrix([0])
     assert dv == [0]
     assert np.all(mat == matrix[0, :, :])
 
-    with pytest.raises(NotImplementedError):
-        enc.get_matrix([10])
+    dv, mat = enc.get_matrix([0, 0])
+    assert dv == [0, 0]
+    assert np.all(mat == matrix[0, :, :])
+
+    dv, mat = enc.get_matrix([0, 1])
+    assert dv == [0, 0]
+    assert np.all(mat == matrix[0, :, :])
+
+    assert enc.is_valid_vector([9])
+    assert not enc.is_valid_vector([10])
+    assert not enc.is_valid_vector([-1])
+
+    dv, mat = enc.get_matrix([10])
+    assert dv == [9]
+    assert np.all(mat == matrix[9, :, :])
+    dv, mat = enc.get_matrix([-1])
+    assert dv == [0]
+    assert np.all(mat == matrix[0, :, :])
 
     matrix_mask = np.ones((10,), dtype=bool)
     matrix_mask[0] = False
@@ -86,27 +105,6 @@ def test_encoder():
     assert np.all(mat == 0)
 
 
-def test_encoder_impute():
-    matrix = np.random.randint(0, 3, (10, 2, 3), dtype=int)
-    enc = DirectEncoder(FirstImputer())
-    enc.matrix = matrix
-    exist = NodeExistence()
-    assert enc.matrix[exist] is matrix
-    assert enc.n_mat_max == 10
-
-    assert not enc.is_valid_vector([10])
-    assert enc.get_matrix_index([10])[0] is None
-    dv, mat = enc.get_matrix([10])
-    assert dv == enc._design_vectors[exist][0, :]
-    assert np.all(mat == matrix[0, :, :])
-
-    matrix_mask = np.ones((10,), dtype=bool)
-    matrix_mask[0] = False
-    dv, mat = enc.get_matrix([0], matrix_mask=matrix_mask)
-    assert dv == enc._design_vectors[exist][1, :]
-    assert np.all(mat == matrix[1, :, :])
-
-
 class TwoEncoder(EagerEncoder):
 
     def _encode(self, matrix: np.ndarray) -> np.ndarray:
@@ -118,6 +116,30 @@ class TwoEncoder(EagerEncoder):
         dv1 = np.tile(np.arange(0, n_mat_half), 2)[:n_mat]
         dv2 = np.repeat([0, 1], n_mat_half)[:n_mat]
         return np.column_stack([dv1, dv2])
+
+
+def test_encoder_impute():
+    matrix = np.random.randint(0, 3, (11, 2, 3), dtype=int)
+    enc = TwoEncoder(FirstImputer())
+    enc.matrix = matrix
+    assert len(enc.design_vars) == 2
+    assert enc.design_vars[0].n_opts == 6
+    assert enc.design_vars[1].n_opts == 2
+    exist = NodeExistence()
+    assert enc.matrix[exist] is matrix
+    assert enc.n_mat_max == 11
+
+    assert not enc.is_valid_vector([5, 1])
+    assert enc.get_matrix_index([5, 1])[0] is None
+    dv, mat = enc.get_matrix([5, 1])
+    assert np.all(dv == enc._design_vectors[exist][0, :])
+    assert np.all(mat == matrix[0, :, :])
+
+    matrix_mask = np.ones((11,), dtype=bool)
+    matrix_mask[0] = False
+    dv, mat = enc.get_matrix([0, 0], matrix_mask=matrix_mask)
+    assert np.all(dv == enc._design_vectors[exist][1, :])
+    assert np.all(mat == matrix[1, :, :])
 
 
 def test_encoder_existence():

@@ -27,8 +27,8 @@ def test_imputer():
     assert np.all(mat == matrix[4, :, :])
 
     dv, mat = encoder.get_matrix([1, 1, 2, 0])
-    assert np.all(dv == [1, 1, 0, 0])
-    assert np.all(mat == matrix[3, :, :])
+    assert np.all(dv == [1, 1, 1, 1])
+    assert np.all(mat == matrix[4, :, :])
 
 
 def test_imputer_masked():

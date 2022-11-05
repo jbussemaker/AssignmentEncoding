@@ -65,6 +65,8 @@ class NodeExistence:
     src_exists: Union[List[bool], np.ndarray] = None
     tgt_exists: Union[List[bool], np.ndarray] = None
 
+    _hash: int = None
+
     def has_src(self, i):
         return self.src_exists[i] if self.src_exists is not None else True
 
@@ -93,8 +95,10 @@ class NodeExistence:
         return not any(self.src_exists) and not any(self.tgt_exists)
 
     def __hash__(self):
-        return hash((-1 if self.src_all_exists() else tuple(self.src_exists),
-                     -1 if self.tgt_all_exists() else tuple(self.tgt_exists)))
+        if self._hash is None:
+            self._hash = hash((-1 if self.src_all_exists() else tuple(self.src_exists),
+                               -1 if self.tgt_all_exists() else tuple(self.tgt_exists)))
+        return self._hash
 
     def __eq__(self, other):
         return hash(self) == hash(other)

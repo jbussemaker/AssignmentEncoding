@@ -131,6 +131,14 @@ class LazyEncoder(Encoder):
         return self._matrix_gen.ex
 
     @property
+    def existence_patterns(self):
+        return self._matrix_gen.existence_patterns
+
+    @property
+    def matrix_gen(self) -> AggregateAssignmentMatrixGenerator:
+        return self._matrix_gen
+
+    @property
     def design_vars(self) -> List[DiscreteDV]:
         return self._design_vars
 
@@ -157,23 +165,46 @@ class LazyEncoder(Encoder):
 
         return n_sample/n_valid
 
+    def _correct_vector_size(self, vector: DesignVector) -> Tuple[DesignVector, int, int]:
+        n_dv = len(self.design_vars)
+        vector, n_extra = EagerEncoder.correct_vector_size(n_dv, vector)
+        return vector, n_dv, n_extra
+
     def get_matrix(self, vector: DesignVector, existence: NodeExistence = None) -> Tuple[DesignVector, np.ndarray]:
         """Select a connection matrix (n_src x n_tgt) and impute the design vector if needed."""
+
+        vector, n_dv, n_extra = self._correct_vector_size(vector)
+        extra_vector = [0]*n_extra
+        vector, _ = EagerEncoder.correct_vector_bounds(vector, self.design_vars)
 
         # Decode matrix
         matrix, existence = self._decode_vector(vector, existence)
 
         # Validate matrix
         if matrix is not None and self._matrix_gen.validate_matrix(matrix, existence=existence):
-            return vector, matrix
+            return list(vector)+extra_vector, matrix
 
-        return self._imputer.impute(vector, matrix, existence)
+        vector, matrix = self._imputer.impute(vector, matrix, existence)
+        return list(vector)+extra_vector, matrix
 
     def is_valid_vector(self, vector: DesignVector, existence: NodeExistence = None):
+
+        original_vector = vector
+        vector, n_dv, n_extra = self._correct_vector_size(vector)
+        vector, is_corrected = EagerEncoder.correct_vector_bounds(vector, self.design_vars)
+        if is_corrected:
+            return False
+
         matrix, existence = self._decode_vector(vector, existence)
         if matrix is None:
             return False
-        return self._matrix_gen.validate_matrix(matrix, existence=existence)
+
+        if not self._matrix_gen.validate_matrix(matrix, existence=existence):
+            return False
+
+        if n_extra > 0 and sum(original_vector[n_dv:]) != 0:
+            return False
+        return True
 
     def _decode_vector(self, vector: DesignVector, existence: NodeExistence = None):
         if existence is None:
@@ -215,20 +246,19 @@ class LazyEncoder(Encoder):
         return valid_dv, i_valid_dv, len(dvs)
 
     @staticmethod
-    def _unfilter_dvs(vector: DesignVector, i_valid_dv: np.ndarray, n: int) -> DesignVector:
+    def _unfilter_dvs(vector: DesignVector, i_valid_dv: np.ndarray, n: int) -> Optional[DesignVector]:
         all_vector = np.zeros((n,), dtype=int)
-        all_vector[i_valid_dv] = vector
+        all_vector[i_valid_dv] = vector[:n]
+
+        # Ensure that all further design variables are zero to avoid multiple design vectors mapping to the same design
+        if n < len(vector) and sum(vector[n:]) != 0:
+            return
+
         return all_vector
 
     @staticmethod
     def _merge_design_vars(design_vars_list: List[List[DiscreteDV]]) -> List[DiscreteDV]:
-        n_dv_max = max([len(dvs) for dvs in design_vars_list])
-        n_opts = np.zeros((len(design_vars_list), n_dv_max), dtype=int)
-        for i, dvs in enumerate(design_vars_list):
-            n_opts[i, :len(dvs)] = [dv.n_opts for dv in dvs]
-
-        n_opts_max = np.max(n_opts, axis=0)
-        return [DiscreteDV(n_opts=n) for n in n_opts_max]
+        return EagerEncoder.merge_design_vars(design_vars_list)
 
     def _encode_prepare(self):
         pass

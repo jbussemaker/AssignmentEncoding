@@ -152,9 +152,39 @@ class EagerEncoder(Encoder):
             n_valid += matrix.shape[0]
         return n_total/n_valid
 
+    def _correct_vector_size(self, vector: DesignVector) -> Tuple[DesignVector, int, int]:
+        n_dv = len(self.design_vars)
+        vector, n_extra = self.correct_vector_size(n_dv, vector)
+        return vector, n_dv, n_extra
+
+    @staticmethod
+    def correct_vector_size(n_dv, vector: DesignVector) -> Tuple[DesignVector, int]:
+        n_extra = len(vector)-n_dv
+        vector = vector[:n_dv]
+        return vector, n_extra
+
+    @staticmethod
+    def correct_vector_bounds(vector: DesignVector, design_vars: List[DiscreteDV]) -> Tuple[DesignVector, bool]:
+        correct_vector = vector.copy()
+        is_corrected = False
+        for i, dv in enumerate(design_vars):
+            if correct_vector[i] < 0:
+                correct_vector[i] = 0
+                is_corrected = True
+
+            elif correct_vector[i] >= dv.n_opts:
+                correct_vector[i] = dv.n_opts-1
+                is_corrected = True
+
+        return correct_vector, is_corrected
+
     def get_matrix(self, vector: DesignVector, existence: NodeExistence = None,
                    matrix_mask: MatrixSelectMask = None) -> Tuple[DesignVector, np.ndarray]:
         """Select a connection matrix (n_src x n_tgt) and impute the design vector if needed."""
+
+        vector, n_dv, n_extra = self._correct_vector_size(vector)
+        extra_vector = [0]*n_extra
+        vector, _ = self.correct_vector_bounds(vector, self.design_vars)
 
         i_mat, existence = self.get_matrix_index(vector, existence=existence, matrix_mask=matrix_mask)
         matrix, existence = self._get_matrix_for_existence(existence)
@@ -163,7 +193,7 @@ class EagerEncoder(Encoder):
         if not self._has_existence(existence):
             vector = [0]*len(vector)
             null_matrix = np.zeros((1, matrix.shape[1], matrix.shape[2]), dtype=int)
-            return vector, null_matrix
+            return vector+extra_vector, null_matrix
 
         # If no matrix can be found, impute
         if i_mat is None:
@@ -173,21 +203,35 @@ class EagerEncoder(Encoder):
             # If the mask filters out all design vectors, there is no need to try imputing
             elif np.all(~matrix_mask):
                 null_matrix = matrix[0, :, :]*0
-                return [0]*len(vector), null_matrix
+                return [0]*len(vector)+extra_vector, null_matrix
 
-            return self._imputer.impute(vector, existence, matrix_mask)
+            vector, matrix = self._imputer.impute(vector, existence, matrix_mask)
+            return list(vector)+extra_vector, matrix
 
         # Design vector directly maps to possible matrix
         vector = self._correct_vector(vector, existence)
-        return vector, matrix[i_mat, :, :]
+        return list(vector)+extra_vector, matrix[i_mat, :, :]
 
     def is_valid_vector(self, vector: DesignVector, existence: NodeExistence = None,
                         matrix_mask: MatrixSelectMask = None) -> bool:
+
+        original_vector = vector
+        vector, n_dv, n_extra = self._correct_vector_size(vector)
+        vector, is_corrected = self.correct_vector_bounds(vector, self.design_vars)
+        if is_corrected:
+            return False
+
         i_mat, existence = self.get_matrix_index(vector, existence=existence, matrix_mask=matrix_mask)
         if i_mat is None:
             return False
+
         corr_vector = self._correct_vector(vector, existence)
-        return np.all(corr_vector == vector)
+        if not np.all(corr_vector == vector):
+            return False
+
+        if n_extra > 0 and sum(original_vector[n_dv:]) != 0:
+            return False
+        return True
 
     def get_matrix_index(self, vector: DesignVector, existence: NodeExistence = None,
                          matrix_mask: MatrixSelectMask = None) -> Tuple[Optional[int], NodeExistence]:
@@ -257,9 +301,7 @@ class EagerEncoder(Encoder):
 
     def _get_design_variables(self, design_vectors: Dict[NodeExistence, np.ndarray]) -> List[DiscreteDV]:
         """Convert possible design vectors to design variable definitions"""
-        n_max = max([dv.shape[1] for dv in design_vectors.values()])
-        n_opts_max = np.zeros((n_max,), dtype=int)
-
+        design_vars_list = []
         for des_vectors in design_vectors.values():
             if des_vectors.shape[1] == 0:
                 continue
@@ -272,14 +314,26 @@ class EagerEncoder(Encoder):
             if np.min(des_vectors) != 0:
                 raise RuntimeError('Design variables should start at zero!')
 
-            n_opts = np.max(des_vectors, axis=0)+1
-            n_dv = len(n_opts)
-            n_opts_max[:n_dv] = np.max(np.row_stack([n_opts, n_opts_max[:n_dv]]), axis=0)
+            n_opts_max = np.max(des_vectors, axis=0)+1
+            design_vars_list.append([DiscreteDV(n_opts=n_opts) for n_opts in n_opts_max])
 
-        # Check number of options
-        if min(n_opts_max) <= 1:
-            raise RuntimeError('All design variables must have at least two options')
+        # Merge design variables
+        design_vars = self.merge_design_vars(design_vars_list)
+        for dv in design_vars:
+            if dv.n_opts <= 1:
+                raise RuntimeError('All design variables must have at least two options')
+        return design_vars
 
+    @staticmethod
+    def merge_design_vars(design_vars_list: List[List[DiscreteDV]]) -> List[DiscreteDV]:
+        if len(design_vars_list) == 0:
+            return []
+        n_dv_max = max([len(dvs) for dvs in design_vars_list])
+        n_opts = np.zeros((len(design_vars_list), n_dv_max), dtype=int)
+        for i, dvs in enumerate(design_vars_list):
+            n_opts[i, :len(dvs)] = [dv.n_opts for dv in dvs]
+
+        n_opts_max = np.max(n_opts, axis=0)
         return [DiscreteDV(n_opts=n) for n in n_opts_max]
 
     @staticmethod

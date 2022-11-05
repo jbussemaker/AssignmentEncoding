@@ -14,6 +14,10 @@ class AssignmentManagerBase:
         return [dv.get_random() for dv in self.design_vars]
 
     @property
+    def matrix_gen(self) -> AggregateAssignmentMatrixGenerator:
+        raise NotImplementedError
+
+    @property
     def design_vars(self):
         raise NotImplementedError
 
@@ -113,6 +117,10 @@ class LazyAssignmentManager(AssignmentManagerBase):
                  excluded: List[Tuple[Node, Node]] = None, existence_patterns: NodeExistencePatterns = None):
         self._encoder = encoder
         encoder.set_nodes(src, tgt, excluded=excluded, existence_patterns=existence_patterns)
+
+    @property
+    def matrix_gen(self) -> AggregateAssignmentMatrixGenerator:
+        return self._encoder.matrix_gen
 
     @property
     def design_vars(self):

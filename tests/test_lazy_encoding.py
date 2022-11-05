@@ -53,9 +53,23 @@ def test_lazy_encoder():
     assert not enc.is_valid_vector([0, 1, 1, 1])
     assert enc.is_valid_vector([0, 1, 1, 0])
     assert enc.is_valid_vector([1, 0, 0, 1])
+    assert not enc.is_valid_vector([0, 2, 1, 1])
+
+    assert enc.is_valid_vector([0, 1, 1, 0, 0])
+    assert not enc.is_valid_vector([0, 1, 1, 0, 1])
 
     dv, matrix = enc.get_matrix([0, 1, 1, 0])
     assert np.all(dv == [0, 1, 1, 0])
+    assert np.all(matrix == np.array([[0, 1], [1, 0]]))
+    dv, matrix = enc.get_matrix([0, 2, 1, 0])
+    assert np.all(dv == [0, 1, 1, 0])
+    assert np.all(matrix == np.array([[0, 1], [1, 0]]))
+
+    dv, matrix = enc.get_matrix([0, 1, 1, 0, 0])
+    assert np.all(dv == [0, 1, 1, 0, 0])
+    assert np.all(matrix == np.array([[0, 1], [1, 0]]))
+    dv, matrix = enc.get_matrix([0, 1, 1, 0, 1])
+    assert np.all(dv == [0, 1, 1, 0, 0])
     assert np.all(matrix == np.array([[0, 1], [1, 0]]))
 
     assert enc.get_conn_idx(matrix) == [(0, 1), (1, 0)]

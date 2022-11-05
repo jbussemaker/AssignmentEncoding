@@ -1,5 +1,6 @@
 import numpy as np
 from assign_enc.matrix import *
+from assign_enc.lazy.imputation.delta import *
 from assign_enc.lazy.encodings.direct_matrix import *
 from assign_enc.lazy.imputation.constraint_violation import *
 
@@ -64,7 +65,7 @@ def test_encoder_no_repeat():
 
 
 def test_encoder_existence():
-    encoder = LazyDirectMatrixEncoder(LazyConstraintViolationImputer())
+    encoder = LazyDirectMatrixEncoder(LazyDeltaImputer())
     src = [Node([0, 1, 2]), Node(min_conn=0, repeated_allowed=False)]
     tgt = [Node([0, 1], repeated_allowed=False), Node(min_conn=1)]
     exist = NodeExistencePatterns([
@@ -89,6 +90,13 @@ def test_encoder_existence():
     assert np.all(mat == np.array([[0, 1], [0, 0]]))
 
     _, mat = encoder.get_matrix([1, 0, 0, 0], existence=exist.patterns[0])
-    assert np.all(mat == np.array([[-1, -1], [-1, -1]]))
-    _, mat = encoder.get_matrix([1, 0, 0, 0], existence=exist.patterns[1])
+    assert np.all(mat == np.array([[1, 0], [0, 1]]))
+    _, mat = encoder.get_matrix([1, 0, 1, 0], existence=exist.patterns[0])
+    assert np.all(mat == np.array([[1, 0], [0, 1]]))
+
+    dv, mat = encoder.get_matrix([1, 0, 0, 0], existence=exist.patterns[1])
+    assert np.all(dv == [1, 0, 0, 0])
+    assert np.all(mat == np.array([[1, 0], [0, 0]]))
+    dv, mat = encoder.get_matrix([1, 0, 0, 1], existence=exist.patterns[1])
+    assert np.all(dv == [1, 0, 0, 0])
     assert np.all(mat == np.array([[1, 0], [0, 0]]))

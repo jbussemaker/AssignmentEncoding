@@ -38,7 +38,7 @@ class LazyDirectMatrixEncoder(LazyEncoder):
                 continue
             src_max = np.inf if src[i].max_inf else src[i].conns[-1]
             for j in range(self.n_tgt):
-                if not existence.has_tgt(i):
+                if not existence.has_tgt(j):
                     continue
                 # Check if connection is blocked
                 if blocked_mask[i, j]:
@@ -61,8 +61,14 @@ class LazyDirectMatrixEncoder(LazyEncoder):
 
     def _decode(self, vector: DesignVector, existence: NodeExistence) -> Optional[np.ndarray]:
         matrix = np.zeros((self.n_src, self.n_tgt), dtype=int)
-        for i_dv, (i, j) in enumerate(self._dv_idx_map.get(existence, [])):
+        dv_map = self._dv_idx_map.get(existence, [])
+        for i_dv, (i, j) in enumerate(dv_map):
             matrix[i, j] = vector[i_dv]
+
+        # Ensure that all other design variables are zero to prevent duplicate vectors mapping to the same matrix
+        for i in range(len(dv_map), len(vector)):
+            if vector[i] != 0:
+                return
 
         return matrix
 

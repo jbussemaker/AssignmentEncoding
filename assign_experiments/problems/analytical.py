@@ -28,6 +28,9 @@ class AnalyticalProblemBase(AssignmentProblem):
         tgt_nodes = [self._get_node(False, i) for i in range(len(self.tgt_coeff))]
         return src_nodes, tgt_nodes
 
+    def get_n_valid_design_points(self, n_cont=5) -> int:
+        return self.assignment_manager.matrix_gen.count_all_matrices()
+
     def _do_evaluate(self, conns: List[Tuple[int, int]], x_aux: Optional[DesignVector]) -> Tuple[List[float], List[float]]:
         coeff_sum = 0.
         for i_src, i_tgt in conns:

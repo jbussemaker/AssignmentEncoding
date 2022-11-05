@@ -9,6 +9,8 @@ class OneVarEncoder(EagerEncoder):
 
     def _encode(self, matrix: np.ndarray) -> np.ndarray:
         n_mat = matrix.shape[0]
+        if n_mat <= 1:
+            return np.empty((0, 0), dtype=int)
         return np.array([np.arange(0, n_mat)]).T
 
     def __repr__(self):

@@ -104,18 +104,26 @@ class AssignmentProblem(Problem):
             n *= n_cont if isinstance(var, Real) else int(xu[i]-xl[i]+1)
         return n
 
+    def get_n_valid_design_points(self, n_cont=5) -> int:
+        """Implement if the number of valid design points can be calculated analytically"""
+
     def get_init_sampler(self, lhs=True, **kwargs):
         return get_init_sampler(repair=self.get_repair(), lhs=lhs, **kwargs)
 
-    def sample_points(self, n=None, n_cont=5, remove_duplicates=True) -> Population:
+    def sample_points(self, n=None, n_cont=5, remove_duplicates=True, lhs=True) -> Population:
         if n is not None:
             n_des_points = self.get_n_design_points(n_cont=n_cont)
             if n > n_des_points:
                 n = None
 
         repair = self.get_repair()
-        sampler = RepairedExhaustiveSampling(repair=repair, n_cont=n_cont, remove_duplicates=remove_duplicates) \
-            if n is None else RepairedLatinHypercubeSampling(repair=repair)
+        if n is None:
+            sampler = RepairedExhaustiveSampling(repair=repair, n_cont=n_cont, remove_duplicates=remove_duplicates)
+        elif lhs:
+            sampler = RepairedLatinHypercubeSampling(repair=repair)
+        else:
+            sampler = RepairedRandomSampling(repair=repair)
+
         return sampler.do(self, n or 100)
 
     def eval_points(self, n=None) -> Population:
@@ -137,7 +145,15 @@ class AssignmentProblem(Problem):
 
     def get_imputation_ratio(self, n_sample: Optional[int] = 10000):
         # return self.assignment_manager.get_imputation_ratio()
-        pop = self.sample_points(n=n_sample, remove_duplicates=False)
+
+        # Check if analytically available
+        n_cont = 5
+        n_real = self.get_n_valid_design_points(n_cont=n_cont)
+        if n_real is not None:
+            n = self.get_n_design_points(n_cont=n_cont)
+            return n/n_real
+
+        pop = self.sample_points(n=n_sample, remove_duplicates=False, lhs=False)
         x = pop.get('X')
         n = x.shape[0]
         n_unique = np.unique(x, axis=0).shape[0]

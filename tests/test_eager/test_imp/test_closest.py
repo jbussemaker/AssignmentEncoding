@@ -47,8 +47,8 @@ def test_imputer_euclidean():
     assert np.all(mat == matrix[3, :, :])
 
     dv, mat = encoder.get_matrix([1, 1, 2, 0])
-    assert np.all(dv == [1, 1, 1, 1])
-    assert np.all(mat == matrix[4, :, :])
+    assert np.all(dv == [1, 1, 0, 0])
+    assert np.all(mat == matrix[3, :, :])
 
 
 def test_imputer_manhattan():

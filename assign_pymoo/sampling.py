@@ -7,9 +7,10 @@ from pymoo.core.sampling import Sampling
 from pymoo.core.population import Population
 from pymoo.core.initialization import Initialization
 from pymoo.core.duplicate import DefaultDuplicateElimination
+from pymoo.operators.sampling.rnd import FloatRandomSampling
 from pymoo.operators.sampling.lhs import LatinHypercubeSampling, sampling_lhs_unit
 
-__all__ = ['RepairedExhaustiveSampling', 'RepairedLatinHypercubeSampling', 'get_init_sampler']
+__all__ = ['RepairedExhaustiveSampling', 'RepairedLatinHypercubeSampling', 'RepairedRandomSampling', 'get_init_sampler']
 
 
 def get_init_sampler(repair: Repair = None, lhs=True, **kwargs):
@@ -83,3 +84,28 @@ class RepairedLatinHypercubeSampling(LatinHypercubeSampling):
         x_abs = x*(xu-xl)+xl
         x_abs = self._repair.do(problem, Population.new(X=x_abs)).get("X")
         return (x_abs-xl)/(xu-xl)
+
+
+class RepairedRandomSampling(FloatRandomSampling):
+
+    def __init__(self, repair: Repair = None):
+        self._repair = repair
+        super().__init__()
+
+    def _do(self, problem, n_samples, **kwargs):
+        xl, xu = problem.bounds()
+        is_cont = np.ones((len(xl),), dtype=bool)
+        if problem.vars is not None:
+            for i, var in enumerate(problem.vars):
+                if not isinstance(var, Real):
+                    is_cont[i] = False
+
+        n_cont = 5
+        opt_values = [np.linspace(xl[i], xu[i], n_cont) if is_cont[i] else np.arange(xl[i], xu[i]+1)
+                      for i in range(len(xl))]
+        x = np.array([np.array(dv) for dv in itertools.product(*opt_values)])
+        i_x = np.random.choice(x.shape[0], size=n_samples, replace=False)
+        x = x[i_x, :]
+
+        x = self._repair.do(problem, Population.new(X=x)).get("X")
+        return x

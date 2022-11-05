@@ -4,11 +4,14 @@ from assign_enc.eager.encodings.one_var import *
 
 
 def test_encoding():
-    for n in range(5, 15):
+    for n in range(1, 15):
         matrix = np.random.randint(0, 3, (n, 3, 4))
         enc = OneVarEncoder(FirstImputer(), matrix)
 
         assert enc.n_mat_max == n
+        if n == 1:
+            assert len(enc.design_vars) == 0
+            continue
         assert len(enc.design_vars) == 1
         assert enc.design_vars[0].n_opts == n
 
