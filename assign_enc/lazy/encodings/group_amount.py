@@ -212,11 +212,17 @@ class FlatLazyConnectionEncoder(LazyConnectionEncoder):
 
     def encode(self, n_src_n_tgt: NList, existence: NodeExistence, encoder: OnDemandLazyEncoder) -> List[DiscreteDV]:
 
-        i_tot_max = np.argmax(np.sum(np.array([n_src_conn for n_src_conn, _ in n_src_n_tgt]), axis=1))
+        n_conn = np.sum(np.array([n_src_conn for n_src_conn, _ in n_src_n_tgt]), axis=1)
+        n_conn_max = np.max(n_conn)
+        n_matrix_max = 0
+        for i, n in enumerate(n_conn):
+            if n == n_conn_max:
+                n_src_conn, n_tgt_conn = n_src_n_tgt[i]
+                n_matrix = encoder.count_matrices(n_src_conn, n_tgt_conn)
+                if n_matrix > n_matrix_max:
+                    n_matrix_max = n_matrix
 
-        n_src_conn, n_tgt_conn = n_src_n_tgt[i_tot_max]
-        n_max = encoder.count_matrices(n_src_conn, n_tgt_conn)
-        return [DiscreteDV(n_opts=n_max)] if n_max > 1 else []
+        return [DiscreteDV(n_opts=n_matrix_max)] if n_matrix_max > 1 else []
 
     def decode(self, n_src_conn, n_tgt_conn, vector: DesignVector, encoder: OnDemandLazyEncoder,
                existence: NodeExistence) -> Optional[np.ndarray]:

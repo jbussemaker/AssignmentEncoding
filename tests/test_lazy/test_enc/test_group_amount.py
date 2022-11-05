@@ -39,6 +39,21 @@ def test_flat_connection_encoder():
     assert encoder.get_imputation_ratio() == 32/21
 
 
+def test_flat_connection_encoder_multi_max():
+    encoder = LazyAmountFirstEncoder(LazyConstraintViolationImputer(), FlatLazyAmountEncoder(), FlatLazyConnectionEncoder())
+    encoder.set_nodes(
+        src=[Node(min_conn=0, repeated_allowed=False) for _ in range(2)],
+        tgt=[Node([1], repeated_allowed=False) for _ in range(3)],
+    )
+
+    assert len(list(encoder.iter_n_src_n_tgt())) == 4
+    assert encoder.matrix_gen.count_all_matrices() == 8
+
+    assert len(encoder.design_vars) == 2
+    assert encoder.design_vars[0].n_opts == 4
+    assert encoder.design_vars[1].n_opts == 3
+
+
 def test_total_amount_encoder():
     dvs = TotalLazyAmountEncoder().encode(2, 2, [((0, 1), (0, 1)), ((1, 1), (0, 2)), ((1, 1), (2, 0)), ((1, 2), (2, 1))],
                                           NodeExistence())
