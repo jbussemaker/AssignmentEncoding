@@ -25,9 +25,6 @@ class Node:
         # Flag whether repeated connections to the same opposite node is allowed
         self.rep = repeated_allowed
 
-        # Flag whether this node exists conditionally (set by existence patterns)
-        self.conditional = False
-
         # Determine whether we have a set list of connections or only a lower bound
         conns, min_conns = None, None
         if nr_conn_list is not None:
@@ -53,51 +50,73 @@ class Node:
         return f'({",".join([str(i) for i in self.conns])})'
 
     def __repr__(self):
-        return f'{self.__class__.__name__}(conns={self.conns!r}, min_conns={self.min_conns}, rep={self.rep}, ' \
-               f'cond={self.conditional})'
+        return f'{self.__class__.__name__}(conns={self.conns!r}, min_conns={self.min_conns}, rep={self.rep}'
 
 
-@dataclass(frozen=False)
 class NodeExistence:
     """
     Defines a specific src/tgt node existence pattern.
     """
-    src_exists: Union[List[bool], np.ndarray] = None
-    tgt_exists: Union[List[bool], np.ndarray] = None
 
-    _hash: int = None
+    def __init__(
+            self,
+            src_exists: Union[List[bool], np.ndarray] = None,
+            tgt_exists: Union[List[bool], np.ndarray] = None,
+            src_n_conn_override: Dict[int, List[int]] = None,
+            tgt_n_conn_override: Dict[int, List[int]] = None,
+    ):
+        self.src_n_conn_override = self._get_n_conn_override(src_exists, src_n_conn_override)
+        self.tgt_n_conn_override = self._get_n_conn_override(tgt_exists, tgt_n_conn_override)
+        self._hash = None
+
+    @staticmethod
+    def _get_n_conn_override(exists: Union[List[bool], np.ndarray] = None,
+                             n_conn_override: Dict[int, List[int]] = None) -> Dict[int, List[int]]:
+        if n_conn_override is None and exists is None:
+            return {}
+
+        n_conn_override = {} if n_conn_override is None else n_conn_override.copy()
+        if exists is not None:
+            for i, exist in enumerate(exists):
+                if not exist:
+                    n_conn_override[i] = [0]
+        if len(n_conn_override) == 0:
+            return {}
+        return n_conn_override
 
     def has_src(self, i):
-        return self.src_exists[i] if self.src_exists is not None else True
+        return self.src_n_conn_override.get(i) != [0]
 
     def has_tgt(self, i):
-        return self.tgt_exists[i] if self.tgt_exists is not None else True
+        return self.tgt_n_conn_override.get(i) != [0]
 
     def src_exists_mask(self, n_src: int):
-        if self.src_exists is None:
-            return np.ones((n_src,), dtype=bool)
-        return np.array(self.src_exists)
+        exist_mask = np.ones((n_src,), dtype=bool)
+        for i in range(n_src):
+            if not self.has_src(i):
+                exist_mask[i] = False
+        return exist_mask
 
     def tgt_exists_mask(self, n_tgt: int):
-        if self.tgt_exists is None:
-            return np.ones((n_tgt,), dtype=bool)
-        return np.array(self.tgt_exists)
+        exist_mask = np.ones((n_tgt,), dtype=bool)
+        for i in range(n_tgt):
+            if not self.has_tgt(i):
+                exist_mask[i] = False
+        return exist_mask
 
-    def src_all_exists(self):
-        return self.src_exists is None or all(self.src_exists)
-
-    def tgt_all_exists(self):
-        return self.tgt_exists is None or all(self.tgt_exists)
-
-    def none_exists(self):
-        if self.src_exists is None or self.tgt_exists is None:
+    def none_exists(self, n_src: int, n_tgt: int):
+        if np.any(self.src_exists_mask(n_src)):
             return False
-        return not any(self.src_exists) and not any(self.tgt_exists)
+        if np.any(self.tgt_exists_mask(n_tgt)):
+            return False
+        return True
 
     def __hash__(self):
         if self._hash is None:
-            self._hash = hash((-1 if self.src_all_exists() else tuple(self.src_exists),
-                               -1 if self.tgt_all_exists() else tuple(self.tgt_exists)))
+            self._hash = hash((
+                tuple([(k, tuple(v)) for k, v in self.src_n_conn_override.items()]) if self.src_n_conn_override is not None else -1,
+                tuple([(k, tuple(v)) for k, v in self.tgt_n_conn_override.items()]) if self.tgt_n_conn_override is not None else -1,
+            ))
         return self._hash
 
     def __eq__(self, other):
@@ -201,7 +220,6 @@ class AggregateAssignmentMatrixGenerator:
         self._exist = None
         self.existence_patterns = existence_patterns
         self._max_conn = max_conn
-        self._min_src_appear = None
         self._max_src_appear = None
         self._max_tgt_appear = None
         self._no_repeat_mat = None
@@ -233,25 +251,11 @@ class AggregateAssignmentMatrixGenerator:
             existence_patterns = NodeExistencePatterns.always_exists()
         self._exist = existence_patterns
 
-        # Set conditional flags
-        for i, src in enumerate(self.src):
-            src.conditional = existence_patterns.src_is_conditional(i)
-        for i, tgt in enumerate(self.tgt):
-            tgt.conditional = existence_patterns.tgt_is_conditional(i)
-
-        self._min_src_appear = None
-
     @property
     def max_conn(self):
         if self._max_conn is None:
             self._max_conn = self._get_max_conn()
         return self._max_conn
-
-    @property
-    def min_src_appear(self):
-        if self._min_src_appear is None:
-            self._min_src_appear = self._get_min_appear(self.tgt)
-        return self._min_src_appear
 
     @property
     def max_src_appear(self):
@@ -314,7 +318,9 @@ class AggregateAssignmentMatrixGenerator:
         tgt_cache_key = ';'.join([repr(tgt) for tgt in self.tgt])
         excluded_cache_key = ';'.join([f'{tup[0]:d},{tup[1]:d}' for tup in sorted([ex for ex in self._ex])]) \
             if self._ex is not None else ''
-        cache_str = '||'.join([src_cache_key, tgt_cache_key, excluded_cache_key])
+        exist_cache_key = ';'.join([str(hash(p)) for p in self.existence_patterns.patterns])\
+            if self.existence_patterns is not None else ''
+        cache_str = '||'.join([src_cache_key, tgt_cache_key, excluded_cache_key, exist_cache_key])
         return hashlib.md5(cache_str.encode('utf-8')).hexdigest()
 
     def _cache_path(self, sub_path=None):
@@ -386,30 +392,34 @@ class AggregateAssignmentMatrixGenerator:
         yield from self.existence_patterns.patterns
 
     def iter_sources(self, existence: NodeExistence = None):
-        exists_mask = existence.src_exists_mask(len(self.src)) if existence is not None else None
-        yield from self._iter_conn_slots(self.src, exists_mask=exists_mask)
+        n_conn_override = existence.src_n_conn_override if existence is not None else None
+        yield from self._iter_conn_slots(self.src, n_conn_override=n_conn_override)
 
     def iter_targets(self, n_source, existence: NodeExistence = None):
-        exists_mask = existence.tgt_exists_mask(len(self.tgt)) if existence is not None else None
-        yield from self._iter_conn_slots(self.tgt, is_src=False, n=n_source, exists_mask=exists_mask)
+        n_conn_override = existence.tgt_n_conn_override if existence is not None else None
+        yield from self._iter_conn_slots(self.tgt, is_src=False, n=n_source, n_conn_override=n_conn_override)
 
-    def _iter_conn_slots(self, nodes: List[Node], is_src=True, n=None, exists_mask: np.ndarray = None):
+    def _iter_conn_slots(self, nodes: List[Node], is_src=True, n=None, n_conn_override: Dict[int, List[int]] = None):
         """Iterate over all combinations of number of connections per nodes."""
 
         max_conn = self.max_src_appear if is_src else self.max_tgt_appear
-        min_conn = self.min_src_appear if is_src else 0
+
+        if n_conn_override is None:
+            n_conn_override = {}
 
         # Get all possible number of connections for each node
-        n_conns = [[0] if exists_mask is not None and not exists_mask[i] else self._get_conns(node, max_conn)
-                   for i, node in enumerate(nodes)]
+        n_conns = []
+        for i, node in enumerate(nodes):
+            if i in n_conn_override:
+                n_conns.append(n_conn_override[i])
+            else:
+                n_conns.append(self._get_conns(node, max_conn))
 
         # Iterate over all combinations of number of connections
         for n_conn_nodes in itertools.product(*n_conns):
 
             n_tot = sum(n_conn_nodes)
             if n is not None and n_tot != n:
-                continue
-            if n_tot < min_conn:
                 continue
 
             yield tuple(n_conn_nodes)
@@ -425,14 +435,10 @@ class AggregateAssignmentMatrixGenerator:
         if np.any((matrix > 0) & self.conn_blocked_mask):
             return False
 
-        # Check total number of connections
-        n_min_tot = self.min_src_appear
-        if n_min_tot > 0 and np.sum(matrix) < n_min_tot:
-            return False
-
         # Check number of source connections
         if existence is None:
             existence = NodeExistence()
+        src_n_conn_override = existence.src_n_conn_override if existence.src_n_conn_override is not None else {}
         max_conn = self.max_src_appear
         for i, n_src in enumerate(np.sum(matrix, axis=1)):
             if not existence.has_src(i):
@@ -440,17 +446,22 @@ class AggregateAssignmentMatrixGenerator:
                     return False
                 else:
                     continue
+            if i in src_n_conn_override and n_src not in src_n_conn_override[i]:
+                return False
             if not self._check_conns(n_src, self.src[i], max_conn):
                 return False
 
         # Check number of target connections
         max_conn = self.max_tgt_appear
+        tgt_n_conn_override = existence.tgt_n_conn_override if existence.tgt_n_conn_override is not None else {}
         for i, n_tgt in enumerate(np.sum(matrix, axis=0)):
             if not existence.has_tgt(i):
                 if n_tgt > 0:
                     return False
                 else:
                     continue
+            if i in tgt_n_conn_override and n_tgt not in tgt_n_conn_override[i]:
+                return False
             if not self._check_conns(n_tgt, self.tgt[i], max_conn):
                 return False
 
@@ -507,7 +518,7 @@ class AggregateAssignmentMatrixGenerator:
 
         # Generate matrices
         # return self._get_matrices_numpy(n_src_conn, n_tgt_conn)  # No compilation time
-        return self._get_matrices_numba(n_src_conn, n_tgt_conn)  # Slightly faster
+        return self._get_matrices_numba(n_src_conn, n_tgt_conn)
 
     def count_matrices(self, n_src_conn, n_tgt_conn) -> int:
         """Count the number of permutations as would be generated by _iter_matrices."""
@@ -548,14 +559,6 @@ class AggregateAssignmentMatrixGenerator:
             return n_conn
 
         return max([_max(self.src), _max(self.tgt)])
-
-    @classmethod
-    def _get_min_appear(cls, conn_tgt_nodes: List[Node]) -> int:
-        n_appear = 0
-        for tgt_node in conn_tgt_nodes:
-            if not tgt_node.conditional:
-                n_appear += cls._get_min_conns(tgt_node)
-        return n_appear
 
     @staticmethod
     def _get_min_conns(node: Node) -> int:

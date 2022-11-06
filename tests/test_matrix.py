@@ -237,6 +237,12 @@ def test_node_existence():
     assert gen.validate_matrix(matrix[0, :, :], NodeExistence(tgt_exists=[False, True]))
     assert not gen.validate_matrix(matrix[1, :, :], NodeExistence(tgt_exists=[False, True]))
 
+    assert gen.validate_matrix(matrix[0, :, :], NodeExistence(src_n_conn_override={0: [1]}))
+    assert not gen.validate_matrix(matrix[0, :, :], NodeExistence(src_n_conn_override={0: [2]}))
+    assert gen.validate_matrix(matrix[3, :, :], NodeExistence(src_n_conn_override={0: [2]}))
+    assert not gen.validate_matrix(matrix[0, :, :], NodeExistence(tgt_n_conn_override={1: [1]}))
+    assert gen.validate_matrix(matrix[1, :, :], NodeExistence(tgt_n_conn_override={1: [1]}))
+
     matrix2 = list(gen.get_agg_matrix(cache=True).values())[0]
     assert np.all(matrix == matrix2)
 
@@ -247,6 +253,11 @@ def test_node_existence():
     assert NodeExistence() in d
     assert NodeExistence(src_exists=[True, False]) in d
     assert NodeExistence(tgt_exists=[True, False]) not in d
+
+    assert NodeExistence() != NodeExistence(src_n_conn_override={0: [3]})
+    assert NodeExistence(src_n_conn_override={0: [3]}) == NodeExistence(src_n_conn_override={0: [3]})
+    assert NodeExistence(src_n_conn_override={0: [1, 3]}) != NodeExistence(src_n_conn_override={0: [3]})
+    assert NodeExistence(src_n_conn_override={0: [3]}) != NodeExistence(tgt_n_conn_override={0: [3]})
 
 
 def test_matrix_all_inf():
@@ -527,14 +538,15 @@ def test_conditional_existence_n_conns():
         NodeExistence(src_exists=[False, False], tgt_exists=[False, False]),
         NodeExistence(src_exists=[True, False], tgt_exists=[True, False]),
         NodeExistence(),
+        NodeExistence(src_n_conn_override={0: [1, 2], 1: [0]}, tgt_n_conn_override={0: [0, 1]}),
     ])
-    assert all([n.conditional for n in gen.src])
-    assert all([n.conditional for n in gen.tgt])
 
     assert list(gen.iter_n_sources_targets()) == [
         ((0, 0), (0, 0), pat.patterns[0]),
         ((1, 0), (1, 0), pat.patterns[1]),
         ((1, 1), (1, 1), pat.patterns[2]),
+        ((1, 0), (0, 1), pat.patterns[3]),
+        ((2, 0), (1, 1), pat.patterns[3]),
     ]
 
     existence_patterns = NodeExistencePatterns.get_all_combinations(

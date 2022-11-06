@@ -45,7 +45,7 @@ class LazyImputer:
 
         # If none of the nodes exist, return empty matrix
         n_src, n_tgt = len(self._matrix_gen.src), len(self._matrix_gen.tgt)
-        if existence.none_exists():
+        if existence.none_exists(n_src, n_tgt):
             imputed_vector = [0]*len(vector)
             imputed_matrix = np.zeros((n_src, n_tgt), dtype=int)
 

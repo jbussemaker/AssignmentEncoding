@@ -37,7 +37,7 @@ class GNCProblem(AssignmentProblem):
         self.choose_nr = choose_nr
         self.n_max = n_max
         self.choose_type = choose_type
-        self._choose_type_managers: Dict[int, AssignmentManager] = {}
+        self._choose_type_manager: Optional[AssignmentManager] = None
         self._n_dv_type = 0
         super().__init__(encoder)
 
@@ -67,16 +67,17 @@ class GNCProblem(AssignmentProblem):
             from assign_enc.eager.imputation.closest import ClosestImputer
             from assign_enc.eager.encodings.group_element import ElementGroupedEncoder
             n_nodes_opts = range(1, self.n_max+1) if self.choose_nr else [self.n_max]
-            self._choose_type_managers = managers = {n_nodes: AssignmentManager(
-                src=[Node([n_nodes])],  # Make the same nr of connections as we have nodes
-                tgt=[Node(min_conn=0) for _ in range(3)],  # To three types
+            self._choose_type_manager = manager = AssignmentManager(
+                src=[Node([self.n_max])],
+                tgt=[Node(min_conn=0) for _ in range(3)],  # Connect to three types
                 encoder=ElementGroupedEncoder(ClosestImputer()),
-            ) for n_nodes in n_nodes_opts}
+                existence_patterns=NodeExistencePatterns([  # Make the same nr of connections as we have nodes
+                    NodeExistence(src_n_conn_override={0: [n]}) for n in n_nodes_opts]),
+            )
 
-            merged_des_vars = EagerEncoder.merge_design_vars([mgr.design_vars for mgr in managers.values()])
-            self._n_dv_type = len(merged_des_vars)
-            aux_des_vars += [DiscreteDV(n_opts=dv.n_opts) for i, dv in enumerate(merged_des_vars)]  # Sensor types
-            aux_des_vars += [DiscreteDV(n_opts=dv.n_opts) for i, dv in enumerate(merged_des_vars)]  # Computer types
+            self._n_dv_type = len(manager.design_vars)
+            aux_des_vars += [DiscreteDV(n_opts=dv.n_opts) for i, dv in enumerate(manager.design_vars)]  # Sensor types
+            aux_des_vars += [DiscreteDV(n_opts=dv.n_opts) for i, dv in enumerate(manager.design_vars)]  # Computer types
 
         return aux_des_vars
 
@@ -153,11 +154,11 @@ class GNCProblem(AssignmentProblem):
             i0 = 2 if self.choose_nr else 0
             n_dv = self._n_dv_type
 
-            x_type_src = x_aux[i0:i0+n_dv]
-            x_type_src = self._choose_type_managers[n_src].correct_vector(x_type_src)
+            x_type_src = self._choose_type_manager.correct_vector(
+                x_aux[i0:i0+n_dv], existence=NodeExistence(src_n_conn_override={0: [n_src]}))
 
-            x_type_tgt = x_aux[i0+n_dv:]
-            x_type_tgt = self._choose_type_managers[n_tgt].correct_vector(x_type_tgt)
+            x_type_tgt = self._choose_type_manager.correct_vector(
+                x_aux[i0+n_dv:], existence=NodeExistence(src_n_conn_override={0: [n_tgt]}))
         else:
             x_type_src = x_type_tgt = []
 
@@ -182,10 +183,12 @@ class GNCProblem(AssignmentProblem):
             i0 = 2 if self.choose_nr else 0
             n_dv = self._n_dv_type
 
-            _, conn_idx = self._choose_type_managers[n_src].get_conn_idx(x_aux[i0:i0+n_dv])
+            _, conn_idx = self._choose_type_manager.get_conn_idx(
+                x_aux[i0:i0 + n_dv], existence=NodeExistence(src_n_conn_override={0: [n_src]}))
             sensor_types = sorted([types[i_type] for _, i_type in conn_idx])[:n_src]
 
-            _, conn_idx = self._choose_type_managers[n_tgt].get_conn_idx(x_aux[i0+n_dv:])
+            _, conn_idx = self._choose_type_manager.get_conn_idx(
+                x_aux[i0 + n_dv:], existence=NodeExistence(src_n_conn_override={0: [n_tgt]}))
             comp_types = sorted([types[i_type] for _, i_type in conn_idx])[:n_tgt]
         else:
             sensor_types = (types*int(np.ceil(n_src/len(types))))[:n_src]
