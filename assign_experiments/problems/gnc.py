@@ -42,7 +42,7 @@ class GNCProblem(AssignmentProblem):
         super().__init__(encoder)
 
     def get_init_kwargs(self) -> dict:
-        return {'choose_nr': self.choose_nr, 'choose_type': self.choose_type}
+        return {'choose_nr': self.choose_nr, 'choose_type': self.choose_type, 'n_max': self.n_max}
 
     def get_n_obj(self) -> int:
         return 2
@@ -251,8 +251,7 @@ class GNCProblem(AssignmentProblem):
         return np.log10(failure_rate)
 
     def __repr__(self):
-        return f'{self.__class__.__name__}({self._encoder!r}, choose_nr={self.choose_nr}, n_max={self.n_max}, ' \
-               f'choose_type={self.choose_type})'
+        return f'{self.__class__.__name__}(choose_nr={self.choose_nr}, n_max={self.n_max}, choose_type={self.choose_type})'
 
     def __str__(self):
         features = []
@@ -268,9 +267,9 @@ if __name__ == '__main__':
     from assign_pymoo.metrics_compare import *
     nm = 3
     # p = GNCProblem(DEFAULT_EAGER_ENCODER(), choose_nr=False, n_max=nm, choose_type=False)
-    # p = GNCProblem(DEFAULT_EAGER_ENCODER(), choose_nr=False, n_max=nm, choose_type=True)
+    p = GNCProblem(DEFAULT_EAGER_ENCODER(), choose_nr=False, n_max=nm, choose_type=True)
     # p = GNCProblem(DEFAULT_EAGER_ENCODER(), choose_nr=True, n_max=nm, choose_type=False)
-    p = GNCProblem(DEFAULT_EAGER_ENCODER(), choose_nr=True, n_max=nm, choose_type=True)
+    # p = GNCProblem(DEFAULT_EAGER_ENCODER(), choose_nr=True, n_max=nm, choose_type=True)
 
     # p = GNCProblem(DEFAULT_LAZY_ENCODER(), choose_nr=False, n_max=nm, choose_type=False)
     # p = GNCProblem(DEFAULT_LAZY_ENCODER(), choose_nr=False, n_max=nm, choose_type=True)
@@ -280,10 +279,12 @@ if __name__ == '__main__':
     print(f'Design space size: {p.get_n_design_points()}')
     print(f'Valid designs: {p.get_n_valid_design_points()}')
     print(f'Imputation ratio: {p.get_imputation_ratio():.2f}')
-    p.get_n_valid_design_points = lambda **_: None
-    print(f'Imputation ratio: {p.get_imputation_ratio():.2f}')
-    exit()
-    p.plot_points(n=5000), exit()
+    # p.get_n_valid_design_points = lambda **_: None
+    # print(f'Imputation ratio: {p.get_imputation_ratio():.2f}')
+    # exit()
+    # p.plot_points(n=5000), exit()
+
+    p.plot_pf(show_approx_f_range=True), exit()
 
     enc = []
     enc += [e(DEFAULT_EAGER_IMPUTER()) for e in EAGER_ENCODERS]

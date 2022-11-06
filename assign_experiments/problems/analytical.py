@@ -69,7 +69,7 @@ class AnalyticalCombinationProblem(AnalyticalProblemBase):
         return Node([1], repeated_allowed=False) if src else Node([0, 1], repeated_allowed=False)
 
     def __repr__(self):
-        return f'{self.__class__.__name__}({self._encoder}, n_tgt={self._n_tgt})'
+        return f'{self.__class__.__name__}(n_tgt={self._n_tgt})'
 
     def __str__(self):
         return f'An Comb Prob {self._n_src} -> {self._n_tgt}'
@@ -100,7 +100,7 @@ class AnalyticalAssignmentProblem(AnalyticalProblemBase):
         return Node(min_conn=1 if self.surjective else 0, repeated_allowed=False)
 
     def __repr__(self):
-        return f'{self.__class__.__name__}({self._encoder}, n_src={self._n_src}, n_tgt={self._n_tgt}, ' \
+        return f'{self.__class__.__name__}(n_src={self._n_src}, n_tgt={self._n_tgt}, ' \
                f'injective={self.injective}, surjective={self.surjective})'
 
     def __str__(self):
@@ -125,7 +125,7 @@ class AnalyticalPartitioningProblem(AnalyticalProblemBase):
         return Node(min_conn=1, repeated_allowed=False) if self.covering else Node([1], repeated_allowed=False)
 
     def __repr__(self):
-        return f'{self.__class__.__name__}({self._encoder}, n_src={self._n_src}, n_tgt={self._n_tgt}, ' \
+        return f'{self.__class__.__name__}(n_src={self._n_src}, n_tgt={self._n_tgt}, ' \
                f'covering={self.covering})'
 
     def __str__(self):
@@ -146,7 +146,7 @@ class AnalyticalDownselectingProblem(AnalyticalProblemBase):
         return Node(min_conn=0, repeated_allowed=False) if src else Node([0, 1], repeated_allowed=False)
 
     def __repr__(self):
-        return f'{self.__class__.__name__}({self._encoder}, n_tgt={self._n_tgt})'
+        return f'{self.__class__.__name__}(n_tgt={self._n_tgt})'
 
     def __str__(self):
         return f'An Down Prob {self._n_src} -> {self._n_tgt}'
@@ -179,7 +179,7 @@ class AnalyticalConnectingProblem(AnalyticalProblemBase):
         return no_diagonal+no_lower_triangle
 
     def __repr__(self):
-        return f'{self.__class__.__name__}({self._encoder}, n={self._n_src}, directed={self.directed})'
+        return f'{self.__class__.__name__}(n={self._n_src}, directed={self.directed})'
 
     def __str__(self):
         return f'An Conn Prob {self._n_src} -> {self._n_tgt}{"; dir" if self.directed else ""}'
@@ -198,7 +198,7 @@ class AnalyticalPermutingProblem(AnalyticalProblemBase):
         return Node([1], repeated_allowed=False)
 
     def __repr__(self):
-        return f'{self.__class__.__name__}({self._encoder}, n={self._n_src})'
+        return f'{self.__class__.__name__}(n={self._n_src})'
 
     def __str__(self):
         return f'An Perm Prob {self._n_src} -> {self._n_tgt}'
@@ -219,7 +219,7 @@ class AnalyticalIterCombinationsProblem(AnalyticalProblemBase):
         return Node([self._n_take], repeated_allowed=False) if src else Node([0, 1], repeated_allowed=False)
 
     def __repr__(self):
-        return f'{self.__class__.__name__}({self._encoder}, n_take={self._n_take}, n_tgt={self._n_tgt})'
+        return f'{self.__class__.__name__}(n_take={self._n_take}, n_tgt={self._n_tgt})'
 
     def __str__(self):
         return f'An Iter Comb Prob {self._n_take} from {self._n_tgt}'
