@@ -157,6 +157,8 @@ class AssignmentProblem(Problem):
             n = self.get_n_design_points(n_cont=n_cont)
             return n/n_real
 
+        # Determining the imputation ratio based on sampling (if not exhaustive) can be very inaccurate due to
+        # non-uniform distribution of imputed design points
         pop = self.sample_points(n=n_sample, remove_duplicates=False, lhs=False)
         x = pop.get('X')
         n = x.shape[0]
