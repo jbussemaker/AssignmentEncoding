@@ -42,6 +42,8 @@ class InformationContentAnalyzer:
         y_train = pop.get('F')
         if pop.get('G') is not None:
             y_train = np.column_stack([y_train, pop.get('G')])
+            not_all_zero = ~np.all(y_train == 0, axis=0)
+            y_train = y_train[:, not_all_zero]
 
         if x_train.shape[0] <= 1:
             return np.ones((2, y_train.shape[1]))

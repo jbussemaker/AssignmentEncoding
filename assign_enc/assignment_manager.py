@@ -13,6 +13,14 @@ class AssignmentManagerBase:
     def get_random_design_vector(self) -> DesignVector:
         return [dv.get_random() for dv in self.design_vars]
 
+    @staticmethod
+    def _is_violated_matrix(matrix: np.ndarray) -> bool:
+        """Whether the matrix represents output of the constraint violator imputer"""
+        try:
+            return matrix[0, 0] == -1
+        except IndexError:
+            return False
+
     @property
     def matrix_gen(self) -> AggregateAssignmentMatrixGenerator:
         raise NotImplementedError
@@ -34,12 +42,12 @@ class AssignmentManagerBase:
         raise NotImplementedError
 
     def get_conn_idx(self, vector: DesignVector, existence: NodeExistence = None) \
-            -> Tuple[DesignVector, List[Tuple[int, int]]]:
+            -> Tuple[DesignVector, Optional[List[Tuple[int, int]]]]:
         """Get node connections for a given design vector"""
         raise NotImplementedError
 
     def get_conns(self, vector: DesignVector, existence: NodeExistence = None) \
-            -> Tuple[DesignVector, List[Tuple[Node, Node]]]:
+            -> Tuple[DesignVector, Optional[List[Tuple[Node, Node]]]]:
         """Get node connections for a given design vector"""
         raise NotImplementedError
 
@@ -87,11 +95,13 @@ class AssignmentManager(AssignmentManagerBase):
         return self._encoder.get_matrix(vector, existence=existence)
 
     def get_conn_idx(self, vector: DesignVector, existence: NodeExistence = None) \
-            -> Tuple[DesignVector, List[Tuple[int, int]]]:
+            -> Tuple[DesignVector, Optional[List[Tuple[int, int]]]]:
         """Get node connections for a given design vector"""
 
         # Get matrix and impute design vector
         imputed_vector, matrix = self.get_matrix(vector, existence=existence)
+        if self._is_violated_matrix(matrix):
+            return imputed_vector, None
 
         # Get connections from matrix
         edges_idx = self._matrix_gen.get_conn_idx(matrix)
@@ -99,11 +109,13 @@ class AssignmentManager(AssignmentManagerBase):
         return imputed_vector, edges_idx
 
     def get_conns(self, vector: DesignVector, existence: NodeExistence = None) \
-            -> Tuple[DesignVector, List[Tuple[Node, Node]]]:
+            -> Tuple[DesignVector, Optional[List[Tuple[Node, Node]]]]:
         """Get node connections for a given design vector"""
 
         # Get matrix and impute design vector
         imputed_vector, matrix = self.get_matrix(vector, existence=existence)
+        if self._is_violated_matrix(matrix):
+            return imputed_vector, None
 
         # Get connections from matrix
         edges = self._matrix_gen.get_conns(matrix)
@@ -139,18 +151,22 @@ class LazyAssignmentManager(AssignmentManagerBase):
         return self._encoder.get_matrix(vector, existence=existence)
 
     def get_conn_idx(self, vector: DesignVector, existence: NodeExistence = None) \
-            -> Tuple[DesignVector, List[Tuple[int, int]]]:
+            -> Tuple[DesignVector, Optional[List[Tuple[int, int]]]]:
         """Get node connections for a given design vector"""
         imputed_vector, matrix = self._encoder.get_matrix(vector, existence=existence)
+        if self._is_violated_matrix(matrix):
+            return imputed_vector, None
 
         # Get connections from matrix
         edges_idx = self._encoder.get_conn_idx(matrix)
         return imputed_vector, edges_idx
 
     def get_conns(self, vector: DesignVector, existence: NodeExistence = None) \
-            -> Tuple[DesignVector, List[Tuple[Node, Node]]]:
+            -> Tuple[DesignVector, Optional[List[Tuple[Node, Node]]]]:
         """Get node connections for a given design vector"""
         imputed_vector, matrix = self._encoder.get_matrix(vector, existence=existence)
+        if self._is_violated_matrix(matrix):
+            return imputed_vector, None
 
         # Get connections from matrix
         edges = self._encoder.get_conns(matrix)

@@ -36,7 +36,7 @@ EAGER_IMPUTERS = [
     lambda: ConstraintViolationImputer(),
 ]
 
-DEFAULT_EAGER_IMPUTER = AutoModImputer
+DEFAULT_EAGER_IMPUTER = ClosestImputer
 
 LAZY_ENCODERS = [
     lambda imp: LazyDirectMatrixEncoder(imp),

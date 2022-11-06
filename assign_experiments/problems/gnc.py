@@ -136,7 +136,7 @@ class GNCProblem(AssignmentProblem):
         tgt_is_conditional = [i > 0 for i in range(self.n_max)]
         return NodeExistencePatterns.get_increasing(src_is_conditional, tgt_is_conditional)
 
-    def correct_x_aux(self, x_aux: DesignVector) -> Tuple[DesignVector, Optional[NodeExistence]]:
+    def correct_x_aux(self, x_aux: DesignVector) -> Tuple[DesignVector, Optional[NodeExistence], bool]:
         # Determine which target nodes exist
         choose_type, n = self.choose_type, self.n_max
         if self.choose_nr:
@@ -150,20 +150,25 @@ class GNCProblem(AssignmentProblem):
             x_nr = []
 
         # Correct type selection design variables
+        is_violated = False
         if self.choose_type:
             i0 = 2 if self.choose_nr else 0
             n_dv = self._n_dv_type
 
-            x_type_src = self._choose_type_manager.correct_vector(
+            x_type_src, conn_idx = self._choose_type_manager.get_conn_idx(
                 x_aux[i0:i0+n_dv], existence=NodeExistence(src_n_conn_override={0: [n_src]}))
+            if conn_idx is None:
+                is_violated = True
 
-            x_type_tgt = self._choose_type_manager.correct_vector(
+            x_type_tgt, conn_idx = self._choose_type_manager.get_conn_idx(
                 x_aux[i0+n_dv:], existence=NodeExistence(src_n_conn_override={0: [n_tgt]}))
+            if conn_idx is None:
+                is_violated = True
         else:
             x_type_src = x_type_tgt = []
 
         x_corrected = list(x_nr)+list(x_type_src)+list(x_type_tgt)
-        return x_corrected, existence
+        return x_corrected, existence, is_violated
 
     def _do_evaluate(self, conns: List[Tuple[int, int]], x_aux: Optional[DesignVector]) -> Tuple[List[float], List[float]]:
         # Get number of sensors and computers

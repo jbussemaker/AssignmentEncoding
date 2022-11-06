@@ -45,7 +45,7 @@ class AssignmentProblem(Problem):
         xl = np.zeros((n_var,), dtype=int)
         xu = np.array([dv.n_opts-1 for dv in design_vars])
 
-        n_obj, n_con = self.get_n_obj(), self.get_n_con()
+        n_obj, n_con = self.get_n_obj(), self.get_n_con()+1
         super().__init__(n_var=n_var, n_obj=n_obj, n_ieq_constr=n_con, xl=xl, xu=xu, vars=var_types)
 
     def get_for_encoder(self, encoder: Encoder):
@@ -68,7 +68,7 @@ class AssignmentProblem(Problem):
         for i_dv in range(x_corr.shape[0]):
             existence = None
             if n_aux > 0:
-                x_corr[i_dv, :n_aux], existence = self.correct_x_aux(x_corr[i_dv, :n_aux])
+                x_corr[i_dv, :n_aux], existence, _ = self.correct_x_aux(x_corr[i_dv, :n_aux])
             x_corr[i_dv, n_aux:] = self.assignment_manager.correct_vector(x_corr[i_dv, n_aux:], existence=existence)
         return x_corr
 
@@ -77,25 +77,29 @@ class AssignmentProblem(Problem):
         n = x.shape[0]
         x_out = np.empty((n, self.n_var))
         f_out = np.empty((n, self.n_obj))
-        has_g = self.n_constr > 0
-        g_out = np.empty((n, self.n_constr)) if has_g else None
+        g_out = np.zeros((n, self.n_constr))
 
         n_aux = self.n_aux
         for i in range(n):
             x_aux, existence = None, None
             if n_aux > 0:
-                x_aux, existence = self.correct_x_aux(x[i, :n_aux])
+                x_aux, existence, is_violated = self.correct_x_aux(x[i, :n_aux])
                 x_out[i, :n_aux] = x_aux
+                if is_violated:
+                    f_out[i, :] = 0
+                    g_out[i, 0] = 1
+                    continue
 
             x_out[i, n_aux:], conn_idx = self.assignment_manager.get_conn_idx(x[i, n_aux:], existence=existence)
-            f_out[i, :], g_i = self._do_evaluate(conn_idx, x_aux=x_aux)
-            if has_g:
-                g_out[i, :] = g_i
+            if conn_idx is None:
+                f_out[i, :] = 0
+                g_out[i, 0] = 1
+            else:
+                f_out[i, :], g_out[i, 1:] = self._do_evaluate(conn_idx, x_aux=x_aux)
 
         out['X'] = x_out
         out['F'] = f_out
-        if has_g:
-            out['G'] = g_out
+        out['G'] = g_out
 
     def get_n_design_points(self, n_cont=5) -> int:
         n = 1
@@ -183,8 +187,9 @@ class AssignmentProblem(Problem):
     def get_existence_patterns(self) -> Optional[NodeExistencePatterns]:
         pass
 
-    def correct_x_aux(self, x_aux: DesignVector) -> Tuple[DesignVector, Optional[NodeExistence]]:
-        """Correct auxiliary design vector and additionally return whether src or tgt nodes exist"""
+    def correct_x_aux(self, x_aux: DesignVector) -> Tuple[DesignVector, Optional[NodeExistence], bool]:
+        """Correct auxiliary design vector, return imputed design vector, optional NodeExistence, and flag whether the
+        design is invalid"""
         raise RuntimeError
 
     def _do_evaluate(self, conns: List[Tuple[int, int]], x_aux: Optional[DesignVector]) -> Tuple[List[float], List[float]]:
