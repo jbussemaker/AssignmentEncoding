@@ -57,12 +57,24 @@ to match with the above decision characteristics:
 1. Constraints are placed on the *sum of values* in rows and columns, corresponding to the number of connections 
    accepted by source and target nodes, respectively. For example, if source node i=1 only can establish 1 connection to
    any of the target nodes, the sum of elements in the first row must be 1.
+   This can be used to model connection slot constraint, stemming from for example physical or capacity constraints.
 2. No upper limit is placed on matrix values if repeated connections are allowed between nodes.
+   Repeated connections can be directly relevant in some architecture problems, for example when multiple connections
+   between components (e.g. electrical connections) would increase robustness (at some cost) of the system.
+   Repeated connections, however, can also be useful as a way to implement sequence-irrelevant connection problems:
+   problems where the number of connections is relevant, but not the sequence that these connections are made in.
+   This can be used to turn a permutation problem into a combinations or combinations-with-replacement problem.
 3. Matrix elements can be constrained to 0 to represent explicitly forbidden connections between node pairs.
+   This can be used to model network connections, where any connection between nodes is possible (i.e. network nodes are
+   represented by both src and tgt nodes at the same time), except from/to itself.
+
+This representation leads to a fundamental difference between node-wise connections and between-node connections:
+- Node-wise connections are used to represent assignment patterns where only the amount of connections is relevant
+- Whereas between-node connections represent patterns where both the amount, and the sequence of connections is relevant 
 
 Given these rules and the definitions of the source and target nodes, all possible assignment patterns can be found and
-represented in the **Aggregate Assignment Matrix (AAM)** of size `n_src` x `n_tgt` x `n_pat` (number of valid
-assignment patterns).
+represented in the **Aggregate Assignment Matrix (AAM)** of size
+`n_pat` (number of valid assignment patterns) x `n_src` x `n_tgt`.
 
 The algorithm for finding the *AAM* is not part of this research.
 
@@ -84,19 +96,59 @@ In general, any encoding scheme should consist of the following elements:
 ### Comparing Encoding Scheme Performance
 
 The different encoding schemes will be compared based on the following metrics:
-1. Maximization of information content, representing the amount of information that can be gained from the design
-   variables; measured by the Leave-one-out-Cross-Validation (LOOCV) accuracy of some surrogate model using the design
-   variables as input and some objective function as output.
-2. Maximization of information content, represented by the amount of design variables: `n_dv`
-3. Minimization of the imputation ratio: the ratio of the combinatorial design space size `prod(n_i)` and `n_pat`
+1. Minimization of information error, representing how accurate information related to the design variables can be
+   modeled; measured by the Leave-one-out-Cross-Validation (LOOCV) accuracy of some surrogate model using the design
+   variables as input and some objective function as output
+2. Minimization of the imputation ratio: the ratio of the combinatorial design space size `prod(n_i)` and `n_pat`
 
 Then to test them for real optimization performance, the following tests should be performed:
 1. Compare different imputation algorithms: combined with the encoding scheme with the highest imputation ratio, solve
    with a genetic algorithm
 2. Compare different encoding schemes, combined with the best imputation algorithm:
    1. Genetic algorithm to test the impact of the imputation ratio
-   2. Surrogate-based optimization algorithm to test the impact of both imputation ratio and information content
+   2. Surrogate-based optimization (SBO) algorithm to test the impact of both imputation ratio and information error
 
 A suitable test problem can be the GN&C problem from Crawley et al, which can be dynamically tuned to be more or less
 difficult by varying the number of possible sensors, computers and actuators. Optimization performance can be measured
-using the `Delta HV` and spread metrics (see Bussemaker 2021), for some fixed computational budget.
+using the `Delta HV` metric, for some fixed computational budget. The spread metric (Bussemaker2021) will not be used,
+as the Pareto front is not necessarily continuous.
+
+## Hypotheses
+
+1. For encoders with high imputation ratios, there exists an imputation algorithm that has the best convergence rate,
+   which is robust across analytical problems (both for eager and lazy encoders)
+2. Information error and imputation ratio are correlated with convergence rate
+    1. Information error is correlated with SBO convergence rate: lower error --> faster convergence
+    2. Information error is not correlated with GA convergence rate
+    3. Imputation ratio is correlated with GA convergence rate: lower ratio --> faster convergence
+    4. Imputation ratio is correlated with SBO convergence rate: lower ratio --> faster convergence
+    5. Imputation ratio and information error should be minimized
+3. Lazy encoders can be applied to encode very large problems time-efficiently
+4. For each analytical architecture problem, a (set of) best encoders exist that is consistent over all problem sizes
+   (separately for eager and lazy encoders)
+5. It is possible to define rules for encoder selection, based on the node configurations (separately for eager and lazy)
+    1. This applies to the analytical problems (i.e. no repetition)
+    2. This also applies to problems with repetition (combinations with replacement)
+    3. This also applies to the GN&C problem (only combinations, with types, and with types + amounts)
+6. It is possible to define a rule for when to select an eager or a lazy encoder
+
+### Observations
+
+#### 1. Imputation Algorithm tests
+01_imputation
+
+- Both eager and lazy imputation algorithms exist that are effective
+- For high imputation ratios (~10):
+  - All imputation algorithms are similarly effective; most effective are:
+  - Eager: Auto Mod
+  - Lazy: Delta Imp
+- For very high imputation ratios (~100):
+  - First imputer and constraint violation imputers are not effective; they either only map to 1 (First Imp) or
+    0 (CV Imp) valid point, meaning that during a random search for new points (e.g. DOE), there is a low chance of
+    finding a diverse set of new points (this is also seen from the starting nr of evaluations of the First Imputer)
+  - The Auto Mod Reverse (Eager) imputation algorithm is also not very effective, as it starts searching from the end of
+    the design vector, where there is a higher chance of not hitting a valid design
+  - Eager: both Closest Imp algorithms are similarly effective, with Auto Mod slightly more effective
+  - Lazy: Delta Imp and both Closest Imp algorithms are similarly effective
+
+Conclusions: use Auto Mod for eager encoders, and Delta Imp for lazy encoders
