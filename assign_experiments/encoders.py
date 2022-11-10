@@ -3,9 +3,6 @@ from assign_enc.lazy.imputation import *
 from assign_enc.eager.encodings import *
 from assign_enc.eager.imputation import *
 
-__all__ = ['EAGER_ENCODERS', 'EAGER_IMPUTERS', 'DEFAULT_EAGER_ENCODER', 'DEFAULT_EAGER_IMPUTER',
-           'LAZY_ENCODERS', 'LAZY_IMPUTERS', 'DEFAULT_LAZY_ENCODER', 'DEFAULT_LAZY_IMPUTER']
-
 
 EAGER_ENCODERS = [
     lambda imp: OneVarEncoder(imp),
@@ -36,7 +33,7 @@ EAGER_IMPUTERS = [
     lambda: ConstraintViolationImputer(),
 ]
 
-DEFAULT_EAGER_IMPUTER = ClosestImputer
+DEFAULT_EAGER_IMPUTER = AutoModImputer
 
 LAZY_ENCODERS = [
     lambda imp: LazyDirectMatrixEncoder(imp),

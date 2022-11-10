@@ -14,7 +14,7 @@ from pymoo.core.duplicate import DefaultDuplicateElimination
 from pymoo.indicators.distance_indicator import euclidean_distance
 from pymoo.util.nds.non_dominated_sorting import NonDominatedSorting
 
-__all__ = ['Metric', 'IndicatorMetric', 'MetricTermination', 'MetricDiffTermination', 'FilteredMetric', 'SpreadMetric',
+__all__ = ['Metric', 'IndicatorMetric', 'MetricTermination', 'MetricDiffTermination', 'SpreadMetric',
            'DeltaHVMetric', 'IGDMetric', 'IGDPlusMetric', 'MaxConstraintViolationMetric', 'NrEvaluationsMetric',
            'BestObjMetric']
 
@@ -247,6 +247,125 @@ class IndicatorMetric(Metric):
 
     def _calculate_values(self, algorithm: Algorithm) -> List[float]:
         return [self.indicator(self._get_opt_f(algorithm))]
+
+
+class MetricTermination(Termination):
+    """Termination based on a metric."""
+
+    def __init__(self, metric: Metric, value_name: str = None, lower_limit: float = None, upper_limit: float = None,
+                 n_eval_check: int = None):
+        if lower_limit is None and upper_limit is None:
+            raise ValueError('Provide at least either a lower or an upper limit!')
+        self.metric = metric
+        self.n_eval = []
+        self.value_name = value_name or metric.value_names[0]
+        self.lower_limit = lower_limit
+        self.upper_limit = upper_limit
+        self.n_eval_check = n_eval_check
+
+        super(MetricTermination, self).__init__()
+
+    @property
+    def metric_name(self) -> str:
+        return self.metric.name
+
+    def _do_continue(self, algorithm: Algorithm, **kwargs):
+
+        values = self._calc_step(algorithm)
+        value = values[-1]
+
+        if self.lower_limit is not None and value <= self.lower_limit:
+            return False
+        if self.upper_limit is not None and value >= self.upper_limit:
+            return False
+        return True
+
+    def _calc_step(self, algorithm: Algorithm):
+        do_calc = True
+        if len(self.n_eval) > 0 and self.n_eval_check is not None:
+            n_eval_next = self.n_eval[-1]+self.n_eval_check
+            n_eval_algo = algorithm.evaluator.n_eval
+            if n_eval_algo < n_eval_next:
+                do_calc = False
+
+        if do_calc:
+            self.metric.calculate_step(algorithm)
+            self.n_eval.append(algorithm.evaluator.n_eval)
+        return self._get_check_values()
+
+    def _get_check_values(self):
+        return np.array(self.metric.values[self.value_name])
+
+    def plot(self, save_filename=None, show=True):
+        plt.figure()
+        plt.title('Metric termination: %s.%s' % (self.metric_name, self.value_name))
+
+        y = self.metric.values[self.value_name]
+        x = list(range(len(y)))
+
+        plt.plot(x, y, '-k', linewidth=1)
+        if self.lower_limit is not None:
+            plt.plot(x, np.ones((len(x),))*self.lower_limit, '--k', linewidth=1)
+        if self.upper_limit is not None:
+            plt.plot(x, np.ones((len(x),))*self.upper_limit, '--k', linewidth=1)
+
+        plt.xlim([0, x[-1]])
+        plt.xlabel('Iteration')
+        plt.ylabel(self.value_name)
+
+        if save_filename is not None:
+            plt.savefig(save_filename+'.png')
+            # plt.savefig(save_filename+'.svg')
+        if show:
+            plt.show()
+
+
+class MetricDiffTermination(MetricTermination):
+    """Termination based on the rate of change of a metric."""
+
+    def __init__(self, metric: Metric, value_name: str = None, limit: float = None, **kwargs):
+        super(MetricDiffTermination, self).__init__(metric, value_name=value_name, lower_limit=limit, **kwargs)
+
+        self.diff_values = []
+
+    def _do_continue(self, algorithm: Algorithm, **kwargs):
+
+        values = self._calc_step(algorithm)
+        values = np.array(values)
+        real_values = values[~np.isnan(values)]
+
+        if len(real_values) < 2:
+            self.diff_values.append(np.nan)
+            return True
+
+        diff = abs(real_values[-1]-real_values[-2])
+        self.diff_values.append(diff)
+        return diff > self.lower_limit
+
+    def plot(self, save_filename=None, show=True):
+        _ll = self.lower_limit
+        self.lower_limit = None
+        super(MetricDiffTermination, self).plot(save_filename=save_filename, show=False)
+        self.lower_limit = _ll
+
+        plt.figure()
+        plt.title('Metric termination (diff): %s.%s' % (self.metric_name, self.value_name))
+
+        y = self.diff_values
+        x = list(range(len(y)))
+
+        plt.semilogy(x, y, '-k', linewidth=1)
+        plt.semilogy(x, np.ones((len(x),))*self.lower_limit, '--k', linewidth=1)
+
+        plt.xlim([0, x[-1]])
+        plt.xlabel('Iteration')
+        plt.ylabel(self.value_name+' diff')
+
+        if save_filename is not None:
+            plt.savefig(save_filename+'_diff.png')
+            # plt.savefig(save_filename+'_diff.svg')
+        if show:
+            plt.show()
 
 
 class SpreadMetric(Metric):

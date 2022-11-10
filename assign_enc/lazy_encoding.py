@@ -1,3 +1,4 @@
+import copy
 import itertools
 import numpy as np
 from typing import *
@@ -109,6 +110,16 @@ class LazyEncoder(Encoder):
                 raise RuntimeError(f'All design variables must have at least 2 options: {i} has {dv.n_opts} opts')
 
         self._imputer.initialize(self._matrix_gen, self._existence_design_vars, self._design_vars, self._decode)
+
+    def set_imputer(self, imputer: LazyImputer):
+        self._imputer = imputer
+        if self._matrix_gen is not None:
+            self._imputer.initialize(self._matrix_gen, self._existence_design_vars, self._design_vars, self._decode)
+
+    def get_for_imputer(self, imputer: LazyImputer):
+        encoder: LazyEncoder = copy.deepcopy(self)
+        encoder.set_imputer(imputer)
+        return encoder
 
     @property
     def src(self):

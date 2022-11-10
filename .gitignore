@@ -132,3 +132,4 @@ dmypy.json
 
 .matrix_cache
 .pf_cache
+results

@@ -11,7 +11,9 @@ from typing import *
 import logging.config
 import concurrent.futures
 import matplotlib.pyplot as plt
-from arch_opt_exp.metrics_base import *
+import pylab as pl
+
+from assign_experiments.metrics import *
 from werkzeug.utils import secure_filename
 
 from pymoo.optimize import minimize
@@ -22,7 +24,7 @@ from pymoo.termination.max_eval import MaximumFunctionCallTermination
 
 __all__ = ['Experimenter', 'EffectivenessTerminator', 'ExperimenterResult']
 
-log = logging.getLogger('arch_opt_exp.exp')
+log = logging.getLogger('assign_exp.exp')
 
 
 class EffectivenessTerminator(MaximumFunctionCallTermination):
@@ -47,7 +49,7 @@ class ExperimenterResult(Result):
     def __init__(self):
         super(ExperimenterResult, self).__init__()
 
-        self.algorithm_name = None
+        self.plot_name = None
         self.metrics: Dict[str, Metric] = {}
         self.metric_converged = None
         self.termination: Optional[MetricTermination] = None
@@ -79,7 +81,7 @@ class ExperimenterResult(Result):
         adding standard deviations."""
         result = cls()
 
-        result.algorithm_name = results[0].algorithm_name
+        result.plot_name = results[0].plot_name
         result.exec_time, result.exec_time_std = cls._get_mean_std(results, lambda r: r.exec_time)
         result.n_steps, result.n_steps_std = cls._get_mean_std(results, lambda r: r.n_steps)
         result.n_eval, result.n_eval_std = cls._get_mean_std(results, lambda r: r.n_eval)
@@ -148,7 +150,7 @@ class ExperimenterResult(Result):
         metrics = [res.metrics[metric_name] for res in results]
         n_eval = [res.n_eval for res in results] if plot_evaluations else None
         if kwargs.get('titles') is None:
-            kwargs['titles'] = [res.algorithm_name for res in results]
+            kwargs['titles'] = [res.plot_name for res in results]
         Metric.plot_multiple(metrics, n_eval=n_eval, **kwargs)
 
     @staticmethod
@@ -201,6 +203,21 @@ class ExperimenterResult(Result):
         if show:
             plt.show()
 
+    def plot_obj_progress(self, save_filename=None, show=True):
+        plt.figure()
+        plt.title(f'Objective progress: {self.plot_name}')
+
+        for i, algo_step in enumerate(self.history):
+            f_pareto = algo_step.opt.get('F')
+            plt.scatter(f_pareto[:, 0], f_pareto[:, 1], s=3, label=f'Step {i}')
+        plt.legend()
+
+        if save_filename is not None:
+            pl.savefig(save_filename+'.png')
+            pl.savefig(save_filename+'.svg')
+        if show:
+            plt.show()
+
     def export_pandas(self) -> pd.DataFrame:
         has_std = self.n_eval_std is not None
         data = {
@@ -228,10 +245,11 @@ class Experimenter:
     results_folder: Optional[str] = None
 
     def __init__(self, problem: Problem, algorithm: Algorithm, n_eval_max: int, algorithm_name: str = None,
-                 metrics: List[Metric] = None, log_level='INFO', results_folder: str = None):
+                 plot_name: str = None, metrics: List[Metric] = None, log_level='INFO', results_folder: str = None):
         self.problem = problem
         self.algorithm = algorithm
         self.algorithm_name = algorithm_name or algorithm.__class__.__name__
+        self.plot_name = plot_name
         self.n_eval_max = n_eval_max
 
         if metrics is None:
@@ -240,9 +258,10 @@ class Experimenter:
             metrics = [
                 DeltaHVMetric(pf),
                 IGDMetric(pf),
-                SpreadMetric(),
                 MaxConstraintViolationMetric(),
             ]
+            # if problem.n_obj == 2:
+            #     metrics.append(SpreadMetric())
         self.metrics = metrics
 
         self.results_folder = results_folder or self.results_folder  # Turn class attr into instance attr
@@ -267,7 +286,7 @@ class Experimenter:
         termination = EffectivenessTerminator(n_eval_max=self.n_eval_max, metrics=self.metrics)
 
         # Run the algorithm
-        log.info('Running effectiveness experiment: %s / %s / %d' %
+        log.info('Running effectiveness experiment:  %s / %s / %d' %
                  (self.problem.name(), self.algorithm_name, repeat_idx))
         result = minimize(
             self.problem, self.algorithm,
@@ -279,7 +298,7 @@ class Experimenter:
 
         # Prepare experimenter results by including metrics
         result = ExperimenterResult.from_result(result)
-        result.algorithm_name = self.algorithm_name
+        result.plot_name = self.plot_name or self.algorithm_name
         metrics: List[Metric] = result.algorithm.termination.metrics
         result.metrics = {met.name: met for met in metrics}
 
@@ -299,14 +318,7 @@ class Experimenter:
         with open(result_path, 'rb') as fp:
             return pickle.loads(bz2.decompress(fp.read()))
 
-    def get_aggregate_effectiveness_results(self, force=False) -> ExperimenterResult:
-        """Returns results aggregated for all individual runs, using mean and std."""
-        agg_results_path = self._get_agg_effectiveness_result_path()
-        if not force and os.path.exists(agg_results_path):
-            with open(agg_results_path, 'rb') as fp:
-                return pickle.load(fp)
-
-        log.info('Aggregating effectiveness results: %s / %s' % (self.problem.name(), self.algorithm_name))
+    def get_effectiveness_results(self) -> List[ExperimenterResult]:
         results = []
         i = 0
         while True:
@@ -316,6 +328,17 @@ class Experimenter:
 
             results.append(result)
             i += 1
+        return results
+
+    def get_aggregate_effectiveness_results(self, force=False) -> ExperimenterResult:
+        """Returns results aggregated for all individual runs, using mean and std."""
+        agg_results_path = self._get_agg_effectiveness_result_path()
+        if not force and os.path.exists(agg_results_path):
+            with open(agg_results_path, 'rb') as fp:
+                return pickle.load(fp)
+
+        log.info('Aggregating effectiveness results: %s / %s' % (self.problem.name(), self.algorithm_name))
+        results = self.get_effectiveness_results()
 
         res = ExperimenterResult.aggregate_results(results)
         with open(agg_results_path, 'wb') as fp:
@@ -378,7 +401,7 @@ class Experimenter:
 
                 # Modify metrics to reflect number of steps
                 result = ExperimenterResult.from_result(result)
-                result.algorithm_name = self.algorithm_name
+                result.plot_name = self.plot_name or self.algorithm_name
                 result.metric_converged = True
                 result.termination = termination
 
@@ -509,7 +532,7 @@ class Experimenter:
                 },
             },
             'loggers': {
-                'arch_opt_exp': {
+                'assign_exp': {
                     'handlers': ['console'],
                     'level': level,
                 },

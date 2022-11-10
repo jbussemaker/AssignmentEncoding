@@ -84,8 +84,11 @@ class MetricsComparer:
         if n_leave_out is None:
             n_leave_out = self.n_leave_out
         information_errors = problem.get_information_error(n_samples=n_samples, n_leave_out=n_leave_out, **kwargs)
-        i_max = np.argmax(information_errors[0, :])
-        return information_errors[:, i_max]
+        try:
+            i_max = np.argmax(information_errors[0, :])
+            return information_errors[:, i_max]
+        except ValueError:
+            return np.ones((2,))
 
     @staticmethod
     def _get_for_encoder(problem: AssignmentProblem, encoder: Encoder) -> AssignmentProblem:

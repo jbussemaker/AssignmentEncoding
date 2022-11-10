@@ -14,6 +14,8 @@ class AnalyticalProblemBase(AssignmentProblem):
     """Test problem where the objective is calculated from the sum of the products of the coefficient of each
     connection, defined by an exponential function."""
 
+    _invert_f2 = False
+
     def __init__(self, encoder, n_src: int = 2, n_tgt: int = 3):
         self._n_src = n_src
         self._n_tgt = n_tgt
@@ -24,26 +26,41 @@ class AnalyticalProblemBase(AssignmentProblem):
         return {'n_src': self._n_src, 'n_tgt': self._n_tgt}
 
     def get_src_tgt_nodes(self) -> Tuple[List[Node], List[Node]]:
-        src_nodes = [self._get_node(True, i) for i in range(len(self.src_coeff))]
-        tgt_nodes = [self._get_node(False, i) for i in range(len(self.tgt_coeff))]
+        src_nodes = [self._get_node(True, i) for i in range(self.src_coeff.shape[1])]
+        tgt_nodes = [self._get_node(False, i) for i in range(self.tgt_coeff.shape[1])]
         return src_nodes, tgt_nodes
+
+    def get_n_obj(self) -> int:
+        return 2
 
     def get_n_valid_design_points(self, n_cont=5) -> int:
         return self.assignment_manager.matrix_gen.count_all_matrices()
 
     def _do_evaluate(self, conns: List[Tuple[int, int]], x_aux: Optional[DesignVector]) -> Tuple[List[float], List[float]]:
-        coeff_sum = 0.
+        coeff_sum = np.zeros((2,))
         for i_src, i_tgt in conns:
-            conn_val = self.src_coeff[i_src]*self.tgt_coeff[i_tgt]
-            coeff_sum += conn_val
-        return [-coeff_sum], []
+            coeff_sum += self.src_coeff[:, i_src]*self.tgt_coeff[:, i_tgt]
+        coeff_sum[0] = -coeff_sum[0]
+        if self._invert_f2:
+            coeff_sum[1] = -coeff_sum[1]
+        return list(coeff_sum), []
 
-    def get_coefficients(self) -> Tuple[List[float], List[float]]:
-        return self._get_exp_coeff(self._n_src), self._get_exp_coeff(self._n_tgt)
+    def get_coefficients(self):
+        src_coeff = np.row_stack([self._get_sin_coeff(self._n_src), self._get_cos_coeff(self._n_src)])
+        tgt_coeff = np.row_stack([self._get_sin_coeff(self._n_tgt), self._get_cos_coeff(self._n_tgt)])
+        return src_coeff, tgt_coeff
 
     @staticmethod
     def _get_exp_coeff(n):
         return np.exp(((np.arange(n)+1)/n)-1)
+
+    @staticmethod
+    def _get_sin_coeff(n):
+        return 1-np.sin(np.linspace(.75*np.pi, 2.*np.pi, n))
+
+    @staticmethod
+    def _get_cos_coeff(n):
+        return np.cos(np.linspace(.25*np.pi, 2.25*np.pi, n))+1
 
     def _get_node(self, src: bool, idx: int) -> Node:
         raise NotImplementedError
@@ -111,6 +128,8 @@ class AnalyticalAssignmentProblem(AnalyticalProblemBase):
 class AnalyticalPartitioningProblem(AnalyticalProblemBase):
     """Partitioning pattern: sources have any connections, targets 1, no repetitions; if changed into a covering
     partitioning pattern, targets have no max connections"""
+
+    _invert_f2 = True
 
     def __init__(self, *args, covering=False, **kwargs):
         self.covering = covering
@@ -208,6 +227,8 @@ class AnalyticalIterCombinationsProblem(AnalyticalProblemBase):
     """Itertools combinations function (select n_take elements from n_tgt targets):
     1 source has n_take connections to n_tgt targets, no repetition"""
 
+    _invert_f2 = True
+
     def __init__(self, encoder, n_take: int = 2, n_tgt: int = 3):
         self._n_take = min(n_take, n_tgt)
         super().__init__(encoder, n_src=1, n_tgt=n_tgt)
@@ -280,14 +301,15 @@ if __name__ == '__main__':
     from assign_experiments.encoders import *
     from assign_pymoo.metrics_compare import *
     # p = AnalyticalCombinationProblem(DEFAULT_EAGER_ENCODER())
-    # p = AnalyticalAssignmentProblem(DEFAULT_EAGER_ENCODER())
+    # p = AnalyticalAssignmentProblem(DEFAULT_EAGER_ENCODER())  # Very high imputation ratios
     p = AnalyticalPartitioningProblem(DEFAULT_EAGER_ENCODER())
     # p = AnalyticalDownselectingProblem(DEFAULT_EAGER_ENCODER())
-    # p = AnalyticalConnectingProblem(DEFAULT_EAGER_ENCODER())
+    # p = AnalyticalConnectingProblem(DEFAULT_EAGER_ENCODER())  # Low information errors
     # p = AnalyticalPermutingProblem(DEFAULT_EAGER_ENCODER())
     # p = AnalyticalIterCombinationsProblem(DEFAULT_EAGER_ENCODER())
-    # p = AnalyticalIterCombinationsReplacementProblem(DEFAULT_EAGER_ENCODER(), n_take=3, n_tgt=3)
+    # p = AnalyticalIterCombinationsReplacementProblem(DEFAULT_EAGER_ENCODER(), n_take=3, n_tgt=3)  # Low inf err
+    # p.plot_pf(show_approx_f_range=True), exit()
     enc = []
-    enc += [e(DEFAULT_EAGER_IMPUTER()) for e in EAGER_ENCODERS]
+    # enc += [e(DEFAULT_EAGER_IMPUTER()) for e in EAGER_ENCODERS]
     enc += [e(DEFAULT_LAZY_IMPUTER()) for e in LAZY_ENCODERS]
     MetricsComparer().compare_encoders(p, enc)

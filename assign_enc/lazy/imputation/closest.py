@@ -10,7 +10,7 @@ class LazyClosestImputer(LazyImputer):
     """Imputes by looking for the closest valid design vector based on euclidean or Mahattan distance.
     Eagerly evaluates itertools.product, so might need too much memory/time."""
 
-    def __init__(self, euclidean=False):
+    def __init__(self, euclidean=True):
         self.euclidean = euclidean
         super().__init__()
 

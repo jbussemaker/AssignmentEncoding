@@ -1,3 +1,4 @@
+import copy
 import numba
 import numpy as np
 from typing import *
@@ -88,6 +89,9 @@ class Encoder:
     def design_vars(self) -> List[DiscreteDV]:
         raise NotImplementedError
 
+    def get_for_imputer(self, imputer):
+        raise NotImplementedError
+
     def get_random_design_vector(self) -> DesignVector:
         return [dv.get_random() for dv in self.design_vars]
 
@@ -134,6 +138,16 @@ class EagerEncoder(Encoder):
                                    for existence, des_vec in des_vectors.items()}
         self._design_vars = self._get_design_variables(des_vectors)
         self._imputer.initialize(matrix, self._design_vectors, self._design_vars)
+
+    def set_imputer(self, imputer: EagerImputer):
+        self._imputer = imputer
+        if self._matrix is not None:
+            self._imputer.initialize(self._matrix, self._design_vectors, self._design_vars)
+
+    def get_for_imputer(self, imputer: EagerImputer):
+        encoder: EagerEncoder = copy.deepcopy(self)
+        encoder.set_imputer(imputer)
+        return encoder
 
     @property
     def n_mat_max(self) -> int:

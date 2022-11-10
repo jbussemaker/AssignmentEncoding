@@ -22,6 +22,10 @@ class AssignmentManagerBase:
             return False
 
     @property
+    def encoder(self):
+        raise NotImplementedError
+
+    @property
     def matrix_gen(self) -> AggregateAssignmentMatrixGenerator:
         raise NotImplementedError
 
@@ -129,6 +133,10 @@ class LazyAssignmentManager(AssignmentManagerBase):
                  excluded: List[Tuple[Node, Node]] = None, existence_patterns: NodeExistencePatterns = None):
         self._encoder = encoder
         encoder.set_nodes(src, tgt, excluded=excluded, existence_patterns=existence_patterns)
+
+    @property
+    def encoder(self):
+        return self._encoder
 
     @property
     def matrix_gen(self) -> AggregateAssignmentMatrixGenerator:

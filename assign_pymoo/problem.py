@@ -254,6 +254,9 @@ class AssignmentProblem(CachedParetoFrontMixin, Problem):
         n_unique = np.unique(x, axis=0).shape[0]
         return n/n_unique
 
+    def name(self):
+        return f'{self!s} / {self.assignment_manager.encoder!s}'
+
     # !! IMPLEMENT BELOW THIS LINE !! #
 
     def get_init_kwargs(self) -> dict:

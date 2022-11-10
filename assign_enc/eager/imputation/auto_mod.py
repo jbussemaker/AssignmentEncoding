@@ -66,4 +66,4 @@ class AutoModImputer(EagerImputer):
         return f'{self.__class__.__name__}(reverse={self.reverse})'
 
     def __str__(self):
-        return f'Auto Mod Imp'
+        return f'Auto Mod Imp{" Rev" if self.reverse else ""}'
