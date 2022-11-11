@@ -30,7 +30,7 @@ from smt.surrogate_models.surrogate_model import SurrogateModel
 
 __all__ = ['get_sbo_rbf', 'get_sbo_krg']
 
-log = logging.getLogger('oad_oc.sbo')
+log = logging.getLogger('assign_exp.sbo')
 
 
 def get_sbo_rbf(**kwargs):
@@ -270,7 +270,11 @@ class PoFInfill(SurrogateInfill):
 
     @staticmethod
     def _pof(g: np.ndarray, g_var: np.ndarray) -> np.ndarray:
-        return norm.cdf(-g/np.sqrt(g_var))
+        pof = norm.cdf(-g/np.sqrt(g_var))
+        is_nan_mask = np.isnan(pof)
+        pof[is_nan_mask & (g <= 0.)] = 1.
+        pof[is_nan_mask & (g > 0.)] = 0.
+        return pof
 
     def get_n_infill_objectives(self) -> int:
         raise NotImplementedError
