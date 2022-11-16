@@ -22,4 +22,5 @@ class DirectMatrixEncoder(EagerEncoder):
         return f'{self.__class__.__name__}({self._imputer!r}, remove_gaps={self.remove_gaps})'
 
     def __str__(self):
-        return f'Direct Matrix + {self._imputer!s}'
+        remove_gaps_str = ' Rem Gaps' if self.remove_gaps else ''
+        return f'Direct Matrix{remove_gaps_str} + {self._imputer!s}'

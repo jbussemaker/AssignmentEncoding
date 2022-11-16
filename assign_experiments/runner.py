@@ -30,6 +30,9 @@ def show_problem_size(problem: AssignmentProblem):
 
 def run(results_key, problems, algorithms, algo_names, plot_names=None, n_repeat=8, n_eval_max=300, do_run=True,
         return_exp=False):
+    import matplotlib
+    matplotlib.use('Agg')
+
     set_results_folder(results_key)
     exp = get_experimenters(problems, algorithms, n_eval_max=n_eval_max, algorithm_names=algo_names,
                             plot_names=plot_names)

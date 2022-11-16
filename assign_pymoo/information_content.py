@@ -53,7 +53,7 @@ class InformationContentAnalyzer:
 
     def cross_validate(self, x_train: np.ndarray, y_train: np.ndarray, n_leave_out: int = None) -> np.ndarray:
         """Cross-validate by leaving n_leave_out (if not given: n_samples) out and retraining;
-        returns vector of size n_y with relative RMSE for each output."""
+        returns vector of size n_y with relative error and std for each output."""
         if n_leave_out is None:
             n_leave_out = x_train.shape[0]
         if n_leave_out > x_train.shape[0]:
@@ -65,10 +65,11 @@ class InformationContentAnalyzer:
         for i, i_pt in enumerate(i_leave_out):
             errors[i, :] = self._get_error(x_train, y_train, i_pt)
 
-        # Get RMSE over all errors
-        rmse = np.sqrt(np.mean(errors**2, axis=0))
-        rmse_std_dev = np.sqrt(np.std(errors**2, axis=0))
-        return np.array([rmse, rmse_std_dev])
+        # Get mean and std of error
+        errors = np.abs(errors)
+        error_mean = np.mean(errors, axis=0)
+        error_std = np.std(errors, axis=0)
+        return np.array([error_mean, error_std])
 
     def _get_error(self, x_train: np.ndarray, y_train: np.ndarray, i_leave_out: int) -> np.ndarray:
         # Separate samples

@@ -99,7 +99,12 @@ The different encoding schemes will be compared based on the following metrics:
 1. Minimization of information error, representing how accurate information related to the design variables can be
    modeled; measured by the Leave-one-out-Cross-Validation (LOOCV) accuracy of some surrogate model using the design
    variables as input and some objective function as output
-2. Minimization of the imputation ratio: the ratio of the combinatorial design space size `prod(n_i)` and `n_pat`
+2. Maximization of information index, representing how much design variables are used compared to a set of pure binary
+   design variables (`n_opts = 2`): `inf_idx = (n_dv-1)/(log2(cumprod(n_opt_i))-1)`
+3. Minimization of the imputation ratio: the ratio of the combinatorial design space size `prod(n_i)` and `n_pat`
+
+Note that the latter two can be calculated directly from the problem formulation itself, whereas the first one needs
+objective/constraint evaluation and repeated surrogate model training.
 
 Then to test them for real optimization performance, the following tests should be performed:
 1. Compare different imputation algorithms: combined with the encoding scheme with the highest imputation ratio, solve
@@ -118,11 +123,12 @@ as the Pareto front is not necessarily continuous.
 1. For encoders with high imputation ratios, there exists an imputation algorithm that has the best convergence rate,
    which is robust across analytical problems (both for eager and lazy encoders)
 2. Information error and imputation ratio are correlated with convergence rate
-    1. Information error is correlated with SBO convergence rate: lower error --> faster convergence
-    2. Information error is not correlated with GA convergence rate
+    1. Information error is not correlated with GA convergence rate
+    2. Information error is correlated with SBO convergence rate: lower error --> faster convergence
     3. Imputation ratio is correlated with GA convergence rate: lower ratio --> faster convergence
     4. Imputation ratio is correlated with SBO convergence rate: lower ratio --> faster convergence
     5. Imputation ratio and information error should be minimized
+    6. Information index is a proxy for (i.e. correlated with) information error
 3. Lazy encoders can be applied to encode very large problems time-efficiently
 4. For each analytical architecture problem, a (set of) best encoders exist that is consistent over all problem sizes
    (separately for eager and lazy encoders)
@@ -152,3 +158,20 @@ as the Pareto front is not necessarily continuous.
   - Lazy: Delta Imp and both Closest Imp algorithms are similarly effective
 
 Conclusions: use Auto Mod for eager encoders, and Delta Imp for lazy encoders
+
+#### 2. Metric Correlations
+02_metric_correlation
+
+- Information error is very difficult to determine; normally a very high standard deviation in estimated values is seen,
+  and if more samples are taken metric values usually move closer together (i.e. there is less of a trend)
+  - Information error and information index are therefore not correlated
+- Information index and imputation ratio are independent parameters
+- A better metric value (lower information error or imp ratio, higher information index), all lead to faster converging
+  optimizers, both for NSGA2 and SBO
+- Only imputation ratio influences performance after the initial DOE; this indicates that a lower imputation ratio
+  greatly influences how diverse the initial DOE is
+
+Conclusions:
+- Information error does not need to be used to predict encoder performance
+- Imputation ratio should be minimized and information index should be maximized
+- It might be more important to minimize imputation ratio

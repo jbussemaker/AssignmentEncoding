@@ -105,6 +105,14 @@ def test_encoder():
     assert np.all(mat == 0)
 
 
+def test_information_index():
+    assert Encoder.calc_information_index([3]) == 0
+    assert Encoder.calc_information_index([2]) == 1
+    assert Encoder.calc_information_index([3, 2]) == pytest.approx(.63, abs=1e-3)
+    assert Encoder.calc_information_index([2, 2, 2]) == 1
+    assert Encoder.calc_information_index([10]) == 0
+
+
 class TwoEncoder(EagerEncoder):
 
     def _encode(self, matrix: np.ndarray) -> np.ndarray:
@@ -128,6 +136,9 @@ def test_encoder_impute():
     exist = NodeExistence()
     assert enc.matrix[exist] is matrix
     assert enc.n_mat_max == 11
+
+    assert enc.get_information_index() == enc.calc_information_index([6, 2])
+    assert enc.get_information_index() == pytest.approx(.386, abs=1e-3)
 
     assert not enc.is_valid_vector([5, 1])
     assert enc.get_matrix_index([5, 1])[0] is None

@@ -14,4 +14,5 @@ class ElementGroupedEncoder(GroupedEncoder):
         return f'{self.__class__.__name__}({self._imputer!r})'
 
     def __str__(self):
-        return f'Group By Element + {self._imputer!s}'
+        normalize_str = ' Norm Grp' if self.normalize_within_group else ''
+        return f'Group By Element{normalize_str} + {self._imputer!s}'

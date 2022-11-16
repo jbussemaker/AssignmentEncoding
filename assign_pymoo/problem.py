@@ -254,6 +254,11 @@ class AssignmentProblem(CachedParetoFrontMixin, Problem):
         n_unique = np.unique(x, axis=0).shape[0]
         return n/n_unique
 
+    def get_information_index(self) -> float:
+        xl, xu = self.bounds()
+        n_opts = [int(xu[i]-xl[i]+1) for i, var in enumerate(self.vars) if isinstance(var, Integer)]
+        return Encoder.calc_information_index(n_opts)
+
     def name(self):
         return f'{self!s} / {self.assignment_manager.encoder!s}'
 

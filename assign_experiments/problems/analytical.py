@@ -302,14 +302,16 @@ if __name__ == '__main__':
     from assign_pymoo.metrics_compare import *
     # p = AnalyticalCombinationProblem(DEFAULT_EAGER_ENCODER())
     # p = AnalyticalAssignmentProblem(DEFAULT_EAGER_ENCODER())  # Very high imputation ratios
-    p = AnalyticalPartitioningProblem(DEFAULT_EAGER_ENCODER())
+    # p = AnalyticalPartitioningProblem(DEFAULT_EAGER_ENCODER())
     # p = AnalyticalDownselectingProblem(DEFAULT_EAGER_ENCODER())
-    # p = AnalyticalConnectingProblem(DEFAULT_EAGER_ENCODER())  # Low information errors
+    p = AnalyticalConnectingProblem(DEFAULT_EAGER_ENCODER())  # Low information errors
     # p = AnalyticalPermutingProblem(DEFAULT_EAGER_ENCODER())
     # p = AnalyticalIterCombinationsProblem(DEFAULT_EAGER_ENCODER())
     # p = AnalyticalIterCombinationsReplacementProblem(DEFAULT_EAGER_ENCODER(), n_take=3, n_tgt=3)  # Low inf err
     # p.plot_pf(show_approx_f_range=True), exit()
     enc = []
-    # enc += [e(DEFAULT_EAGER_IMPUTER()) for e in EAGER_ENCODERS]
+    enc += [e(DEFAULT_EAGER_IMPUTER()) for e in EAGER_ENCODERS]
     enc += [e(DEFAULT_LAZY_IMPUTER()) for e in LAZY_ENCODERS]
-    MetricsComparer().compare_encoders(p, enc)
+    # MetricsComparer().compare_encoders(p, enc)
+    MetricsComparer().compare_encoders(p, enc, inf_idx=True)
+    # MetricsComparer(n_samples=50, n_leave_out=30).check_information_corr(p, enc)

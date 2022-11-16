@@ -98,6 +98,18 @@ class Encoder:
     def get_n_design_points(self) -> int:
         return int(np.cumprod([dv.n_opts for dv in self.design_vars])[-1])
 
+    def get_information_index(self) -> float:
+        return self.calc_information_index([dv.n_opts for dv in self.design_vars])
+
+    @staticmethod
+    def calc_information_index(n_opts: List[int]) -> float:
+        n_dv = len(n_opts)
+        n_combinations = np.cumprod(n_opts)[-1]
+        if n_combinations <= 2:
+            return 1.
+        n_dv_max = np.log2(n_combinations)
+        return (n_dv-1.)/(n_dv_max-1.)
+
     def get_imputation_ratio(self) -> float:
         """Ratio of the total design space size to the actual amount of possible connections"""
         raise NotImplementedError

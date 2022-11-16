@@ -119,11 +119,13 @@ class ExperimenterResult(Result):
                     new_shape = (max(rs[0], r[0]), max(rs[1], r[1]))
 
                     results_data_ = np.zeros(new_shape+(rs[2],))*np.nan
-                    results_data_[-rs[0]:, -rs[1]:, :] = results_data
+                    # results_data_[-rs[0]:, -rs[1]:, :] = results_data
+                    results_data_[:rs[0], :rs[1], :] = results_data
                     results_data = results_data_
 
                     res_data_ = np.zeros(new_shape+(1,))*np.nan
-                    res_data_[-r[0]:, -r[1]:, :] = res_data
+                    # res_data_[-r[0]:, -r[1]:, :] = res_data
+                    res_data_[:r[0], :r[1], :] = res_data
                     res_data = res_data_
 
                 results_data = np.concatenate([results_data, res_data], axis=2)
