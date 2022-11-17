@@ -157,7 +157,9 @@ as the Pareto front is not necessarily continuous.
   - Eager: both Closest Imp algorithms are similarly effective, with Auto Mod slightly more effective
   - Lazy: Delta Imp and both Closest Imp algorithms are similarly effective
 
-Conclusions: use Auto Mod for eager encoders, and Delta Imp for lazy encoders
+Conclusions:
+- For eager encoders, use the Auto Mod imputer
+- For lazy encoders, use the Delta imputer
 
 #### 2. Metric Correlations
 02_metric_correlation
@@ -175,3 +177,25 @@ Conclusions:
 - Information error does not need to be used to predict encoder performance
 - Imputation ratio should be minimized and information index should be maximized
 - It might be more important to minimize imputation ratio
+
+#### 3. Encoding and Decoding Times
+03_encoding_time
+
+- Decoding time for lazy encoders depends both on the time to generate matrices on-demand (if needed)
+  and to validate the generated matrices
+- For lazy encoders where no matrices are generated (so only validation time counts):
+  - Lazy encoding is between 50x faster than eager encoding
+  - Lazy decoding is between 1.2x-1.5x slower than eager decoding
+- For lazy encoders where matrices are generated on-demand (as well as validated):
+  - Lazy encoding is about 100x faster as eager encoding
+  - Lazy decoding is about 2x slower than eager decoding
+- Encoding time increases linearly with the amount of matrices for eager encoders
+- Encoding time does not increase (or maximally with the log of amount of matrices) for lazy encoders
+- Sampling time increases sub-linearly (due to some constant overhead) with the amount of samples in all cases
+- Sampling time increases with the log of amount of matrices
+- It should be noted that the amount of matrices might increase extremely fast for small increases in problem size,
+  whereas this is not necessarily the case for the number of samples
+
+Conclusions:
+- Lazy encoders are very effective at keeping encoding times low, at a relatively low increase in sampling time
+- Cut-off eager encoders after some fixed encoding time has been exceeded when looking for the best encoder

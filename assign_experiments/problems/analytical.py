@@ -304,8 +304,8 @@ if __name__ == '__main__':
     # p = AnalyticalAssignmentProblem(DEFAULT_EAGER_ENCODER())  # Very high imputation ratios
     # p = AnalyticalPartitioningProblem(DEFAULT_EAGER_ENCODER())
     # p = AnalyticalDownselectingProblem(DEFAULT_EAGER_ENCODER())
-    p = AnalyticalConnectingProblem(DEFAULT_EAGER_ENCODER())  # Low information errors
-    # p = AnalyticalPermutingProblem(DEFAULT_EAGER_ENCODER())
+    # p = AnalyticalConnectingProblem(DEFAULT_EAGER_ENCODER())  # Low information errors
+    p = AnalyticalPermutingProblem(DEFAULT_EAGER_ENCODER())
     # p = AnalyticalIterCombinationsProblem(DEFAULT_EAGER_ENCODER())
     # p = AnalyticalIterCombinationsReplacementProblem(DEFAULT_EAGER_ENCODER(), n_take=3, n_tgt=3)  # Low inf err
     # p.plot_pf(show_approx_f_range=True), exit()
