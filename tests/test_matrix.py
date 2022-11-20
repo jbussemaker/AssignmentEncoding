@@ -609,3 +609,12 @@ def test_conditional_existence():
     _assert_mask([False, False], [False, False], np.array([
         [[0, 0], [0, 0]],
     ]))
+
+
+def test_combination_problem():
+    n_tgt = 20
+    gen = AggregateAssignmentMatrixGenerator(
+        src=[Node([1], repeated_allowed=False)], tgt=[Node([0, 1], repeated_allowed=False) for _ in range(n_tgt)])
+    matrix = gen.get_agg_matrix()[NodeExistence()]
+    assert matrix.shape == (n_tgt, 1, n_tgt)
+    assert np.all(matrix[:, 0, :] == np.eye(n_tgt, dtype=int)[::-1, :])

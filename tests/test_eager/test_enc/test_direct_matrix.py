@@ -5,12 +5,16 @@ from assign_enc.eager.encodings.direct_matrix import *
 
 
 def test_encoding():
+    n_checked = 0
     for n in range(5, 15):
         enc = DirectMatrixEncoder(FirstImputer(), remove_gaps=False)
         n_src, n_tgt = 3, 4
         enc.matrix = matrix = np.random.randint(0, 3, (n, n_src, n_tgt))
 
         assert enc.n_mat_max == n
+        if len(enc.design_vars) != 3*4:
+            continue
+        n_checked += 1
         assert len(enc.design_vars) == 3*4
         n_des_points = np.cumprod([dv.n_opts for dv in enc.design_vars])[-1]
         assert enc.get_imputation_ratio() == n_des_points/n
@@ -40,6 +44,7 @@ def test_encoding():
                        for i_dv in range(enc_dvs.shape[1])]
         assert np.all(n_unique_rg == n_unique)
         assert all([dv.n_opts == n_unique_rg[i] for i, dv in enumerate(enc_remove_gaps.design_vars)])
+    assert n_checked > 0
 
 
 def test_encoder_excluded():

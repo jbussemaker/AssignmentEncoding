@@ -415,6 +415,25 @@ class AggregateAssignmentMatrixGenerator:
             else:
                 n_conns.append(self._get_conns(node, max_conn))
 
+        # If we have an amount constraint, use the matrix generation algorithm
+        if n is not None:
+            n_conn_max = [max(n_conn) for n_conn in n_conns]
+            n_tgt_combs = count_src_to_target(n_src=n, n_src_to_target=tuple(n_conn_max))
+
+            # Filter out invalid amounts
+            for i_tgt, n_conn in enumerate(n_conns):
+                tgt_n_conns = n_tgt_combs[:, i_tgt]
+                n_invalid = set(tgt_n_conns).difference(set(n_conn))
+                if len(n_invalid) > 0:
+                    invalid_mask = np.zeros((len(tgt_n_conns),), dtype=bool)
+                    for n in n_invalid:
+                        invalid_mask |= tgt_n_conns == n
+                    n_tgt_combs = n_tgt_combs[~invalid_mask, :]
+
+            for i in reversed(range(n_tgt_combs.shape[0])):  # Reversed for compatibility
+                yield tuple(n_tgt_combs[i, :])
+            return
+
         # Iterate over all combinations of number of connections
         for n_conn_nodes in itertools.product(*n_conns):
 
