@@ -157,3 +157,13 @@ def test_filter_dvs():
     dv, matrix = encoder.get_matrix([1])
     assert np.all(dv == [1])
     assert np.all(matrix == np.array([[0, 1], [1, 0]]))
+
+
+def test_covering_partitioning():
+    encoder = LazyAmountFirstEncoder(LazyDeltaImputer(), FlatLazyAmountEncoder(), FlatLazyConnectionEncoder())
+    encoder.set_nodes(src=[Node(min_conn=0, repeated_allowed=False) for _ in range(2)],
+                      tgt=[Node(min_conn=1, repeated_allowed=False) for _ in range(4)])
+
+    assert len(list(encoder.iter_n_src_n_tgt())) == 48
+    assert encoder.matrix_gen.count_all_matrices() == 81
+    assert encoder.get_n_design_points() >= 81

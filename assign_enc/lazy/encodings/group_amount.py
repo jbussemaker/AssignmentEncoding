@@ -221,10 +221,24 @@ class FlatLazyConnectionEncoder(LazyConnectionEncoder):
         n_matrix_max = 0
         for i, n in enumerate(n_conn):
             if n == n_conn_max:
-                n_src_conn, n_tgt_conn = n_src_n_tgt[i]
-                n_matrix = encoder.count_matrices(n_src_conn, n_tgt_conn)
+                n_matrix = encoder.count_matrices(*n_src_n_tgt[i])
                 if n_matrix > n_matrix_max:
                     n_matrix_max = n_matrix
+
+        # Get the combination of src and tgt amounts that are closest to half of the max amounts
+        # For half of the max amount (where max amount is given by the nr of nodes of the other type --> max src
+        # connections is the amount of tgt nodes), there are the most amount of connection permutations possible
+        n_src_, n_tgt_ = n_src_n_tgt[0]
+        n_src_tgt_half = np.array([len(n_tgt_)/2]*len(n_src_) + [len(n_src_)/2]*len(n_tgt_))
+        i_closest, dist_closest = None, None
+        for i, (n_src_conn, n_tgt_conn) in enumerate(n_src_n_tgt):
+            n_src_tgt_dist = np.sum(np.abs(np.array(list(n_src_conn)+list(n_tgt_conn))-n_src_tgt_half))
+            if dist_closest is None or n_src_tgt_dist < dist_closest:
+                i_closest, dist_closest = i, n_src_tgt_dist
+
+        n_matrix = encoder.count_matrices(*n_src_n_tgt[i_closest])
+        if n_matrix > n_matrix_max:
+            n_matrix_max = n_matrix
 
         return [DiscreteDV(n_opts=n_matrix_max)] if n_matrix_max > 1 else []
 
