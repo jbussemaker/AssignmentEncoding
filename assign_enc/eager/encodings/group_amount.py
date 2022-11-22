@@ -140,7 +140,7 @@ class OneVarLocationGrouper(LocationGrouper):
 
 
 class FlatIndexLocationGrouper(LocationGrouper):
-    """Group by connection location indices"""
+    """Group by connection location indices. Inefficient for very large nr of matrices."""
 
     def get_grouping_values(self, matrix: np.ndarray) -> np.ndarray:
         matrix_flat = flatten_matrix(matrix)
@@ -174,7 +174,7 @@ class FlatIndexLocationGrouper(LocationGrouper):
 
 
 class RelFlatIndexLocationGrouper(FlatIndexLocationGrouper):
-    """Group by relative connection location indices"""
+    """Group by relative connection location indices. Inefficient for very large nr of matrices."""
 
     @classmethod
     def _get_loc_indices(cls, conn_arr: np.ndarray) -> np.ndarray:
@@ -189,7 +189,7 @@ class RelFlatIndexLocationGrouper(FlatIndexLocationGrouper):
 
 
 class CoordIndexLocationGrouper(LocationGrouper):
-    """Group by connection location indices (encoded as i_src, i_tgt)"""
+    """Group by connection location indices (encoded as i_src, i_tgt). Inefficient for very large nr of matrices."""
 
     def get_grouping_values(self, matrix: np.ndarray) -> np.ndarray:
         matrix_flat = flatten_matrix(matrix)
@@ -224,7 +224,7 @@ class CoordIndexLocationGrouper(LocationGrouper):
 
 
 class RelCoordIndexLocationGrouper(CoordIndexLocationGrouper):
-    """Group by relative connection location indices (encoded as i_src, i_tgt)"""
+    """Group by relative connection location indices (encoded as i_src, i_tgt). Inefficient for very large nr of mat."""
 
     @classmethod
     def _get_loc_indices(cls, conn_arr: np.ndarray, idx_map) -> np.ndarray:

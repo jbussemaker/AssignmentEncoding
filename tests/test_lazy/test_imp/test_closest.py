@@ -15,3 +15,20 @@ def test_imputer():
     dv, mat = encoder.get_matrix([1, 2, 1, 0])
     assert np.all(dv == [0, 2, 1, 0])
     assert np.all(mat == np.array([[0, 2], [1, 0]]))
+
+
+def test_max_tries():
+    encoder = LazyDirectMatrixEncoder(LazyClosestImputer(n_max_tries=100))
+    encoder.set_nodes(src=[Node([1], repeated_allowed=False)],
+                      tgt=[Node([0, 1], repeated_allowed=False) for _ in range(10)])
+    assert encoder.get_imputation_ratio() > 100
+
+    n_invalid = 0
+    for _ in range(5):
+        dv_rand = encoder.get_random_design_vector()
+        dv, mat = encoder.get_matrix(dv_rand)
+        if mat[0, 0] == -1:
+            assert np.all(dv == dv_rand)
+            assert np.all(mat == -1)
+            n_invalid += 1
+    assert n_invalid > 0

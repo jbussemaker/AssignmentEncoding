@@ -9,6 +9,12 @@ __all__ = ['LazyDeltaImputer']
 class LazyDeltaImputer(LazyImputer):
     """Imputes by looking for the first valid design vector created by iterating over delta values."""
 
+    _n_max_tries_default = 10000
+
+    def __init__(self, n_max_tries=None):
+        self.n_max_tries = n_max_tries if n_max_tries is not None else self._n_max_tries_default
+        super().__init__()
+
     def _impute(self, vector: DesignVector, matrix: Optional[np.ndarray], existence: NodeExistence,
                 validate: Callable[[np.ndarray], bool], tried_vectors: Set[Tuple[int, ...]]) -> Tuple[DesignVector, np.ndarray]:
 
@@ -20,11 +26,8 @@ class LazyDeltaImputer(LazyImputer):
         delta_values = [_sort_by_dist(np.arange(dv.n_opts)-vector[i]) for i, dv in enumerate(self._des_vars)]
 
         # Loop over all delta values
-        first = True
-        for dv_delta in itertools.product(*delta_values):
-            if first:  # Skip first as this one has a delta of 0
-                first = False
-                continue
+        n_tries, n_tries_max = 0, self.n_max_tries
+        for dv_delta in self.yield_dv_delta_product(delta_values):
             dv = vector+np.array(dv_delta)
 
             # Validate associated matrix
@@ -32,7 +35,21 @@ class LazyDeltaImputer(LazyImputer):
             if validate(matrix):
                 return dv, matrix
 
+            # Limit the amount of tries
+            n_tries += 1
+            if n_tries > n_tries_max:
+                invalid_matrix = -np.ones((len(self._matrix_gen.src), len(self._matrix_gen.tgt)), dtype=int)
+                return vector, invalid_matrix
+
         raise RuntimeError('No valid design vector found!')
+
+    def yield_dv_delta_product(self, delta_values):
+        first = True
+        for dv_delta in itertools.product(*delta_values):
+            if first:  # Skip first as this one has a delta of 0
+                first = False
+                continue
+            yield dv_delta
 
     def __repr__(self):
         return f'{self.__class__.__name__}()'
