@@ -76,15 +76,15 @@ class ExperimenterResult(Result):
         return exp_result
 
     @classmethod
-    def aggregate_results(cls, results: List['ExperimenterResult']) -> 'ExperimenterResult':
+    def aggregate_results(cls, results: List['ExperimenterResult'], align_end=False) -> 'ExperimenterResult':
         """Aggregate results from multiple ExperimenterResult instances, replacing metrics values with the mean and
         adding standard deviations."""
         result = cls()
 
         result.plot_name = results[0].plot_name
-        result.exec_time, result.exec_time_std = cls._get_mean_std(results, lambda r: r.exec_time)
-        result.n_steps, result.n_steps_std = cls._get_mean_std(results, lambda r: r.n_steps)
-        result.n_eval, result.n_eval_std = cls._get_mean_std(results, lambda r: r.n_eval)
+        result.exec_time, result.exec_time_std = cls._get_mean_std(results, lambda r: r.exec_time, align_end=align_end)
+        result.n_steps, result.n_steps_std = cls._get_mean_std(results, lambda r: r.n_steps, align_end=align_end)
+        result.n_eval, result.n_eval_std = cls._get_mean_std(results, lambda r: r.n_eval, align_end=align_end)
 
         for name, metric in results[0].metrics.items():
             result.metrics[name] = metric = copy.deepcopy(metric)
@@ -92,13 +92,13 @@ class ExperimenterResult(Result):
             metric.values, metric.values_std = {}, {}
             for key in metric.value_names:
                 metric.values[key], metric.values_std[key] = \
-                    cls._get_mean_std(results, lambda r: r.metrics[name].values[key])
+                    cls._get_mean_std(results, lambda r: r.metrics[name].values[key], align_end=align_end)
 
         return result
 
     @staticmethod
     def _get_mean_std(results: List['ExperimenterResult'],
-                      getter: Callable[['ExperimenterResult'], Optional[np.ndarray]]) -> Tuple[np.ndarray, np.ndarray]:
+                      getter: Callable[['ExperimenterResult'], Optional[np.ndarray]], align_end=False) -> Tuple[np.ndarray, np.ndarray]:
         """Get mean and standard deviation for several repeated experimenter results."""
 
         results_data = None
@@ -119,13 +119,17 @@ class ExperimenterResult(Result):
                     new_shape = (max(rs[0], r[0]), max(rs[1], r[1]))
 
                     results_data_ = np.zeros(new_shape+(rs[2],))*np.nan
-                    # results_data_[-rs[0]:, -rs[1]:, :] = results_data
-                    results_data_[:rs[0], :rs[1], :] = results_data
+                    if align_end:
+                        results_data_[-rs[0]:, -rs[1]:, :] = results_data
+                    else:
+                        results_data_[:rs[0], :rs[1], :] = results_data
                     results_data = results_data_
 
                     res_data_ = np.zeros(new_shape+(1,))*np.nan
-                    # res_data_[-r[0]:, -r[1]:, :] = res_data
-                    res_data_[:r[0], :r[1], :] = res_data
+                    if align_end:
+                        res_data_[-r[0]:, -r[1]:, :] = res_data
+                    else:
+                        res_data_[:r[0], :r[1], :] = res_data
                     res_data = res_data_
 
                 results_data = np.concatenate([results_data, res_data], axis=2)
@@ -332,7 +336,7 @@ class Experimenter:
             i += 1
         return results
 
-    def get_aggregate_effectiveness_results(self, force=False) -> ExperimenterResult:
+    def get_aggregate_effectiveness_results(self, force=False, align_end=False) -> ExperimenterResult:
         """Returns results aggregated for all individual runs, using mean and std."""
         agg_results_path = self._get_agg_effectiveness_result_path()
         if not force and os.path.exists(agg_results_path):
@@ -342,7 +346,7 @@ class Experimenter:
         log.info('Aggregating effectiveness results: %s / %s' % (self.problem.name(), self.algorithm_name))
         results = self.get_effectiveness_results()
 
-        res = ExperimenterResult.aggregate_results(results)
+        res = ExperimenterResult.aggregate_results(results, align_end=align_end)
         with open(agg_results_path, 'wb') as fp:
             pickle.dump(res, fp)
         return res

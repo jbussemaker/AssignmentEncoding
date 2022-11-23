@@ -7,15 +7,18 @@ import concurrent.futures
 import assign_experiments
 import matplotlib.pyplot as plt
 from assign_pymoo.problem import *
+from assign_pymoo.sampling import *
 from assign_experiments.metrics import *
 from assign_experiments.experimenter import *
 from werkzeug.utils import secure_filename
 
 from pymoo.core.problem import Problem
 from pymoo.core.algorithm import Algorithm
+from pymoo.core.evaluator import Evaluator
+from pymoo.core.initialization import Initialization
 
 __all__ = ['run', 'show_problem_size', 'set_results_folder', 'get_experimenters', 'run_effectiveness_multi',
-           'plot_effectiveness_results']
+           'plot_effectiveness_results', 'calc_initial_hv']
 
 log = logging.getLogger('assign_exp.runner')
 warnings.filterwarnings("ignore")
@@ -28,29 +31,42 @@ def show_problem_size(problem: AssignmentProblem):
     print(f'Imputation ratio: {problem.get_imputation_ratio():.2f}')
 
 
-def run(results_key, problems, algorithms, algo_names, plot_names=None, n_repeat=8, n_eval_max=300, do_run=True,
-        return_exp=False):
-    import matplotlib
-    matplotlib.use('Agg')
+def calc_initial_hv(problem: AssignmentProblem):
+    pop = Initialization(RepairedRandomSampling(repair=problem.get_repair())).do(problem, 1000)
+    Evaluator().eval(problem, pop)
+    f = pop.get('F')
 
+    hv = DeltaHVMetric(problem.pareto_front()).calculate_delta_hv(f)[2]
+    pre, post = '', ''
+    if hv == 0:  # https://stackoverflow.com/a/287944
+        pre, post = '\033[91m', '\033[0m'
+        post = f' ({os.path.basename(problem._pf_cache_path())}){post}'
+    print(f'{pre}Initial hypervolume: {hv:.2f}{post}')
+
+
+def run(results_key, problems, algorithms, algo_names, plot_names=None, n_repeat=8, n_eval_max=300, do_run=True,
+        return_exp=False, do_plot=True):
     set_results_folder(results_key)
     exp = get_experimenters(problems, algorithms, n_eval_max=n_eval_max, algorithm_names=algo_names,
                             plot_names=plot_names)
     if return_exp:
         return exp
 
+    import matplotlib
+    matplotlib.use('Agg')
     if do_run:
         run_effectiveness_multi(exp, n_repeat=n_repeat)
-    plot_metric_values = {
-        'delta_hv': ['delta_hv'],
-        'IGD': None,
-        'spread': ['delta'],
-        'max_cv': None,
-        # 'sm_quality': ['rmse', 'loo_cv'] if include_loo_cv else ['rmse'],
-        # 'training': ['n_train', 'n_samples', 'time_train'],
-        # 'infill': ['time_infill'],
-    }
-    plot_effectiveness_results(exp, plot_metric_values=plot_metric_values, save=True, show=False)
+    if do_plot:
+        plot_metric_values = {
+            'delta_hv': ['delta_hv'],
+            'IGD': None,
+            'spread': ['delta'],
+            'max_cv': None,
+            # 'sm_quality': ['rmse', 'loo_cv'] if include_loo_cv else ['rmse'],
+            # 'training': ['n_train', 'n_samples', 'time_train'],
+            # 'infill': ['time_infill'],
+        }
+        plot_effectiveness_results(exp, plot_metric_values=plot_metric_values, save=True, show=False)
 
 
 def set_results_folder(key: str, sub_key: str = None):
@@ -111,7 +127,7 @@ def get_experimenters(problems: Union[List[Problem], Problem], algorithms: Union
                 for i, problem in enumerate(problems)]
 
 
-def run_effectiveness_multi(experimenters: List[Experimenter], n_repeat=12, reset=False):
+def run_effectiveness_multi(experimenters: List[Experimenter], n_repeat=12, reset=False, agg_align_end=False):
     """Runs the effectiveness experiment using multiple algorithms, repeated a number of time for each algorithm."""
     Experimenter.capture_log()
     log.info('Running effectiveness experiments: %d algorithms @ %d repetitions (%d total runs)' %
@@ -121,7 +137,7 @@ def run_effectiveness_multi(experimenters: List[Experimenter], n_repeat=12, rese
         reset_results()
     for exp in experimenters:
         exp.run_effectiveness_parallel(n_repeat=n_repeat)
-        agg_res = exp.get_aggregate_effectiveness_results(force=True)
+        agg_res = exp.get_aggregate_effectiveness_results(force=True, align_end=agg_align_end)
 
         agg_res.export_pandas().to_pickle(exp.get_problem_algo_results_path('result_agg_df.pkl'))
         agg_res.save_csv(exp.get_problem_algo_results_path('result_agg.csv'))

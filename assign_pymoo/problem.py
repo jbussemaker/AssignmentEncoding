@@ -21,6 +21,7 @@ from pymoo.core.evaluator import Evaluator
 from pymoo.core.population import Population
 from pymoo.visualization.scatter import Scatter
 from pymoo.core.initialization import Initialization
+from pymoo.core.duplicate import DefaultDuplicateElimination
 from pymoo.operators.sampling.lhs import LatinHypercubeSampling
 from pymoo.algorithms.moo.nsga2 import NSGA2, calc_crowding_distance
 from pymoo.util.nds.non_dominated_sorting import NonDominatedSorting
@@ -29,7 +30,7 @@ from pymoo.util.nds.non_dominated_sorting import NonDominatedSorting
 __all__ = ['AssignmentProblem', 'AssignmentRepair', 'CachedParetoFrontMixin']
 
 
-class CachedParetoFrontMixin:
+class CachedParetoFrontMixin(Problem):
     """Mixin to calculate the Pareto front once by simply running the problem a couple of times using NSGA2. Stores the
     results based on the repr of the main class, so make sure that one is set."""
 
@@ -38,27 +39,49 @@ class CachedParetoFrontMixin:
         if os.path.exists(cache_path):
             os.remove(cache_path)
 
+    def get_repair(self):
+        pass
+
     def _calc_pareto_front(self, *_, pop_size=200, n_gen=20, n_repeat=10, n_pts_keep=50, **__):
         cache_path = self._pf_cache_path()
         if os.path.exists(cache_path):
             with open(cache_path, 'rb') as fp:
                 return pickle.load(fp)
 
-        with concurrent.futures.ProcessPoolExecutor() as executor:
-            futures = [executor.submit(self._run_minimize, pop_size, n_gen, i, n_repeat)
-                       for i in range(n_repeat)]
-            concurrent.futures.wait(futures)
+        n = 1
+        xl, xu = self.bounds()
+        for i, var in enumerate(self.vars):
+            if isinstance(var, Real):
+                n = None
+                break
+            n *= int(xu[i]-xl[i]+1)
+        if n is not None and n < pop_size*n_gen*n_repeat:
+            sampling = RepairedExhaustiveSampling(repair=self.get_repair())
+            pop = sampling.do(self, n)
+            Evaluator().eval(self, pop)
 
-            pf = None
-            for i in range(n_repeat):
-                res = futures[i].result()
-                if pf is None:
-                    pf = res.F
-                else:
-                    pf_merged = np.row_stack([pf, res.F])
-                    i_non_dom = NonDominatedSorting().do(pf_merged, only_non_dominated_front=True)
-                    pf = pf_merged[i_non_dom, :]
+            pop = DefaultDuplicateElimination().do(pop)
+            pf = pop.get('F')
+            i_non_dom = NonDominatedSorting().do(pf, only_non_dominated_front=True)
+            pf = pf[i_non_dom, :]
 
+        else:
+            with concurrent.futures.ProcessPoolExecutor() as executor:
+                futures = [executor.submit(self._run_minimize, pop_size, n_gen, i, n_repeat)
+                           for i in range(n_repeat)]
+                concurrent.futures.wait(futures)
+
+                pf = None
+                for i in range(n_repeat):
+                    res = futures[i].result()
+                    if pf is None:
+                        pf = res.F
+                    else:
+                        pf_merged = np.row_stack([pf, res.F])
+                        i_non_dom = NonDominatedSorting().do(pf_merged, only_non_dominated_front=True)
+                        pf = pf_merged[i_non_dom, :]
+
+        pf = np.unique(pf, axis=0)
         if n_pts_keep is not None and pf.shape[0] > n_pts_keep:
             for _ in range(pf.shape[0]-n_pts_keep):
                 crowding_of_front = calc_crowding_distance(pf)

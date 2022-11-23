@@ -96,7 +96,7 @@ class AnalyticalAssignmentProblem(AnalyticalProblemBase):
     """Assignment pattern: connect any source to any target, optionally with injective/surjective/bijective constraints:
     sources and target have any number of connections, no repetitions;
     - injective: targets have max 1 connection
-    - surjective: targets have min 1 connection
+    - surjective: targets have min 1 connection (note: this is the same as a partitioning problem!)
     - bijective (= injective & surjective): targets have exactly 1 connection"""
 
     def __init__(self, *args, injective=False, surjective=False, **kwargs):
@@ -302,10 +302,12 @@ if __name__ == '__main__':
     from assign_pymoo.metrics_compare import *
     # p = AnalyticalCombinationProblem(DEFAULT_EAGER_ENCODER())
     # p = AnalyticalAssignmentProblem(DEFAULT_EAGER_ENCODER())  # Very high imputation ratios
-    # p = AnalyticalPartitioningProblem(DEFAULT_EAGER_ENCODER())
+    # p = AnalyticalAssignmentProblem(DEFAULT_EAGER_ENCODER(), injective=True, surjective=True)
+    p = AnalyticalPartitioningProblem(DEFAULT_EAGER_ENCODER())
+    # p = AnalyticalPartitioningProblem(LazyAmountFirstEncoder(DEFAULT_LAZY_IMPUTER(), FlatLazyAmountEncoder(), FlatLazyConnectionEncoder()), n_src=2, n_tgt=4, covering=True)
     # p = AnalyticalDownselectingProblem(DEFAULT_EAGER_ENCODER())
     # p = AnalyticalConnectingProblem(DEFAULT_EAGER_ENCODER())  # Low information errors
-    p = AnalyticalPermutingProblem(DEFAULT_EAGER_ENCODER())
+    # p = AnalyticalPermutingProblem(DEFAULT_EAGER_ENCODER())
     # p = AnalyticalIterCombinationsProblem(DEFAULT_EAGER_ENCODER())
     # p = AnalyticalIterCombinationsReplacementProblem(DEFAULT_EAGER_ENCODER(), n_take=3, n_tgt=3)  # Low inf err
     # p.plot_pf(show_approx_f_range=True), exit()

@@ -102,6 +102,9 @@ The different encoding schemes will be compared based on the following metrics:
 2. Maximization of information index, representing how much design variables are used compared to a set of pure binary
    design variables (`n_opts = 2`): `inf_idx = (n_dv-1)/(log2(cumprod(n_opt_i))-1)`
 3. Minimization of the imputation ratio: the ratio of the combinatorial design space size `prod(n_i)` and `n_pat`
+  - A derived metric can be the "Relative imputation ratio", which would apply to a set of encoders and simply compares
+    relative design space sizes `prod(n_i)` (i.e. `n_pat` is divided out), which would prevent the need for counting
+    the total number of matrices
 
 Note that the latter two can be calculated directly from the problem formulation itself, whereas the first one needs
 objective/constraint evaluation and repeated surrogate model training.
@@ -132,11 +135,10 @@ as the Pareto front is not necessarily continuous.
 3. Lazy encoders can be applied to encode very large problems time-efficiently
 4. For each analytical architecture problem, a (set of) best encoders exist that is consistent over all problem sizes
    (separately for eager and lazy encoders)
-5. It is possible to define rules for encoder selection, based on the node configurations (separately for eager and lazy)
+5. It is possible to define rules for encoder selection, based on the node configurations
     1. This applies to the analytical problems (i.e. no repetition)
     2. This also applies to problems with repetition (combinations with replacement)
     3. This also applies to the GN&C problem (only combinations, with types, and with types + amounts)
-6. It is possible to define a rule for when to select an eager or a lazy encoder
 
 ### Observations
 
@@ -156,6 +158,9 @@ as the Pareto front is not necessarily continuous.
     the design vector, where there is a higher chance of not hitting a valid design
   - Eager: both Closest Imp algorithms are similarly effective, with Auto Mod slightly more effective
   - Lazy: Delta Imp and both Closest Imp algorithms are similarly effective
+    - The Delta Imputer is faster and needs less memory
+    - For extremely high imputation ratios, lazy imputers might fail to find a valid design point, in which case they
+      will behave as the constraint violation imputer
 
 Conclusions:
 - For eager encoders, use the Auto Mod imputer
@@ -199,3 +204,20 @@ Conclusions:
 Conclusions:
 - Lazy encoders are very effective at keeping encoding times low, at a relatively low increase in sampling time
 - Cut-off eager encoders after some fixed encoding time has been exceeded when looking for the best encoder
+
+#### 4. Metric Consistency
+04_metric_consistency
+
+- GA algorithm are most effective for low imputation ratios or high information indices
+- For eager Amount First groupers, the (Rel) Flat/Coord Idx groupers are very inefficient for large nr of matrices
+  - Inefficient in time, memory usage, and imputation ratio
+  - For some problems their imputation is low, but then other encoders with low imputation ratio are also available
+- A time limit must be set for eager encoders to prevent runaway encoding time
+
+Suggested selection:
+- First try lazy encoders
+    - Filter based on imputation ratios: filter out any with imp ratio > 1; or imp ratio > 100 if none available
+    - Filter based on information index: filter out any with inf idx < .6
+- If none left, try the same with eager encoders included
+- If none left, take the encoder with the lowest imputation ratio
+- Any encoders that take longer than 10 seconds to encode are discarded
