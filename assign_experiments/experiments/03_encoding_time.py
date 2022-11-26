@@ -5,7 +5,7 @@ import pandas as pd
 from assign_pymoo.problem import *
 from assign_pymoo.sampling import *
 from assign_experiments.runner import *
-from assign_experiments.encoders import *
+from assign_enc.encoder_registry import *
 from werkzeug.utils import secure_filename
 from assign_experiments.experimenter import *
 from assign_experiments.problems.analytical import *

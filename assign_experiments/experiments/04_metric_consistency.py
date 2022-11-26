@@ -8,7 +8,7 @@ from typing import *
 from assign_pymoo.algo import *
 from assign_enc.time_limiter import *
 from assign_experiments.runner import *
-from assign_experiments.encoders import *
+from assign_enc.encoder_registry import *
 from assign_pymoo.problem import AssignmentProblem
 from assign_experiments.problems.analytical import *
 from assign_experiments.experimenter import Experimenter

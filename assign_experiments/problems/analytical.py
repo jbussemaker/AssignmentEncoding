@@ -298,7 +298,7 @@ if __name__ == '__main__':
     # _start_comp()
     # _do_real(), exit()
 
-    from assign_experiments.encoders import *
+    from assign_enc.encoder_registry import *
     from assign_pymoo.metrics_compare import *
     # p = AnalyticalCombinationProblem(DEFAULT_EAGER_ENCODER())
     # p = AnalyticalAssignmentProblem(DEFAULT_EAGER_ENCODER())  # Very high imputation ratios

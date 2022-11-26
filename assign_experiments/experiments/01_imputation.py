@@ -1,6 +1,6 @@
 from assign_pymoo.algo import *
 from assign_experiments.runner import *
-from assign_experiments.encoders import *
+from assign_enc.encoder_registry import *
 from assign_experiments.problems.analytical import *
 
 

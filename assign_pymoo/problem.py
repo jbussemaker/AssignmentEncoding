@@ -7,6 +7,7 @@ from typing import *
 import concurrent.futures
 from assign_enc.matrix import *
 from assign_enc.encoding import *
+from assign_enc.selector import *
 from assign_pymoo.sampling import *
 from assign_enc.lazy_encoding import *
 from assign_enc.assignment_manager import *
@@ -132,17 +133,17 @@ class CachedParetoFrontMixin(Problem):
 class AssignmentProblem(CachedParetoFrontMixin, Problem):
     """class representing an assignment optimization problem."""
 
-    def __init__(self, encoder: Encoder, **_):
-        self._encoder = encoder
+    def __init__(self, encoder: Encoder = None, **_):
         src, tgt = self.get_src_tgt_nodes()
         excluded = self.get_excluded_edges()
         existence_patterns = self.get_existence_patterns()
-        if isinstance(encoder, LazyEncoder):
-            assignment_manager = LazyAssignmentManager(src, tgt, encoder, excluded=excluded,
-                                                       existence_patterns=existence_patterns)
-        elif isinstance(encoder, EagerEncoder):
-            assignment_manager = AssignmentManager(src, tgt, encoder, excluded=excluded,
-                                                   existence_patterns=existence_patterns)
+        if encoder is None:
+            assignment_manager = EncoderSelector(
+                src, tgt, excluded=excluded, existence_patterns=existence_patterns).get_best_assignment_manager()
+        elif isinstance(encoder, (LazyEncoder, EagerEncoder)):
+            args, kwargs = (src, tgt, encoder), {'excluded': excluded, 'existence_patterns': existence_patterns}
+            cls = LazyAssignmentManager if isinstance(encoder, LazyEncoder) else AssignmentManager
+            assignment_manager = cls(*args, **kwargs)
         else:
             raise RuntimeError(f'Unknown encoder type: {encoder}')
         self.assignment_manager = assignment_manager
@@ -159,6 +160,12 @@ class AssignmentProblem(CachedParetoFrontMixin, Problem):
 
         n_obj, n_con = self.get_n_obj(), self.get_n_con()+1
         super().__init__(n_var=n_var, n_obj=n_obj, n_ieq_constr=n_con, xl=xl, xu=xu, vars=var_types)
+
+    def reset_encoder_selector_cache(self):
+        src, tgt = self.get_src_tgt_nodes()
+        excluded = self.get_excluded_edges()
+        existence_patterns = self.get_existence_patterns()
+        EncoderSelector(src, tgt, excluded=excluded, existence_patterns=existence_patterns).reset_cache()
 
     def get_for_encoder(self, encoder: Encoder):
         return self.__class__(encoder, **self.get_init_kwargs())

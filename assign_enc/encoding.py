@@ -96,7 +96,7 @@ class Encoder:
         return [dv.get_random() for dv in self.design_vars]
 
     def get_n_design_points(self) -> int:
-        return int(np.cumprod([dv.n_opts for dv in self.design_vars])[-1])
+        return int(np.cumprod([dv.n_opts for dv in self.design_vars], dtype=np.float)[-1])
 
     def get_information_index(self) -> float:
         return self.calc_information_index([dv.n_opts for dv in self.design_vars])

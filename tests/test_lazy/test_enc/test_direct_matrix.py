@@ -100,3 +100,13 @@ def test_encoder_existence():
     dv, mat = encoder.get_matrix([1, 0, 0, 1], existence=exist.patterns[1])
     assert np.all(dv == [1, 0, 0, 0])
     assert np.all(mat == np.array([[1, 0], [0, 0]]))
+
+
+def test_large_matrix():
+    encoder = LazyDirectMatrixEncoder(LazyDeltaImputer())
+    src = [Node([0, 1], repeated_allowed=False) for _ in range(6)]
+    tgt = [Node([0, 1], repeated_allowed=False) for _ in range(6)]
+    encoder.set_nodes(src, tgt)
+
+    assert len(encoder.design_vars) == 36
+    assert encoder.get_n_design_points() > 0

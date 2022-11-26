@@ -263,7 +263,7 @@ class GNCProblem(AssignmentProblem):
 
 
 if __name__ == '__main__':
-    from assign_experiments.encoders import *
+    from assign_enc.encoder_registry import *
     from assign_pymoo.metrics_compare import *
     nm = 3
     # p = GNCProblem(DEFAULT_EAGER_ENCODER(), choose_nr=False, n_max=nm, choose_type=False)
