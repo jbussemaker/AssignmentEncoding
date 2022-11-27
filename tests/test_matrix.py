@@ -230,6 +230,7 @@ def test_node_existence():
         [[1, 1], [0, 1]],
         [[0, 2], [1, 0]],
     ]))
+    gen.reset_agg_matrix_cache()
     assert gen.count_all_matrices() == 6
     assert gen.count_all_matrices(max_by_existence=False) == 8
 
@@ -245,6 +246,9 @@ def test_node_existence():
 
     matrix2 = list(gen.get_agg_matrix(cache=True).values())[0]
     assert np.all(matrix == matrix2)
+    assert gen._load_agg_matrix_from_cache() is not None
+    assert gen.count_all_matrices() == 6
+    assert gen.count_all_matrices(max_by_existence=False) == 8
 
     assert NodeExistence() == NodeExistence()
     assert NodeExistence(src_exists=[True, False]) != NodeExistence(tgt_exists=[True, False])
@@ -294,6 +298,9 @@ def test_matrix_all_inf():
         [[1, 1], [1, 1]],
         [[0, 2], [2, 0]],
     ]))
+    gen.reset_agg_matrix_cache()
+    assert gen.count_all_matrices() == 26
+    gen.get_agg_matrix(cache=True)
     assert gen.count_all_matrices() == 26
 
     for matrix, _ in gen.iter_matrices():
@@ -522,6 +529,9 @@ def test_count_matrices_from_nodes():
 
     matrix = list(gen.get_agg_matrix().values())[0]
     assert matrix.shape[0] == 64
+    gen.reset_agg_matrix_cache()
+    assert gen.count_all_matrices() == 64
+    gen.get_agg_matrix(cache=True)
     assert gen.count_all_matrices() == 64
 
 
