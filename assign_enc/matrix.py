@@ -230,16 +230,22 @@ class AggregateAssignmentMatrixGenerator:
         return self._ex
 
     @ex.setter
-    def ex(self, excluded: Optional[List[Tuple[int, int]]]):
+    def ex(self, excluded: Optional[List[Tuple[Node, Node]]]):
         if excluded is None:
             self._ex = None
         else:
-            src_idx = {src: i for i, src in enumerate(self.src)}
-            tgt_idx = {tgt: i for i, tgt in enumerate(self.tgt)}
-            self._ex = set([(src_idx[ex[0]], tgt_idx[ex[1]]) for ex in excluded])
-            if len(self._ex) == 0:
-                self._ex = None
+            self._ex = self.ex_to_idx(self.src, self.tgt, excluded)
         self._conn_blocked_mat = None
+
+    @staticmethod
+    def ex_to_idx(src: List[Node], tgt: List[Node], excluded: Optional[List[Tuple[Node, Node]]]) \
+            -> Optional[Set[Tuple[int, int]]]:
+        if excluded is None:
+            return excluded
+        src_idx = {s: i for i, s in enumerate(src)}
+        tgt_idx = {t: i for i, t in enumerate(tgt)}
+        excluded_idx = set([(src_idx[ex[0]], tgt_idx[ex[1]]) for ex in excluded])
+        return excluded_idx if len(excluded_idx) > 0 else None
 
     @property
     def existence_patterns(self) -> NodeExistencePatterns:
@@ -302,16 +308,32 @@ class AggregateAssignmentMatrixGenerator:
                 yield matrix, exist
 
     def get_agg_matrix(self, cache=False) -> MatrixMap:
-        cache_path = self._cache_path(f'{self._get_cache_key()}.pkl')
-        if cache and os.path.exists(cache_path):
-            with open(cache_path, 'rb') as fp:
-                return pickle.load(fp)
+        if cache:
+            agg_matrix = self._load_agg_matrix_from_cache()
+            if agg_matrix is not None:
+                return agg_matrix
 
         agg_matrix = self._agg_matrices(self)
+
+        cache_path = self._get_cache_file()
         os.makedirs(os.path.dirname(cache_path), exist_ok=True)
         with open(cache_path, 'wb') as fp:
             pickle.dump(agg_matrix, fp)
         return agg_matrix
+
+    def _load_agg_matrix_from_cache(self) -> Optional[MatrixMap]:
+        cache_path = self._get_cache_file()
+        if os.path.exists(cache_path):
+            with open(cache_path, 'rb') as fp:
+                return pickle.load(fp)
+
+    def reset_agg_matrix_cache(self):
+        cache_path = self._get_cache_file()
+        if os.path.exists(cache_path):
+            os.remove(cache_path)
+
+    def _get_cache_file(self):
+        return self._cache_path(f'{self._get_cache_key()}.pkl')
 
     def _get_cache_key(self):
         return self.get_cache_key(self.src, self.tgt, self._ex, self.existence_patterns)
@@ -507,11 +529,15 @@ class AggregateAssignmentMatrixGenerator:
         return [c for c in node.conns if c <= max_conn]
 
     def count_all_matrices(self, max_by_existence=True) -> int:
-        count_by_existence = {}
-        for n_src_conn, n_tgt_conn, existence in self.iter_n_sources_targets():
-            if existence not in count_by_existence:
-                count_by_existence[existence] = 0
-            count_by_existence[existence] += self.count_matrices(n_src_conn, n_tgt_conn)
+        agg_matrix = self._load_agg_matrix_from_cache()
+        if agg_matrix is not None:
+            count_by_existence = {existence: matrix.shape[0] for existence, matrix in agg_matrix.items()}
+        else:
+            count_by_existence = {}
+            for n_src_conn, n_tgt_conn, existence in self.iter_n_sources_targets():
+                if existence not in count_by_existence:
+                    count_by_existence[existence] = 0
+                count_by_existence[existence] += self.count_matrices(n_src_conn, n_tgt_conn)
 
         if max_by_existence:
             return max(count_by_existence.values())
