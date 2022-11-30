@@ -66,12 +66,16 @@ def run_n_sample_dep_exp(results_folder, n_repeat=10):
         (get_problem_lazy_get_matrix(), 'Matrix Gen Influence'),
     ]:
         problem = problems[0]
-        for encoder, enc_name in [(eager_encoder, 'Eager'), (lazy_encoder, 'Lazy')]:
+        for encoder, enc_name, reset_cache in [
+            (eager_encoder, 'Eager (No Cache)', True),
+            (eager_encoder, 'Eager', False),
+            (lazy_encoder, 'Lazy', False),
+        ]:
             encoding_time_series = np.zeros((len(n_samples), 2))
             sampling_time_series = np.zeros((len(n_samples), 2))
             for i, n in enumerate(n_samples):
                 print(f'Timing {problem_name} {enc_name} @ {n} samples')
-                times = _time_encoder(problem, encoder, n_repeat, n)
+                times = _time_encoder(problem, encoder, n_repeat, n, reset_cache=reset_cache)
                 encoding_time_series[i, :] = times[:2]
                 sampling_time_series[i, :] = times[2:]
             x_values.append(n_samples)
@@ -94,12 +98,16 @@ def run_n_matrix_dep_exp(results_folder, n_repeat=10):
         (get_problem_lazy_get_matrix(), 'Matrix Gen Influence'),
     ]:
         n_mat = [problem.assignment_manager.matrix_gen.count_all_matrices() for problem in problems]
-        for encoder, enc_name in [(eager_encoder, 'Eager'), (lazy_encoder, 'Lazy')]:
+        for encoder, enc_name, reset_cache in [
+            (eager_encoder, 'Eager (No Cache)', True),
+            (eager_encoder, 'Eager', False),
+            (lazy_encoder, 'Lazy', False),
+        ]:
             encoding_time_series = np.zeros((len(problems), 2))
             sampling_time_series = np.zeros((len(problems), 2))
             for i, problem in enumerate(problems):
                 print(f'Timing {enc_name} problem {i} @ {n_mat[i]} matrices')
-                times = _time_encoder(problem, encoder, n_repeat, n_samples)
+                times = _time_encoder(problem, encoder, n_repeat, n_samples, reset_cache=reset_cache)
                 encoding_time_series[i, :] = times[:2]
                 sampling_time_series[i, :] = times[2:]
             x_values.append(n_mat)
@@ -122,7 +130,7 @@ def plot_timing_results(results_folder, title, x_values, x_label, y_values, y_la
             fig = plt.figure(figsize=(12, 6))
             plt.title(f'{title} per {x_label}' if div_by_x else title)
 
-            y_norm = np.min(y_values[0][:, 0])
+            y_norm = np.min(y_values[2][:, 0])
             plotted_data = []
             col_names = []
             for i, y_ser in enumerate(y_values):
@@ -132,8 +140,8 @@ def plot_timing_results(results_folder, title, x_values, x_label, y_values, y_la
                 if div_by_x:
                     y /= x
                     y_err /= x
-                plt.errorbar(x, y, yerr=y_err, fmt='--.', capsize=3, elinewidth=.5,
-                             label=y_labels[i])
+                plt.errorbar(x, y, yerr=y_err, fmt='-', marker='.', markersize=5, linewidth=.5, capsize=3,
+                             elinewidth=.5, label=y_labels[i])
                 plotted_data += [x, y, y_err]
                 col_names += [f'{y_labels[i]} ({x_label})', y_labels[i], f'{y_labels[i]} (Std Dev)']
             if plot_log:
@@ -156,10 +164,13 @@ def plot_timing_results(results_folder, title, x_values, x_label, y_values, y_la
             plt.close(fig)
 
 
-def _time_encoder(problem: AssignmentProblem, encoder, n_repeat: int, n_sample: int, report=False):
+def _time_encoder(problem: AssignmentProblem, encoder, n_repeat: int, n_sample: int, reset_cache=False, report=False):
     encoding_times = []
     sampling_times = []
     for _ in range(n_repeat):
+        if reset_cache:
+            problem.assignment_manager.matrix_gen.reset_agg_matrix_cache()
+
         s = timeit.default_timer()
         problem = problem.get_for_encoder(encoder)
         encoding_times.append(timeit.default_timer()-s)
@@ -172,7 +183,7 @@ def _time_encoder(problem: AssignmentProblem, encoder, n_repeat: int, n_sample: 
     encoding_mean, encoding_std = np.mean(encoding_times), np.std(encoding_times)
     sampling_mean, sampling_std = np.mean(sampling_times), np.std(sampling_times)
     if report:
-        print(f'Encoder (x{n_repeat}): {encoder!s}')
+        print(f'Encoder (x{n_repeat}{", reset cache" if reset_cache else ""}): {encoder!s}')
         print(f'Encoding time: {np.mean(encoding_times):.2g} +- {np.std(encoding_times):.2g} sec')
         print(f'Sampling time: {np.mean(sampling_times):.2g} +- {np.std(sampling_times):.2g} sec ({n_sample} samples)')
     return np.array([encoding_mean, encoding_std, sampling_mean, sampling_std])
@@ -180,4 +191,4 @@ def _time_encoder(problem: AssignmentProblem, encoder, n_repeat: int, n_sample: 
 
 if __name__ == '__main__':
     # show_problem_sizes(), exit()
-    run_experiment(n_repeat=5)
+    run_experiment(n_repeat=8)

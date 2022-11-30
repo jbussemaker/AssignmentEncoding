@@ -540,9 +540,14 @@ def test_conditional_existence_n_conns():
     tgt = [Node([1], repeated_allowed=False) for _ in range(2)]
     gen = AggregateAssignmentMatrixGenerator(src, tgt)
 
-    assert list(gen.iter_n_sources_targets()) == [
+    assert list(gen._iter_n_sources_targets()) == [
         ((1, 1), (1, 1), NodeExistence()),
     ]
+    gen.reset_agg_matrix_cache()
+    for _ in range(2):
+        assert list(gen.iter_n_sources_targets()) == [
+            ((1, 1), (1, 1), NodeExistence()),
+        ]
 
     gen.existence_patterns = pat = NodeExistencePatterns([
         NodeExistence(src_exists=[False, False], tgt_exists=[False, False]),

@@ -8,6 +8,7 @@ from typing import *
 from assign_pymoo.algo import *
 from assign_enc.time_limiter import *
 from assign_experiments.runner import *
+from assign_enc.encoding import Encoder
 from assign_enc.encoder_registry import *
 from assign_pymoo.problem import AssignmentProblem
 from assign_experiments.problems.analytical import *
@@ -23,7 +24,13 @@ class Size(enum.Enum):
     LG = 3  # ~100 000 design points
 
 
-def get_problems(size: Size) -> List[AssignmentProblem]:
+def _get_problem_factory(cls, **kwargs) -> Callable[[Encoder], AssignmentProblem]:
+    def _problem_factory(enc):
+        return cls(enc, **kwargs)
+    return _problem_factory
+
+
+def get_problems(size: Size, return_factories=False) -> Union[List[AssignmentProblem], List[Callable[[Encoder], AssignmentProblem]]]:
     init_enc = lambda: OneVarEncoder(DEFAULT_EAGER_IMPUTER())
     prob_kwargs = [
         (AnalyticalCombinationProblem, {Size.SM: {'n_tgt': 100}, Size.MD: {'n_tgt': 150},
@@ -51,6 +58,8 @@ def get_problems(size: Size) -> List[AssignmentProblem]:
         (AnalyticalIterCombinationsReplacementProblem, {Size.SM: {'n_take': 3, 'n_tgt': 7}, Size.MD: {'n_take': 5, 'n_tgt': 10},
                                                         Size.LG: None}, init_enc()),  # Large size needs too much memory...
     ]
+    if return_factories:
+        return [_get_problem_factory(cls, **kwargs[size]) for cls, kwargs, enc in prob_kwargs if kwargs[size] is not None]
     return [cls(enc, **kwargs[size]) for cls, kwargs, enc in prob_kwargs if kwargs[size] is not None]
 
 
@@ -138,7 +147,7 @@ def run_experiment(size: Size, sbo=False, n_repeat=8, i_prob=None, do_run=True):
     df.to_csv(f'{res_folder}/stats_init{stats_file_post}.csv')
 
     if i_prob is not None:
-        _merge_csv_files(res_folder, 'stats_init', len(base_problems))
+        merge_csv_files(res_folder, 'stats_init', len(base_problems))
 
     if do_run:
         run(exp_name, problems, algorithms, algo_names=algo_names, plot_names=plot_names, n_repeat=n_repeat,
@@ -158,17 +167,17 @@ def run_experiment(size: Size, sbo=False, n_repeat=8, i_prob=None, do_run=True):
     df.to_csv(stats_file)
 
     if i_prob is not None:
-        df = _merge_csv_files(res_folder, 'stats', len(base_problems))
+        df = merge_csv_files(res_folder, 'stats', len(base_problems))
     plot_stats(df, res_folder, show=not do_run)
 
 
-def _merge_csv_files(res_folder, filename, n):
+def merge_csv_files(res_folder, filename, n):
     df_merged = None
     for j in range(n):
         csv_path = f'{res_folder}/{filename}_{j}.csv'
         if os.path.exists(csv_path):
             df_i = pd.read_csv(csv_path)
-            df_merged = df_i if df_merged is None else pd.concat([df_merged, df_i])
+            df_merged = df_i if df_merged is None else pd.concat([df_merged, df_i], ignore_index=True)
     if df_merged is not None:
         df_merged.to_csv(f'{res_folder}/{filename}.csv')
     return df_merged

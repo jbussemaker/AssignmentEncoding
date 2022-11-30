@@ -68,6 +68,9 @@ class AnalyticalProblemBase(AssignmentProblem):
     def __repr__(self):
         raise NotImplementedError
 
+    def get_problem_name(self):
+        raise NotImplementedError
+
     def __str__(self):
         raise NotImplementedError
 
@@ -88,8 +91,11 @@ class AnalyticalCombinationProblem(AnalyticalProblemBase):
     def __repr__(self):
         return f'{self.__class__.__name__}(n_tgt={self._n_tgt})'
 
+    def get_problem_name(self):
+        return 'An Comb Prob'
+
     def __str__(self):
-        return f'An Comb Prob {self._n_src} -> {self._n_tgt}'
+        return f'{self.get_problem_name()} {self._n_src} -> {self._n_tgt}'
 
 
 class AnalyticalAssignmentProblem(AnalyticalProblemBase):
@@ -120,6 +126,9 @@ class AnalyticalAssignmentProblem(AnalyticalProblemBase):
         return f'{self.__class__.__name__}(n_src={self._n_src}, n_tgt={self._n_tgt}, ' \
                f'injective={self.injective}, surjective={self.surjective})'
 
+    def get_problem_name(self):
+        return f'An Assign Prob{"; inj" if self.injective else ""}{"; sur" if self.surjective else ""}'
+
     def __str__(self):
         return f'An Assign Prob {self._n_src} -> {self._n_tgt}{"; inj" if self.injective else ""}' \
                f'{"; sur" if self.surjective else ""}'
@@ -147,6 +156,9 @@ class AnalyticalPartitioningProblem(AnalyticalProblemBase):
         return f'{self.__class__.__name__}(n_src={self._n_src}, n_tgt={self._n_tgt}, ' \
                f'covering={self.covering})'
 
+    def get_problem_name(self):
+        return f'An Part Prob{"; cov" if self.covering else ""}'
+
     def __str__(self):
         return f'An Part Prob {self._n_src} -> {self._n_tgt}{"; cov" if self.covering else ""}'
 
@@ -166,6 +178,9 @@ class AnalyticalDownselectingProblem(AnalyticalProblemBase):
 
     def __repr__(self):
         return f'{self.__class__.__name__}(n_tgt={self._n_tgt})'
+
+    def get_problem_name(self):
+        return 'An Down Prob'
 
     def __str__(self):
         return f'An Down Prob {self._n_src} -> {self._n_tgt}'
@@ -200,6 +215,9 @@ class AnalyticalConnectingProblem(AnalyticalProblemBase):
     def __repr__(self):
         return f'{self.__class__.__name__}(n={self._n_src}, directed={self.directed})'
 
+    def get_problem_name(self):
+        return f'An Conn Prob{"; dir" if self.directed else ""}'
+
     def __str__(self):
         return f'An Conn Prob {self._n_src} -> {self._n_tgt}{"; dir" if self.directed else ""}'
 
@@ -218,6 +236,9 @@ class AnalyticalPermutingProblem(AnalyticalProblemBase):
 
     def __repr__(self):
         return f'{self.__class__.__name__}(n={self._n_src})'
+
+    def get_problem_name(self):
+        return 'An Perm Prob'
 
     def __str__(self):
         return f'An Perm Prob {self._n_src} -> {self._n_tgt}'
@@ -242,6 +263,9 @@ class AnalyticalIterCombinationsProblem(AnalyticalProblemBase):
     def __repr__(self):
         return f'{self.__class__.__name__}(n_take={self._n_take}, n_tgt={self._n_tgt})'
 
+    def get_problem_name(self):
+        return 'An Iter Comb Prob'
+
     def __str__(self):
         return f'An Iter Comb Prob {self._n_take} from {self._n_tgt}'
 
@@ -252,6 +276,9 @@ class AnalyticalIterCombinationsReplacementProblem(AnalyticalIterCombinationsPro
 
     def _get_node(self, src: bool, idx: int) -> Node:
         return Node([self._n_take]) if src else Node(min_conn=0)
+
+    def get_problem_name(self):
+        return 'An Iter Comb Repl Prob'
 
     def __str__(self):
         return f'An Iter Comb Repl Prob {self._n_take} from {self._n_tgt}'
@@ -298,10 +325,28 @@ if __name__ == '__main__':
     # _start_comp()
     # _do_real(), exit()
 
+    from assign_enc.selector import *
     from assign_enc.encoder_registry import *
     from assign_pymoo.metrics_compare import *
+
+    # def _do_time():
+    #     EncoderSelector.encoding_timeout = .5
+    #     EncoderSelector.n_mat_max_eager = 1e3
+    #     def _do_cache(disable_cache):
+    #         EncoderSelector._global_disable_cache = disable_cache
+    #         s = timeit.default_timer()
+    #         # enc = AmountFirstGroupedEncoder(DEFAULT_EAGER_IMPUTER(), SourceAmountFlattenedGrouper(), CoordIndexLocationGrouper())
+    #         # p = AnalyticalIterCombinationsProblem(enc, n_take=8, n_tgt=16)
+    #         p = AnalyticalIterCombinationsProblem(None, n_take=9, n_tgt=19)
+    #         print(f'{p!s}: {p.assignment_manager.encoder!s} ({timeit.default_timer()-s:.1f} sec, '
+    #               f'imp_ratio = {p.get_imputation_ratio():.2f}, inf_idx = {p.get_information_index():.2f})')
+    #     _do_cache(True)
+    #     _do_cache(False)
+    # _do_time(), exit()
+
     # p = AnalyticalCombinationProblem(DEFAULT_EAGER_ENCODER())
     # p = AnalyticalAssignmentProblem(DEFAULT_EAGER_ENCODER())  # Very high imputation ratios
+    # p = AnalyticalAssignmentProblem(DEFAULT_EAGER_ENCODER(), injective=True, n_src=2, n_tgt=4)
     # p = AnalyticalAssignmentProblem(DEFAULT_EAGER_ENCODER(), injective=True, surjective=True)
     p = AnalyticalPartitioningProblem(DEFAULT_EAGER_ENCODER())
     # p = AnalyticalPartitioningProblem(LazyAmountFirstEncoder(DEFAULT_LAZY_IMPUTER(), FlatLazyAmountEncoder(), FlatLazyConnectionEncoder()), n_src=2, n_tgt=4, covering=True)

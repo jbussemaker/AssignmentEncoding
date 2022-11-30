@@ -275,12 +275,13 @@ class Experimenter:
 
     # ## EFFECTIVENESS EXPERIMENTATION ## #
 
-    def run_effectiveness_parallel(self, n_repeat: int) -> List[ExperimenterResult]:
+    def run_effectiveness_parallel(self, n_repeat: int):
         with concurrent.futures.ProcessPoolExecutor() as executor:
             futures = [executor.submit(self.run_effectiveness, i) for i in range(n_repeat)]
             concurrent.futures.wait(futures)
 
-            return [fut.result() for fut in futures]
+            for fut in futures:
+                fut.result()
 
     def run_effectiveness(self, repeat_idx: int = 0, seed=None) -> ExperimenterResult:
         """

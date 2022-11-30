@@ -136,9 +136,8 @@ as the Pareto front is not necessarily continuous.
 4. For each analytical architecture problem, a (set of) best encoders exist that is consistent over all problem sizes
    (separately for eager and lazy encoders)
 5. It is possible to define rules for encoder selection, based on the node configurations
-    1. This applies to the analytical problems (i.e. no repetition)
-    2. This also applies to problems with repetition (combinations with replacement)
-    3. This also applies to the GN&C problem (only combinations, with types, and with types + amounts)
+    1. This applies to the analytical problems (incl. repetition)
+    2. This also applies to the GN&C problem (only combinations, with types, and with types + amounts)
 
 ### Observations
 
@@ -189,10 +188,10 @@ Conclusions:
 - Decoding time for lazy encoders depends both on the time to generate matrices on-demand (if needed)
   and to validate the generated matrices
 - For lazy encoders where no matrices are generated (so only validation time counts):
-  - Lazy encoding is between 50x faster than eager encoding
+  - Lazy encoding is between 50x faster than eager encoding (~1000x slower if the matrix is not cached)
   - Lazy decoding is between 1.2x-1.5x slower than eager decoding
 - For lazy encoders where matrices are generated on-demand (as well as validated):
-  - Lazy encoding is about 100x faster as eager encoding
+  - Lazy encoding is about 100x faster as eager encoding (~200x slower if the matrix is not cached)
   - Lazy decoding is about 2x slower than eager decoding
 - Encoding time increases linearly with the amount of matrices for eager encoders
 - Encoding time does not increase (or maximally with the log of amount of matrices) for lazy encoders
@@ -202,6 +201,7 @@ Conclusions:
   whereas this is not necessarily the case for the number of samples
 
 Conclusions:
+- Aggregate matrix caching is very effective at reducing eager encoding times
 - Lazy encoders are very effective at keeping encoding times low, at a relatively low increase in sampling time
 - Cut-off eager encoders after some fixed encoding time has been exceeded when looking for the best encoder
 
@@ -215,9 +215,55 @@ Conclusions:
 - A time limit must be set for eager encoders to prevent runaway encoding time
 
 Suggested selection:
-- First try lazy encoders
-    - Filter based on imputation ratios: filter out any with imp ratio > 1; or imp ratio > 100 if none available
-    - Filter based on information index: filter out any with inf idx < .6
-- If none left, try the same with eager encoders included
-- If none left, take the encoder with the lowest imputation ratio
-- Any encoders that take longer than 10 seconds to encode are discarded
+- First try lazy encoders: try to select an encoder with as low imp ratio as possible and high inf index as possible
+- If none are available, also try eager encoders
+- Set a time limit on the encoding process (for each encoder)
+
+#### 5. Selector Algorithm
+05_selector_algo
+
+- A selector algorithm is developed that selects the best encoder given some combination of nodes
+  - The selection is cached, however the time to initially do the selection is of interest
+  - Before doing the selection, the actual matrices are generated and cached
+    - It turns out that matrix generation does not take a long time compared to some encoders
+    - Main time cost comes from design variable grouping (`GroupedEncoder.group_by_values`)
+- The selector algorithm consists of the following steps:
+  - Pre-generate the matrix (and cache it)
+  - Encode lazy encoders; for each calculate the imputation ratio (using pre-generated matrix) and information index
+    - Additionally encode eager encoders if `n_mat <= n_mat_eager_max`
+    - Stop encoding (and skip) if encoding time exceeds `encoding_time_limit`
+  - Select the best lazy encoder according to the division-scoring algorithm (*not forced*)
+  - If none is selected, encode eager encoders (calculate same metrics as for lazy encoders)
+  - Select the best encoder according to the division-scoring algorithm (*forced*)
+  - Regardless of how good the finally selected encoder is, this algorithm will always have at least one result:
+    - The lazy direct matrix encoder (high information index, but also high imputation ratio) will always be included,
+      as its encoding time is close to instant (no need for matrix generation and no need for DV grouping)
+    - If eager encoders are also included, the one var encoder will also always be included, as except for the matrix
+      generation (which is done anyway), its encoding time is close to instant too
+- The division-scoring algorithm works as follows:
+  - Given a set of encoders and associated imputation ratio and information index scores, divide them into priorities
+  - Define multiple bands of imputation ratios: ==1, 1-3, 3-10, 10-30, 30-100, 100+
+  - Define multiple bands of information indices: 0-.3, .3-.6, .6-1
+  - This division is done according to the following division (see also the `selector_areas` plot):
+    - For the first two imputation ratio bands, priorities are selected in descending information index order
+    - After that, priority is selected in descending information index order per imputation ratio band
+  - If not *forced*, only consider the first 4 priorities (i.e. imp ratio <= 3, inf inx >= .3)
+  - The best encoder is selected from the division with the highest priority that contains 1 or more encoders:
+    - Determine minimum imputation ratio within the division
+    - From the encoders that have this minimum imputation ratio, select the one with the highest information index
+- Total selection time (not cached) is greatly influenced by `n_mat_eager_max` and `encoding_time_limit`
+  - For lower time values (`n_mat_eager_max ~ 1000`, `encoding_time_limit ~ .5`), many encoders are skipped
+  - However, increasing the allowed time does not result in better encoding scores and optimization results
+  - This could be because the encoders that take most time are the ones that use design variable grouping, which is
+    normally used in encoders with very high imputation ratios, and are therefore usually not interesting anyway
+- Selected encoders all reside either on the imputation ratio = 1 or information index = 1 lines
+  - Many even lie at the intersection (which is the best encoding score possible)
+  - Maximum imputation ratio was about 30, even for relatively large problems
+  - Encoders with information index = 1 all reach very good optimization results
+  - Encoders with imputation ratio = 1 reach very good optimization results if information index > approx .5
+    - Below that, results are still acceptable
+
+Conclusion:
+- The selector algorithm is able to select the best encoder for the problem at hand, in a low amount of initial time
+  - The result is cached, however, so subsequent encoding requests are close to instant
+- Setting `n_mat_eager_max = 1000` and `encoding_time_limit = .5` result in good results, within max 8 sec

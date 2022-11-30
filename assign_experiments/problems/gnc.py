@@ -33,7 +33,7 @@ class GNCProblem(AssignmentProblem):
         'S': {'A': .001, 'B': .0005, 'C': .0001},
     }
 
-    def __init__(self, encoder: Encoder, choose_nr=True, n_max=3, choose_type=True):
+    def __init__(self, encoder: Encoder = None, choose_nr=True, n_max=3, choose_type=True):
         self.choose_nr = choose_nr
         self.n_max = n_max
         self.choose_type = choose_type
@@ -253,13 +253,16 @@ class GNCProblem(AssignmentProblem):
     def __repr__(self):
         return f'{self.__class__.__name__}(choose_nr={self.choose_nr}, n_max={self.n_max}, choose_type={self.choose_type})'
 
-    def __str__(self):
+    def get_problem_name(self):
         features = []
         if self.choose_nr:
             features.append('NR')
         if self.choose_type:
             features.append('TYP')
-        return f'GNC {self.n_max} {"/".join(features)}'.strip()
+        return f'GNC {"/".join(features)}'.strip()
+
+    def __str__(self):
+        return f'{self.get_problem_name()} @ {self.n_max}'
 
 
 if __name__ == '__main__':

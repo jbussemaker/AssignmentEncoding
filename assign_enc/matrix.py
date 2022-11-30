@@ -10,7 +10,7 @@ from typing import *
 from dataclasses import dataclass
 
 __all__ = ['Node', 'NodeExistence', 'NodeExistencePatterns', 'AggregateAssignmentMatrixGenerator', 'count_n_pool_take',
-           'MatrixMap', 'MatrixMapOptional']
+           'MatrixMap', 'MatrixMapOptional', 'count_src_to_target']
 
 
 class Node:
@@ -314,15 +314,18 @@ class AggregateAssignmentMatrixGenerator:
                 return agg_matrix
 
         agg_matrix = self._agg_matrices(self)
-
-        cache_path = self._get_cache_file()
-        os.makedirs(os.path.dirname(cache_path), exist_ok=True)
-        with open(cache_path, 'wb') as fp:
-            pickle.dump(agg_matrix, fp)
+        self._write_to_cache(self._get_cache_file(), agg_matrix)
         return agg_matrix
 
     def _load_agg_matrix_from_cache(self) -> Optional[MatrixMap]:
-        cache_path = self._get_cache_file()
+        return self._load_from_cache(self._get_cache_file())
+
+    def _write_to_cache(self, cache_path, obj):
+        os.makedirs(os.path.dirname(cache_path), exist_ok=True)
+        with open(cache_path, 'wb') as fp:
+            pickle.dump(obj, fp)
+
+    def _load_from_cache(self, cache_path):
         if os.path.exists(cache_path):
             with open(cache_path, 'rb') as fp:
                 return pickle.load(fp)
@@ -332,8 +335,15 @@ class AggregateAssignmentMatrixGenerator:
         if os.path.exists(cache_path):
             os.remove(cache_path)
 
+        cache_path = self._get_cache_file_iter_n()
+        if os.path.exists(cache_path):
+            os.remove(cache_path)
+
     def _get_cache_file(self):
         return self._cache_path(f'{self._get_cache_key()}.pkl')
+
+    def _get_cache_file_iter_n(self):
+        return self._cache_path(f'{self._get_cache_key()}_iter_n.pkl')
 
     def _get_cache_key(self):
         return self.get_cache_key(self.src, self.tgt, self._ex, self.existence_patterns)
@@ -408,7 +418,38 @@ class AggregateAssignmentMatrixGenerator:
                     edges.append((src, tgt))
         return edges
 
-    def iter_n_sources_targets(self, existence: NodeExistence = None):
+    def iter_n_sources_targets(self, existence: NodeExistence = None, cache=True):
+        cache_path = self._get_cache_file_iter_n()
+        if cache:
+            iter_data = self._load_from_cache(cache_path)
+            if iter_data is not None:
+                n_src = len(self.src)
+                for exist, np_tup in iter_data:
+                    if existence is None or existence == exist:
+                        for i in range(np_tup.shape[0]):
+                            yield tuple(np_tup[i, :n_src]), tuple(np_tup[i, n_src:]), exist
+                return
+
+        tuples = {}
+        for n_src_conn, n_tgt_conn, exist in self._iter_n_sources_targets():
+            if exist not in tuples:
+                tuples[exist] = []
+            tuples[exist].append((n_src_conn, n_tgt_conn))
+            if existence is None or existence == exist:
+                yield n_src_conn, n_tgt_conn, exist
+
+        # Store it as a numpy array (more efficient than storing as tuples)
+        tuples_efficient = []
+        n_src = len(self.src)
+        for exist, n_src_n_tgt in tuples.items():
+            np_tup = np.empty((len(n_src_n_tgt), n_src+len(self.tgt)), dtype=np.int64)
+            for i, (n_src_conn, n_tgt_conn) in enumerate(n_src_n_tgt):
+                np_tup[i, :n_src] = n_src_conn
+                np_tup[i, n_src:] = n_tgt_conn
+            tuples_efficient.append((exist, np_tup))
+        self._write_to_cache(cache_path, tuples_efficient)
+
+    def _iter_n_sources_targets(self, existence: NodeExistence = None):
         for exist in (self.iter_existence() if existence is None else [existence]):
             for n_src_conn in self.iter_sources(existence=exist):
                 for n_tgt_conn in self.iter_targets(n_source=sum(n_src_conn), existence=exist):
@@ -439,7 +480,7 @@ class AggregateAssignmentMatrixGenerator:
             if i in n_conn_override:
                 n_conns.append(n_conn_override[i])
             else:
-                n_conns.append(self._get_conns(node, max_conn))
+                n_conns.append(self.get_node_conns(node, max_conn))
 
         # If we have an amount constraint, use the matrix generation algorithm
         if n is not None:
@@ -521,7 +562,7 @@ class AggregateAssignmentMatrixGenerator:
         return n_conns in node.conns
 
     @staticmethod
-    def _get_conns(node: Node, max_conn: int):
+    def get_node_conns(node: Node, max_conn: int):
         if node.max_inf:
             slot_max_conn = max_conn
             return list(range(node.min_conns, slot_max_conn+1))

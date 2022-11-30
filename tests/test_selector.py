@@ -15,7 +15,7 @@ def test_selector():
     assert isinstance(assignment_manager, AssignmentManagerBase)
 
     encoder = assignment_manager.encoder
-    assert encoder.get_imputation_ratio() == 1
+    assert encoder.get_imputation_ratio() < 2
 
 
 def test_selector_inf_idx_filter():
@@ -30,7 +30,7 @@ def test_selector_inf_idx_filter():
     assert isinstance(assignment_manager, AssignmentManagerBase)
 
     encoder = assignment_manager.encoder
-    assert encoder.get_imputation_ratio() == 1
+    assert encoder.get_imputation_ratio() < 2
 
 
 def test_selector_encoding_timeout():

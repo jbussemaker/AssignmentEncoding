@@ -103,10 +103,15 @@ class RepairedRandomSampling(FloatRandomSampling):
         n_cont = 5
         opt_values = [np.linspace(xl[i], xu[i], n_cont) if is_cont[i] else np.arange(xl[i], xu[i]+1)
                       for i in range(len(xl))]
-        x = np.array([np.array(dv) for dv in itertools.product(*opt_values)])
-        if n_samples < x.shape[0]:
-            i_x = np.random.choice(x.shape[0], size=n_samples, replace=False)
-            x = x[i_x, :]
+        try:
+            x = np.array([np.array(dv) for dv in itertools.product(*opt_values)])
+            if n_samples < x.shape[0]:
+                i_x = np.random.choice(x.shape[0], size=n_samples, replace=False)
+                x = x[i_x, :]
+        except MemoryError:
+            x = np.empty((n_samples, len(opt_values)))
+            for i_x in range(n_samples):
+                x[i_x, :] = [np.random.choice(opt_values_i) for opt_values_i in opt_values]
 
         x = self._repair.do(problem, Population.new(X=x)).get("X")
         return x

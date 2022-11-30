@@ -167,7 +167,7 @@ class AssignmentProblem(CachedParetoFrontMixin, Problem):
         existence_patterns = self.get_existence_patterns()
         EncoderSelector(src, tgt, excluded=excluded, existence_patterns=existence_patterns).reset_cache()
 
-    def get_for_encoder(self, encoder: Encoder):
+    def get_for_encoder(self, encoder: Encoder = None):
         return self.__class__(encoder, **self.get_init_kwargs())
 
     def get_matrix_count(self):
@@ -326,6 +326,10 @@ class AssignmentProblem(CachedParetoFrontMixin, Problem):
         raise NotImplementedError
 
     def __repr__(self):
+        raise NotImplementedError
+
+    def get_problem_name(self):
+        """Similar to __str__, but without any indication of problem size"""
         raise NotImplementedError
 
     def __str__(self):

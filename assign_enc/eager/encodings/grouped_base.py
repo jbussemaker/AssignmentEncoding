@@ -44,16 +44,31 @@ class GroupedEncoder(EagerEncoder):
             grouping_needed = False
             for row_mask in row_mask_list:
 
+                # Check if there are multiple design vectors in this sub-division
+                group_by_values_sub = group_by_values[row_mask, i_col]
+                if len(group_by_values_sub) == 1:
+                    next_row_masks.append(row_mask)
+                    design_vectors[row_mask, i_col] = 0 if normalize_within_group else group_by_values_sub[0]
+                    continue
+
+                # Check if there are multiple unique values in this sub-division
+                unique_values = sorted(list(set(group_by_values_sub)))
+                if len(unique_values) == 1:
+                    next_row_masks.append(row_mask)
+                    design_vectors[row_mask, i_col] = 0 if normalize_within_group else unique_values[0]
+                    grouping_needed = True
+                    continue
+
                 # Loop over unique values in sub-divisions
-                unique_values = np.sort(np.unique(group_by_values[row_mask, i_col]))
                 for value_idx, value in enumerate(unique_values):
 
                     # Assign indices for each unique value
-                    next_row_mask = row_mask & (group_by_values[:, i_col] == value)
+                    next_row_mask = row_mask.copy()
+                    next_row_mask[row_mask] = next_row_sub_mask = group_by_values_sub == value
                     design_vectors[next_row_mask, i_col] = value_idx if normalize_within_group else value
                     next_row_masks.append(next_row_mask)
 
-                    if len(np.where(next_row_mask)[0]) > 1:
+                    if np.count_nonzero(next_row_sub_mask) > 1:
                         grouping_needed = True
 
             # Stop grouping if not needed anymore

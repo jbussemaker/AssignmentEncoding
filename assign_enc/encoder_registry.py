@@ -42,6 +42,15 @@ LAZY_ENCODERS = [
     lambda imp: LazyAmountFirstEncoder(imp, TotalLazyAmountEncoder(), FlatLazyConnectionEncoder()),
     lambda imp: LazyAmountFirstEncoder(imp, SourceLazyAmountEncoder(), FlatLazyConnectionEncoder()),
     lambda imp: LazyAmountFirstEncoder(imp, SourceTargetLazyAmountEncoder(), FlatLazyConnectionEncoder()),
+
+    lambda imp: LazyConnIdxMatrixEncoder(imp, FlatConnCombsEncoder()),
+    lambda imp: LazyConnIdxMatrixEncoder(imp, FlatConnCombsEncoder(), by_src=False),
+    lambda imp: LazyConnIdxMatrixEncoder(imp, FlatConnCombsEncoder(), amount_first=True),
+    lambda imp: LazyConnIdxMatrixEncoder(imp, FlatConnCombsEncoder(), by_src=False, amount_first=True),
+    lambda imp: LazyConnIdxMatrixEncoder(imp, GroupedConnCombsEncoder()),
+    lambda imp: LazyConnIdxMatrixEncoder(imp, GroupedConnCombsEncoder(), by_src=False),
+    lambda imp: LazyConnIdxMatrixEncoder(imp, GroupedConnCombsEncoder(), amount_first=True),
+    lambda imp: LazyConnIdxMatrixEncoder(imp, GroupedConnCombsEncoder(), by_src=False, amount_first=True),
 ]
 
 DEFAULT_LAZY_ENCODER = lambda: LazyDirectMatrixEncoder(DEFAULT_LAZY_IMPUTER())
