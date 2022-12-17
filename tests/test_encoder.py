@@ -106,6 +106,7 @@ def test_encoder():
 
 
 def test_information_index():
+    assert Encoder.calc_information_index([]) == 1
     assert Encoder.calc_information_index([3]) == 0
     assert Encoder.calc_information_index([2]) == 1
     assert Encoder.calc_information_index([3, 2]) == pytest.approx(.63, abs=1e-3)
@@ -284,3 +285,23 @@ def test_encoder_zero_dvs():
     dv, mat = encoder.get_matrix([0], existence=exist.patterns[1])
     assert dv == [0]
     assert np.all(mat == np.array([[1, 0], [0, 0]]))
+
+
+def test_one_to_one(gen_one_per_existence: AggregateAssignmentMatrixGenerator):
+    encoder = DirectZeroEncoder(EagerImputer())
+    encoder.matrix = gen_one_per_existence.get_agg_matrix()
+    assert len(encoder.design_vars) == 0
+
+    assert encoder.get_n_design_points() == 1
+    assert encoder.get_imputation_ratio() == 1
+    assert encoder.get_information_index() == 1
+
+    for i, existence in enumerate(gen_one_per_existence.existence_patterns.patterns):
+        if i == 3 or i == 7:  # One of the sources exist but no target
+            with pytest.raises(NotImplementedError):
+                encoder.get_matrix([], existence=existence)
+            continue
+
+        dv, mat = encoder.get_matrix([], existence=existence)
+        assert dv == []
+        assert mat.shape[0] == len(gen_one_per_existence.src)

@@ -16,6 +16,9 @@ class ClosestImputer(EagerImputer):
         design_vectors = self._get_design_vectors(existence)[matrix_mask, :]
         matrices = self._get_matrix(existence)[matrix_mask, :, :]
 
+        if len(design_vectors) == 0:
+            return vector, np.zeros((0, 0), dtype=int)
+
         elements, target = design_vectors, np.array(vector)
         if self.euclidean:
             dist = self._calc_dist_euclidean(elements, target)

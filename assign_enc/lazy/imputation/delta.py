@@ -18,6 +18,10 @@ class LazyDeltaImputer(LazyImputer):
     def _impute(self, vector: DesignVector, matrix: Optional[np.ndarray], existence: NodeExistence,
                 validate: Callable[[np.ndarray], bool], tried_vectors: Set[Tuple[int, ...]]) -> Tuple[DesignVector, np.ndarray]:
 
+        # Check if we have any design variables
+        if len(vector) == 0:
+            return vector, np.zeros((0, 0), dtype=int)
+
         # Determine delta values to try out
         def _sort_by_dist(des_var_delta):
             i_sorted = np.argsort(np.abs(des_var_delta))
@@ -41,7 +45,7 @@ class LazyDeltaImputer(LazyImputer):
                 invalid_matrix = -np.ones((len(self._matrix_gen.src), len(self._matrix_gen.tgt)), dtype=int)
                 return vector, invalid_matrix
 
-        raise RuntimeError('No valid design vector found!')
+        return vector, np.zeros((0, 0), dtype=int)
 
     def yield_dv_delta_product(self, delta_values):
         first = True

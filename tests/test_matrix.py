@@ -1,4 +1,5 @@
 import pytest
+import itertools
 import numpy as np
 from assign_enc.matrix import *
 
@@ -587,7 +588,9 @@ def test_conditional_existence():
     assert len(src_tgt_conns) == 8
 
     matrix_map = gen.get_agg_matrix()
-    assert len(matrix_map) == 8
+    assert len(matrix_map) == 16
+    for existence in existence_patterns.patterns:
+        assert existence in matrix_map
     all_arrays = list(matrix_map.values())
     assert np.all(np.row_stack(all_arrays) == np.array([
         [[1, 0], [0, 1]],
@@ -633,3 +636,7 @@ def test_combination_problem():
     matrix = gen.get_agg_matrix()[NodeExistence()]
     assert matrix.shape == (n_tgt, 1, n_tgt)
     assert np.all(matrix[:, 0, :] == np.eye(n_tgt, dtype=int)[::-1, :])
+
+
+def test_one_to_one_mapping(gen_one_per_existence: AggregateAssignmentMatrixGenerator):
+    assert gen_one_per_existence.count_all_matrices() == 1

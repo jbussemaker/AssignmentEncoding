@@ -1,4 +1,5 @@
 import numpy as np
+from assign_enc.matrix import *
 from assign_enc.encoding import *
 from assign_enc.eager.imputation.first import *
 from assign_enc.eager.encodings import *
@@ -332,3 +333,13 @@ def test_rel_coord_index_loc_grouper():
         [1, 1, 1],
         [1, 2, 0],
     ]))
+
+
+def test_one_to_one(gen_one_per_existence: AggregateAssignmentMatrixGenerator):
+    encoder = AmountFirstGroupedEncoder(FirstImputer(), TotalAmountGrouper(), OneVarLocationGrouper())
+    encoder.matrix = gen_one_per_existence.get_agg_matrix()
+    assert len(encoder.design_vars) == 0
+
+    assert encoder.get_n_design_points() == 1
+    assert encoder.get_imputation_ratio() == 1
+    assert encoder.get_information_index() == 1

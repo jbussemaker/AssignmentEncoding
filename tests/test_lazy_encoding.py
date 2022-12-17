@@ -153,3 +153,9 @@ def test_lazy_assignment_manager():
     assert conn_idx == [(0, 1), (1, 0)]
     _, conn_idx = manager.get_conn_idx([0, 1, 1, 1])
     assert not conn_idx
+
+
+def test_one_to_one(gen_one_per_existence: AggregateAssignmentMatrixGenerator):
+    g = gen_one_per_existence
+    encoder = DummyLazyEncoder(DummyImputer())
+    encoder.set_nodes(g.src, g.tgt, existence_patterns=g.existence_patterns)

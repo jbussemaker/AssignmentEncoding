@@ -144,6 +144,8 @@ class FlatIndexLocationGrouper(LocationGrouper):
 
     def get_grouping_values(self, matrix: np.ndarray) -> np.ndarray:
         matrix_flat = flatten_matrix(matrix)
+        if matrix_flat.shape[0] == 0:
+            return np.zeros((0, 0), dtype=int)
         n_conn_max = np.max(np.sum(matrix_flat, axis=1))
 
         n_mat = matrix.shape[0]
@@ -193,6 +195,8 @@ class CoordIndexLocationGrouper(LocationGrouper):
 
     def get_grouping_values(self, matrix: np.ndarray) -> np.ndarray:
         matrix_flat = flatten_matrix(matrix)
+        if matrix_flat.shape[0] == 0:
+            return np.zeros((0, 0), dtype=int)
         n_conn_max = np.max(np.sum(matrix_flat, axis=1))*2
 
         n_mat, n_src, n_tgt = matrix.shape[0], matrix.shape[1], matrix.shape[2]

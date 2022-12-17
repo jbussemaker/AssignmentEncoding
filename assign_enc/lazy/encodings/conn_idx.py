@@ -37,9 +37,12 @@ class FlatConnCombsEncoder(ConnCombsEncoder):
     def decode(self, key, vector: DesignVector) -> Optional[np.ndarray]:
         matrix = self._registry[key]
         if matrix.shape[0] == 0:
-            return np.zeros((0, matrix.shape[1]), dtype=np.int64)
+            return np.zeros((matrix.shape[1],), dtype=np.int64)
         i_matrix = vector[0] if len(vector) > 0 else 0
-        return matrix[i_matrix, :]
+        try:
+            return matrix[i_matrix, :]
+        except IndexError:
+            return
 
     def __repr__(self):
         return f'{self.__class__.__name__}()'
@@ -63,13 +66,16 @@ class GroupedConnCombsEncoder(ConnCombsEncoder):
     def decode(self, key, vector: DesignVector) -> Optional[np.ndarray]:
         dv_map, matrix = self._registry[key]
         if matrix.shape[0] == 0:
-            return np.zeros((0, matrix.shape[1]), dtype=np.int64)
+            return np.zeros((matrix.shape[1],), dtype=np.int64)
         if len(vector) == 0:
             return matrix[0, :]
         i_matrix = dv_map.get(tuple(vector))
         if i_matrix is None:
             return
-        return matrix[i_matrix, :]
+        try:
+            return matrix[i_matrix, :]
+        except IndexError:
+            return
 
     def __repr__(self):
         return f'{self.__class__.__name__}()'
@@ -170,9 +176,6 @@ class LazyConnIdxMatrixEncoder(LazyEncoder):
         return all_dvs
 
     def _decode(self, vector: DesignVector, existence: NodeExistence) -> Optional[np.ndarray]:
-        if len(vector) == 0:
-            return
-
         by_src, amount_first = self._by_src, self._amount_first
         dv_idx_map = self._dv_idx_map.get(existence, {})
         matrix = np.zeros((self.n_src, self.n_tgt), dtype=int)

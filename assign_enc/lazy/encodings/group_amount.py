@@ -139,7 +139,10 @@ class FlatLazyAmountEncoder(LazyAmountEncoder):
 
     def decode(self, vector: DesignVector, existence: NodeExistence) \
             -> Optional[Tuple[Tuple[int, ...], Tuple[int, ...]]]:
-        return self._n_src_n_tgt[existence][vector[0]]
+        n_existence = self._n_src_n_tgt[existence]
+        if len(n_existence) == 0:
+            return
+        return n_existence[vector[0]]
 
     def __repr__(self):
         return f'{self.__class__.__name__}()'
@@ -158,6 +161,9 @@ class GroupedLazyAmountEncoder(LazyAmountEncoder):
 
     def encode(self, n_src, n_tgt, n_src_n_tgt: NList, existence: NodeExistence) -> List[DiscreteDV]:
         n_src_tgt_arr = self._get_n_src_tgt_array(n_src_n_tgt)
+        if len(n_src_n_tgt) == 0:
+            return []
+
         dv_group_values = self._get_dv_group_values(n_src, n_tgt, n_src_tgt_arr)
         dv_values = LazyAmountFirstEncoder.group_by_values(dv_group_values)
         self._dv_val_map[existence] = {tuple(dv_val): n_src_n_tgt[i] for i, dv_val in enumerate(dv_values)}
@@ -216,6 +222,8 @@ class FlatLazyConnectionEncoder(LazyConnectionEncoder):
 
     def encode(self, n_src_n_tgt: NList, existence: NodeExistence, encoder: OnDemandLazyEncoder) -> List[DiscreteDV]:
 
+        if len(n_src_n_tgt) == 0:
+            return []
         n_conn = np.sum(np.array([n_src_conn for n_src_conn, _ in n_src_n_tgt]), axis=1)
         n_conn_max = np.max(n_conn)
         n_matrix_max = 0

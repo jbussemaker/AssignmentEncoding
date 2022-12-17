@@ -22,6 +22,9 @@ class AutoModImputer(EagerImputer):
         self.reverse = reverse
 
     def impute(self, vector: DesignVector, existence: NodeExistence, matrix_mask: MatrixSelectMask) -> Tuple[DesignVector, np.ndarray]:
+        if len(vector) == 0:
+            return vector, np.zeros((0, 0), dtype=int)
+
         mask = matrix_mask
         partial_vector: PartialDesignVector = [None for _ in range(len(vector))]
         for i_dv in (reversed(range(len(vector))) if self.reverse else range(len(vector))):

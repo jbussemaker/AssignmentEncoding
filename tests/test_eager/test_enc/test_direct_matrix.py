@@ -1,3 +1,4 @@
+import pytest
 import numpy as np
 from assign_enc.matrix import *
 from assign_enc.eager.imputation.first import *
@@ -18,7 +19,7 @@ def test_encoding():
         assert len(enc.design_vars) == 3*4
         n_des_points = np.cumprod([dv.n_opts for dv in enc.design_vars])[-1]
         assert enc.get_imputation_ratio() == n_des_points/n
-        assert enc.get_imputation_ratio() > 9000
+        assert enc.get_imputation_ratio() > 7000
 
         for i in range(n_src):
             for j in range(n_tgt):
@@ -68,3 +69,18 @@ def test_encoder_excluded():
 
     _, mat = encoder.get_matrix([0, 2, 1])
     assert np.all(mat == np.array([[0, 2], [0, 1]]))
+
+
+def test_one_to_one(gen_one_per_existence: AggregateAssignmentMatrixGenerator):
+    encoder = DirectMatrixEncoder(FirstImputer())
+    encoder.matrix = gen_one_per_existence.get_agg_matrix()
+    assert len(encoder.design_vars) == 0
+
+    assert encoder.get_n_design_points() == 1
+    assert encoder.get_imputation_ratio() == 1
+    assert encoder.get_information_index() == 1
+
+    for i, existence in enumerate(gen_one_per_existence.existence_patterns.patterns):
+        dv, mat = encoder.get_matrix([], existence=existence)
+        assert dv == []
+        assert mat.shape[0] == (len(gen_one_per_existence.src) if i not in [3, 7] else 0)

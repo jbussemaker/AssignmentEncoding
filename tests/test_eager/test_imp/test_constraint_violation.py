@@ -39,3 +39,18 @@ def test_assignment_manager():
     dv, conns = manager.get_conns([1, 0, 1, 0])
     assert np.all(dv == [1, 0, 1, 0])
     assert conns is None
+
+
+def test_one_to_one(gen_one_per_existence: AggregateAssignmentMatrixGenerator):
+    encoder = DirectMatrixEncoder(ConstraintViolationImputer())
+    encoder.matrix = gen_one_per_existence.get_agg_matrix()
+    assert len(encoder.design_vars) == 0
+
+    assert encoder.get_n_design_points() == 1
+    assert encoder.get_imputation_ratio() == 1
+    assert encoder.get_information_index() == 1
+
+    for i, existence in enumerate(gen_one_per_existence.existence_patterns.patterns):
+        dv, mat = encoder.get_matrix([], existence=existence)
+        assert dv == []
+        assert mat.shape[0] == (len(gen_one_per_existence.src) if i not in [3, 7] else 0)

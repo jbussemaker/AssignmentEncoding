@@ -66,3 +66,13 @@ def test_selector_cache():
     selector.get_best_assignment_manager(cache=False)
     t3 = timeit.default_timer()-s
     assert t3 > t2
+
+
+def test_one_to_one(gen_one_per_existence: AggregateAssignmentMatrixGenerator):
+    g = gen_one_per_existence
+    selector = EncoderSelector(g.src, g.tgt, existence_patterns=g.existence_patterns)
+
+    assignment_manager = selector._get_best_assignment_manager()
+    assert isinstance(assignment_manager, AssignmentManagerBase)
+
+    assert len(assignment_manager.design_vars) == 0

@@ -155,8 +155,13 @@ class LazyEncoder(Encoder):
 
     def get_imputation_ratio(self, use_real_matrix=True) -> float:
         if use_real_matrix:
-            n_matrix = self._matrix_gen.count_all_matrices(max_by_existence=False)
-            return self.get_n_design_points()/n_matrix
+            n_design_points = self.get_n_design_points()
+            n_total = 0
+            n_valid = 0
+            for matrix in self._matrix_gen.get_agg_matrix(cache=True).values():
+                n_total += n_design_points
+                n_valid += max(1, matrix.shape[0])
+            return n_total/n_valid
 
         n_sample = self._n_mc_imputation_ratio
         n_valid = 0

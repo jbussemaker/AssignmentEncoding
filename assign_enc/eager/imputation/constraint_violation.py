@@ -10,7 +10,10 @@ class ConstraintViolationImputer(EagerImputer):
     The optimization problem should represent this as a violated constraint."""
 
     def impute(self, vector: DesignVector, existence: NodeExistence, matrix_mask: MatrixSelectMask) -> Tuple[DesignVector, np.ndarray]:
-        invalid_matrix = self._get_matrix(existence)[0, :, :]*0-1
+        matrix = self._get_matrix(existence)
+        if matrix.shape[0] == 0:
+            return vector, np.zeros((0, 0), dtype=int)
+        invalid_matrix = matrix[0, :, :]*0-1
         return vector, invalid_matrix
 
     def __repr__(self):

@@ -1,4 +1,5 @@
 import numpy as np
+from assign_enc.matrix import *
 from assign_enc.eager.imputation.first import *
 from assign_enc.eager.encodings.direct_matrix import *
 
@@ -39,3 +40,18 @@ def test_imputer_masked():
                 assert np.all(mat == list(encoder._matrix.values())[0][i_first_valid, :, :])
 
         assert n_imp > 0
+
+
+def test_one_to_one(gen_one_per_existence: AggregateAssignmentMatrixGenerator):
+    encoder = DirectMatrixEncoder(FirstImputer())
+    encoder.matrix = gen_one_per_existence.get_agg_matrix()
+    assert len(encoder.design_vars) == 0
+
+    assert encoder.get_n_design_points() == 1
+    assert encoder.get_imputation_ratio() == 1
+    assert encoder.get_information_index() == 1
+
+    for i, existence in enumerate(gen_one_per_existence.existence_patterns.patterns):
+        dv, mat = encoder.get_matrix([], existence=existence)
+        assert dv == []
+        assert mat.shape[0] == (len(gen_one_per_existence.src) if i not in [3, 7] else 0)

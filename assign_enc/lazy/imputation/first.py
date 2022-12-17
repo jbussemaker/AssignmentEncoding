@@ -12,6 +12,9 @@ class LazyFirstImputer(LazyImputer):
     def _impute(self, vector: DesignVector, matrix: Optional[np.ndarray], existence: NodeExistence,
                 validate: Callable[[np.ndarray], bool], tried_vectors: Set[Tuple[int, ...]]) -> Tuple[DesignVector, np.ndarray]:
 
+        if len(vector) == 0:
+            return vector, np.zeros((0, 0), dtype=int)
+
         # Loop through possible design vectors until one is found that has not been tried yet
         for dv in itertools.product(*[list(range(dv.n_opts)) for dv in self._des_vars]):
             dv = tuple(dv)
@@ -19,7 +22,7 @@ class LazyFirstImputer(LazyImputer):
                 continue
             break
         else:
-            raise RuntimeError('No valid design vector found!')
+            return vector, np.zeros((0, 0), dtype=int)
 
         # Validate this design vector and associated matrix
         vector = np.array(dv)

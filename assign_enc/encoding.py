@@ -96,6 +96,8 @@ class Encoder:
         return [dv.get_random() for dv in self.design_vars]
 
     def get_n_design_points(self) -> int:
+        if len(self.design_vars) == 0:
+            return 1
         return int(np.cumprod([dv.n_opts for dv in self.design_vars], dtype=np.float)[-1])
 
     def get_information_index(self) -> float:
@@ -104,6 +106,8 @@ class Encoder:
     @staticmethod
     def calc_information_index(n_opts: List[int]) -> float:
         n_dv = len(n_opts)
+        if n_dv == 0:
+            return 1.
         n_combinations = np.cumprod(n_opts)[-1]
         if n_combinations <= 2:
             return 1.
@@ -175,7 +179,7 @@ class EagerEncoder(Encoder):
         n_valid = 0
         for matrix in self._matrix.values():
             n_total += n_design_points
-            n_valid += matrix.shape[0]
+            n_valid += max(1, matrix.shape[0])
         return n_total/n_valid
 
     def _correct_vector_size(self, vector: DesignVector) -> Tuple[DesignVector, int, int]:
@@ -329,7 +333,7 @@ class EagerEncoder(Encoder):
         """Convert possible design vectors to design variable definitions"""
         design_vars_list = []
         for des_vectors in design_vectors.values():
-            if des_vectors.shape[1] == 0:
+            if des_vectors.shape[0] == 0 or des_vectors.shape[1] == 0:
                 continue
 
             # Check if all design vectors are unique
@@ -369,6 +373,10 @@ class EagerEncoder(Encoder):
     @staticmethod
     def _normalize_design_vectors(design_vectors: np.ndarray, remove_gaps=True) -> np.ndarray:
         """Move lowest values to 0 and eliminate value gaps."""
+
+        # Check if there are no design vectors defined
+        if design_vectors.shape[0] == 0:
+            return design_vectors
 
         # Move to zero
         if not remove_gaps:

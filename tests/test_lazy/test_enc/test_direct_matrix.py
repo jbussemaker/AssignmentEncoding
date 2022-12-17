@@ -1,6 +1,7 @@
 import numpy as np
 from assign_enc.matrix import *
 from assign_enc.lazy.imputation.delta import *
+from assign_enc.lazy.imputation.first import *
 from assign_enc.lazy.encodings.direct_matrix import *
 from assign_enc.lazy.imputation.constraint_violation import *
 
@@ -110,3 +111,43 @@ def test_large_matrix():
 
     assert len(encoder.design_vars) == 36
     assert encoder.get_n_design_points() > 0
+
+
+def test_one_to_one(gen_one_per_existence: AggregateAssignmentMatrixGenerator):
+    g = gen_one_per_existence
+    encoder = LazyDirectMatrixEncoder(LazyDeltaImputer())
+    encoder.set_nodes(g.src, g.tgt, existence_patterns=g.existence_patterns)
+    assert len(encoder.design_vars) == 1
+    assert encoder.design_vars[0].n_opts == 2
+
+    assert encoder.get_n_design_points() == 2
+    assert encoder.get_imputation_ratio() == 2
+    assert encoder.get_information_index() == 1
+
+    for i, existence in enumerate(gen_one_per_existence.existence_patterns.patterns):
+        dv, mat = encoder.get_matrix([1], existence=existence)
+        assert mat.shape[0] == (len(gen_one_per_existence.src) if i not in [3, 7] else 0)
+
+
+def test_one_to_one_first(gen_one_per_existence: AggregateAssignmentMatrixGenerator):
+    g = gen_one_per_existence
+    encoder = LazyDirectMatrixEncoder(LazyFirstImputer())
+    encoder.set_nodes(g.src, g.tgt, existence_patterns=g.existence_patterns)
+    assert len(encoder.design_vars) == 1
+    assert encoder.design_vars[0].n_opts == 2
+
+    for i, existence in enumerate(gen_one_per_existence.existence_patterns.patterns):
+        dv, mat = encoder.get_matrix([1], existence=existence)
+        assert mat.shape[0] == (len(gen_one_per_existence.src) if i not in [3, 7] else 0)
+
+
+def test_one_to_one_cv(gen_one_per_existence: AggregateAssignmentMatrixGenerator):
+    g = gen_one_per_existence
+    encoder = LazyDirectMatrixEncoder(LazyConstraintViolationImputer())
+    encoder.set_nodes(g.src, g.tgt, existence_patterns=g.existence_patterns)
+    assert len(encoder.design_vars) == 1
+    assert encoder.design_vars[0].n_opts == 2
+
+    for i, existence in enumerate(gen_one_per_existence.existence_patterns.patterns):
+        dv, mat = encoder.get_matrix([1], existence=existence)
+        assert mat.shape[0] == len(gen_one_per_existence.src)

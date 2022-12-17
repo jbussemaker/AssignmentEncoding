@@ -313,7 +313,7 @@ class AggregateAssignmentMatrixGenerator:
             if agg_matrix is not None:
                 return agg_matrix
 
-        agg_matrix = self._agg_matrices(self)
+        agg_matrix = self._agg_matrices(self, ensure_all_existence=True)
         self._write_to_cache(self._get_cache_file(), agg_matrix)
         return agg_matrix
 
@@ -363,7 +363,7 @@ class AggregateAssignmentMatrixGenerator:
         cache_folder = os.path.join(os.path.dirname(__file__), '.matrix_cache')
         return cache_folder if sub_path is None else os.path.join(cache_folder, sub_path)
 
-    def _agg_matrices(self, matrix_gen):
+    def _agg_matrices(self, matrix_gen, ensure_all_existence=False):
         """Aggregate generated matrices into one big matrix, one per existence pattern"""
         matrices_by_existence = {}
         for matrix_data in list(matrix_gen):
@@ -375,6 +375,11 @@ class AggregateAssignmentMatrixGenerator:
             if existence not in matrices_by_existence:
                 matrices_by_existence[existence] = []
             matrices_by_existence[existence].append(matrices)
+
+        if ensure_all_existence:
+            for existence in self.iter_existence():
+                if existence not in matrices_by_existence:
+                    matrices_by_existence[existence] = []
 
         agg_matrices_by_existence = {}
         for existence, matrices in matrices_by_existence.items():

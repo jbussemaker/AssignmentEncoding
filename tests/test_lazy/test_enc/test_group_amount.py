@@ -167,3 +167,19 @@ def test_covering_partitioning():
     assert len(list(encoder.iter_n_src_n_tgt())) == 48
     assert encoder.matrix_gen.count_all_matrices() == 81
     assert encoder.get_n_design_points() >= 81
+
+
+def test_one_to_one(gen_one_per_existence: AggregateAssignmentMatrixGenerator):
+    g = gen_one_per_existence
+    encoder = LazyAmountFirstEncoder(LazyDeltaImputer(), FlatLazyAmountEncoder(), FlatLazyConnectionEncoder())
+    encoder.set_nodes(g.src, g.tgt, existence_patterns=g.existence_patterns)
+    assert len(encoder.design_vars) == 0
+
+    assert encoder.get_n_design_points() == 1
+    assert encoder.get_imputation_ratio() == 1
+    assert encoder.get_information_index() == 1
+
+    for i, existence in enumerate(gen_one_per_existence.existence_patterns.patterns):
+        dv, mat = encoder.get_matrix([], existence=existence)
+        assert dv == []
+        assert mat.shape[0] == (len(gen_one_per_existence.src) if i not in [3, 7] else 0)
