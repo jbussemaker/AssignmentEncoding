@@ -45,6 +45,8 @@ class GNCProblem(AssignmentProblem):
         return {'choose_nr': self.choose_nr, 'choose_type': self.choose_type, 'n_max': self.n_max}
 
     def get_n_obj(self) -> int:
+        if not self.choose_nr and not self.choose_type:  # In this case, there is no way to change system mass
+            return 1
         return 2
 
     def get_aux_des_vars(self) -> Optional[List[DiscreteDV]]:
@@ -203,6 +205,8 @@ class GNCProblem(AssignmentProblem):
         mass = self._calc_mass(sensor_types, comp_types)
         failure_rate = self._calc_failure_rate(sensor_types, comp_types, conns)
 
+        if not self.choose_nr and not self.choose_type:
+            return [failure_rate], []
         return [failure_rate, mass], []
 
     @classmethod

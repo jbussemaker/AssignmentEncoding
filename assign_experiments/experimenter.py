@@ -140,14 +140,14 @@ class ExperimenterResult(Result):
         mean_data = np.nanmean(results_data, axis=2)
         if mean_data.shape[0] == 1:
             mean_data = mean_data[0, :]
-        if len(mean_data) == 1:
-            mean_data = mean_data[0]
+        # if len(mean_data) == 1:
+        #     mean_data = mean_data[0]
 
         std_data = np.nanstd(results_data, axis=2)
         if std_data.shape[0] == 1:
             std_data = std_data[0, :]
-        if len(std_data) == 1:
-            std_data = std_data[0]
+        # if len(std_data) == 1:
+        #     std_data = std_data[0]
 
         return mean_data, std_data
 
@@ -308,6 +308,10 @@ class Experimenter:
         result.plot_name = self.plot_name or self.algorithm_name
         metrics: List[Metric] = result.algorithm.termination.metrics
         result.metrics = {met.name: met for met in metrics}
+
+        # Reduce file size to prevent memory errors
+        result.algorithm = None
+        result.history = None
 
         # Store results and return
         result_path = self._get_effectiveness_result_path(repeat_idx=repeat_idx)

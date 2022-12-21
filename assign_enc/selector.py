@@ -22,7 +22,7 @@ class EncoderSelector:
 
     encoding_timeout = .25  # sec
     n_mat_max_eager = 1000
-    imputation_ratio_limits = [3, 10, 30, 100]
+    imputation_ratio_limits = [40, 80, 200]
     min_information_index = .6
 
     def __init__(self, src: List[Node], tgt: List[Node], excluded: List[Tuple[Node, Node]] = None,
@@ -93,17 +93,20 @@ class EncoderSelector:
 
         # Try lazy encoders
         _create_managers(LAZY_ENCODERS, self.lazy_imputer)
-        take_one = False
-        if n_mat is not None and n_mat <= self.n_mat_max_eager:
-            _create_managers(EAGER_ENCODERS, self.eager_imputer)
-            take_one = True
-        i_best = self._get_best(pd.DataFrame(data=scoring), knows_n_mat=n_mat is not None, take_one=take_one)
-        if i_best is not None:
-            return assignment_managers[i_best]
+        if n_mat is None or n_mat > self.n_mat_max_eager:
+            i_best = self._get_best(pd.DataFrame(data=scoring), knows_n_mat=n_mat is not None, n_priority=4)
+            if i_best is not None:
+                return assignment_managers[i_best]
 
         # Try eager encoders
         _create_managers(EAGER_ENCODERS, self.eager_imputer)
-        i_best = self._get_best(pd.DataFrame(data=scoring), knows_n_mat=n_mat is not None, take_one=True)
+        i_best = self._get_best(pd.DataFrame(data=scoring), knows_n_mat=n_mat is not None, n_priority=6)
+        if i_best is not None:
+            return assignment_managers[i_best]
+
+        # Try eager enumeration-based encoders
+        _create_managers(EAGER_ENUM_ENCODERS, self.eager_imputer)
+        i_best = self._get_best(pd.DataFrame(data=scoring), knows_n_mat=n_mat is not None)
         if i_best is None:
             raise RuntimeError(f'Cannot find best encoder, try increasing timeout')
         return assignment_managers[i_best]
@@ -115,7 +118,7 @@ class EncoderSelector:
         log.info('Generating aggregate matrix for eager encoders...')
         self._get_matrix_gen().get_agg_matrix(cache=True)
 
-    def _get_best(self, df_scores: pd.DataFrame, knows_n_mat, take_one=False) -> Optional[int]:
+    def _get_best(self, df_scores: pd.DataFrame, knows_n_mat, n_priority: int = None) -> Optional[int]:
         if len(df_scores) == 0:
             return
 
@@ -143,6 +146,8 @@ class EncoderSelector:
             df_imp_bands[1][df_imp_bands[1].inf_idx >= self.min_information_index],
             df_imp_bands[0][df_imp_bands[0].inf_idx >= .5*self.min_information_index],
             df_imp_bands[1][df_imp_bands[1].inf_idx >= .5*self.min_information_index],
+            df_imp_bands[0][df_imp_bands[0].inf_idx > 0],
+            df_imp_bands[1][df_imp_bands[1].inf_idx > 0],
             df_imp_bands[0],
             df_imp_bands[1],
         ]
@@ -150,11 +155,12 @@ class EncoderSelector:
             df_priority += [
                 df_imp_bands[i][df_imp_bands[i].inf_idx >= self.min_information_index],
                 df_imp_bands[i][df_imp_bands[i].inf_idx >= .5*self.min_information_index],
+                df_imp_bands[i][df_imp_bands[i].inf_idx > 0],
                 df_imp_bands[i],
             ]
 
         for i, df in enumerate(df_priority):
-            if not take_one and i >= 4:
+            if n_priority is not None and i >= n_priority:
                 return
             if len(df) > 0:
                 return _return_best_imp_inf(df)

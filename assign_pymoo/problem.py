@@ -98,12 +98,12 @@ class CachedParetoFrontMixin(Problem):
         print('Running PF discovery %d/%d (%d pop, %d gen)' % (i+1, n, pop_size, n_gen))
         return minimize(self, NSGA2(pop_size=pop_size), termination=('n_gen', n_gen))
 
-    def plot_pf(self: Union[Problem, 'CachedParetoFrontMixin'], show_approx_f_range=False, **kwargs):
+    def plot_pf(self: Union[Problem, 'CachedParetoFrontMixin'], show_approx_f_range=False, n_sample=100, **kwargs):
         scatter = Scatter()
         if show_approx_f_range:
             scatter.add(self.get_approx_f_range(), s=.1, color='white')
 
-            pop = Initialization(LatinHypercubeSampling()).do(self, 100)
+            pop = Initialization(LatinHypercubeSampling()).do(self, n_sample)
             Evaluator().eval(self, pop)
             scatter.add(pop.get('F'), s=5)
 

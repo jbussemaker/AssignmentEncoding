@@ -5,7 +5,6 @@ from assign_enc.eager.imputation import *
 
 
 EAGER_ENCODERS = [
-    lambda imp: OneVarEncoder(imp),
     lambda imp: DirectMatrixEncoder(imp),
     lambda imp: DirectMatrixEncoder(imp, remove_gaps=False),
     lambda imp: ElementGroupedEncoder(imp),
@@ -23,6 +22,13 @@ EAGER_ENCODERS = [
 ]
 
 DEFAULT_EAGER_ENCODER = lambda: OneVarEncoder(DEFAULT_EAGER_IMPUTER())
+
+EAGER_ENUM_ENCODERS = [  # Encoders only based on counting the possibilities, ignoring the actual connection patterns
+    lambda imp: OneVarEncoder(imp),
+    lambda imp: RecursiveEncoder(imp, n_divide=2),
+    lambda imp: RecursiveEncoder(imp, n_divide=3),
+    lambda imp: RecursiveEncoder(imp, n_divide=4),
+]
 
 EAGER_IMPUTERS = [
     lambda: FirstImputer(),

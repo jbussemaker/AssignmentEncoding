@@ -43,6 +43,8 @@ class AnalyticalProblemBase(AssignmentProblem):
         coeff_sum[0] = -coeff_sum[0]
         if self._invert_f2:
             coeff_sum[1] = -coeff_sum[1]
+        if self.n_obj == 1:
+            return list(coeff_sum)[:1], []
         return list(coeff_sum), []
 
     def get_coefficients(self):
@@ -105,44 +107,54 @@ class AnalyticalAssignmentProblem(AnalyticalProblemBase):
     - surjective: targets have min 1 connection (note: this is the same as a partitioning problem!)
     - bijective (= injective & surjective): targets have exactly 1 connection"""
 
-    def __init__(self, *args, injective=False, surjective=False, **kwargs):
+    def __init__(self, *args, injective=False, surjective=False, repeatable=False, **kwargs):
         self.injective = injective
         self.surjective = surjective
+        self.repeatable = repeatable
+        self._is_so = injective and surjective
         super().__init__(*args, **kwargs)
 
+    def get_n_obj(self) -> int:
+        return 1 if self._is_so else 2
+
     def get_init_kwargs(self) -> dict:
-        return {**super().get_init_kwargs(), **{'injective': self.injective, 'surjective': self.surjective}}
+        return {**super().get_init_kwargs(), **{
+            'injective': self.injective, 'surjective': self.surjective, 'repeatable': self.repeatable}}
 
     def _get_node(self, src: bool, idx: int) -> Node:
         if src:
-            return Node(min_conn=0, repeated_allowed=False)
+            return Node(min_conn=0, repeated_allowed=self.repeatable)
         if self.injective:
             if self.surjective:
-                return Node([1], repeated_allowed=False)
-            return Node([0, 1], repeated_allowed=False)
-        return Node(min_conn=1 if self.surjective else 0, repeated_allowed=False)
+                return Node([1], repeated_allowed=self.repeatable)
+            return Node([0, 1], repeated_allowed=self.repeatable)
+        return Node(min_conn=1 if self.surjective else 0, repeated_allowed=self.repeatable)
 
     def __repr__(self):
         return f'{self.__class__.__name__}(n_src={self._n_src}, n_tgt={self._n_tgt}, ' \
-               f'injective={self.injective}, surjective={self.surjective})'
+               f'injective={self.injective}, surjective={self.surjective}, repeatable={self.repeatable})'
 
     def get_problem_name(self):
-        return f'An Assign Prob{"; inj" if self.injective else ""}{"; sur" if self.surjective else ""}'
+        return f'An Assign Prob{"; inj" if self.injective else ""}{"; sur" if self.surjective else ""}' \
+               f'{"; rep" if self.repeatable else ""}'
 
     def __str__(self):
         return f'An Assign Prob {self._n_src} -> {self._n_tgt}{"; inj" if self.injective else ""}' \
-               f'{"; sur" if self.surjective else ""}'
+               f'{"; sur" if self.surjective else ""}{"; rep" if self.repeatable else ""}'
 
 
 class AnalyticalPartitioningProblem(AnalyticalProblemBase):
     """Partitioning pattern: sources have any connections, targets 1, no repetitions; if changed into a covering
     partitioning pattern, targets have no max connections"""
 
-    _invert_f2 = True
+    # _invert_f2 = True
 
     def __init__(self, *args, covering=False, **kwargs):
         self.covering = covering
         super().__init__(*args, **kwargs)
+
+    def get_n_obj(self) -> int:
+        return 1
 
     def get_init_kwargs(self) -> dict:
         return {**super().get_init_kwargs(), **{'covering': self.covering}}
@@ -246,7 +258,8 @@ class AnalyticalPermutingProblem(AnalyticalProblemBase):
 
 class AnalyticalIterCombinationsProblem(AnalyticalProblemBase):
     """Itertools combinations function (select n_take elements from n_tgt targets):
-    1 source has n_take connections to n_tgt targets, no repetition"""
+    1 source has n_take connections to n_tgt targets, no repetition
+    Note: combination problem with more n_take"""
 
     _invert_f2 = True
 
@@ -347,17 +360,22 @@ if __name__ == '__main__':
     # p = AnalyticalCombinationProblem(DEFAULT_EAGER_ENCODER())
     # p = AnalyticalAssignmentProblem(DEFAULT_EAGER_ENCODER())  # Very high imputation ratios
     # p = AnalyticalAssignmentProblem(DEFAULT_EAGER_ENCODER(), injective=True, n_src=2, n_tgt=4)
+    # p = AnalyticalAssignmentProblem(DEFAULT_EAGER_ENCODER(), injective=True)
+    # p = AnalyticalAssignmentProblem(DEFAULT_EAGER_ENCODER(), surjective=True)
     # p = AnalyticalAssignmentProblem(DEFAULT_EAGER_ENCODER(), injective=True, surjective=True)
     p = AnalyticalPartitioningProblem(DEFAULT_EAGER_ENCODER())
+    # p = AnalyticalPartitioningProblem(DEFAULT_EAGER_ENCODER(), covering=True, n_src=3, n_tgt=4)
     # p = AnalyticalPartitioningProblem(LazyAmountFirstEncoder(DEFAULT_LAZY_IMPUTER(), FlatLazyAmountEncoder(), FlatLazyConnectionEncoder()), n_src=2, n_tgt=4, covering=True)
     # p = AnalyticalDownselectingProblem(DEFAULT_EAGER_ENCODER())
     # p = AnalyticalConnectingProblem(DEFAULT_EAGER_ENCODER())  # Low information errors
     # p = AnalyticalPermutingProblem(DEFAULT_EAGER_ENCODER())
     # p = AnalyticalIterCombinationsProblem(DEFAULT_EAGER_ENCODER())
     # p = AnalyticalIterCombinationsReplacementProblem(DEFAULT_EAGER_ENCODER(), n_take=3, n_tgt=3)  # Low inf err
+    # p.reset_pf_cache()
     # p.plot_pf(show_approx_f_range=True), exit()
     enc = []
     enc += [e(DEFAULT_EAGER_IMPUTER()) for e in EAGER_ENCODERS]
+    enc += [e(DEFAULT_EAGER_IMPUTER()) for e in EAGER_ENUM_ENCODERS]
     enc += [e(DEFAULT_LAZY_IMPUTER()) for e in LAZY_ENCODERS]
     # MetricsComparer().compare_encoders(p, enc)
     MetricsComparer().compare_encoders(p, enc, inf_idx=True)

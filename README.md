@@ -67,6 +67,9 @@ to match with the above decision characteristics:
 3. Matrix elements can be constrained to 0 to represent explicitly forbidden connections between node pairs.
    This can be used to model network connections, where any connection between nodes is possible (i.e. network nodes are
    represented by both src and tgt nodes at the same time), except from/to itself.
+4. Nodes may or may not exist or may be constrained to certain nr of connections. Each such "existence scheme" can be
+   determined in advance, and only one such existence scheme may exist at a time. This means that the encoding algorithm
+   should be flexible enough to define design variables that represent the superset of all existence schemes.
 
 This representation leads to a fundamental difference between node-wise connections and between-node connections:
 - Node-wise connections are used to represent assignment patterns where only the amount of connections is relevant
@@ -120,6 +123,19 @@ A suitable test problem can be the GN&C problem from Crawley et al, which can be
 difficult by varying the number of possible sensors, computers and actuators. Optimization performance can be measured
 using the `Delta HV` metric, for some fixed computational budget. The spread metric (Bussemaker2021) will not be used,
 as the Pareto front is not necessarily continuous.
+
+### Imputation Ratio and Node Existence
+The imputation ratio is the ratio of the combinatorial design space size to number of valid points. For analytical
+problems this is easy to define and understand. However, for architecture optimization problems where the node
+assignment problem is only part of the problem, the assignment sub-problem can operate in any of a set of predetermined
+existence schemes that are activated based on the other design variables.
+
+This leads to a distinction between different types of imputation ratios:
+- Assignment sub-problem imputation ratio over all existence scheme (*encoder total*)
+- Assignment sub-problem imputation ratio for a specific existence scheme
+  - Here, the existence scheme with the lowest imputation ratio represents the largest matrix, and is therefore most
+    relevant for encoder comparison and selection (*encoder min*)
+- Optimization problem imputation ratio (*problem-level*)
 
 ## Hypotheses
 
@@ -208,7 +224,11 @@ Conclusions:
 #### 4. Metric Consistency
 04_metric_consistency
 
-- GA algorithm are most effective for low imputation ratios or high information indices
+- GA and SBO algorithms are most effective for low imputation ratios or high information indices
+  - Enumeration-based encoders (one-var and recursive) are always able to create low imputation ratios, however are
+    only efficient for high information indices (i.e. one-var is never efficient)
+  - For recursive encoder, higher than `n_divide=4` yields inf idx < .5
+  - Connection-based encoders are to be preferred over enumeration-based encoders
 - For eager Amount First groupers, the (Rel) Flat/Coord Idx groupers are very inefficient for large nr of matrices
   - Inefficient in time, memory usage, and imputation ratio
   - For some problems their imputation is low, but then other encoders with low imputation ratio are also available
@@ -217,6 +237,7 @@ Conclusions:
 Suggested selection:
 - First try lazy encoders: try to select an encoder with as low imp ratio as possible and high inf index as possible
 - If none are available, also try eager encoders
+- If still no good ones are available, try enumeration-based encoders (these are eager)
 - Set a time limit on the encoding process (for each encoder)
 
 #### 5. Selector Algorithm
@@ -230,24 +251,26 @@ Suggested selection:
 - The selector algorithm consists of the following steps:
   - Pre-generate the matrix (and cache it)
   - Encode lazy encoders; for each calculate the imputation ratio (using pre-generated matrix) and information index
+    - The minimum encoder imputation ratio is taken, as this represents the largest matrix
     - Additionally encode eager encoders if `n_mat <= n_mat_eager_max`
     - Stop encoding (and skip) if encoding time exceeds `encoding_time_limit`
-  - Select the best lazy encoder according to the division-scoring algorithm (*not forced*)
+  - Select the best lazy encoder according to the division-scoring algorithm (considering priority areas 1 to 4)
   - If none is selected, encode eager encoders (calculate same metrics as for lazy encoders)
-  - Select the best encoder according to the division-scoring algorithm (*forced*)
+  - Select the best encoder according to the division-scoring algorithm (considering priority areas 1 to 6)
+  - If none is selected, encode enumeration-based encoders
+  - Select the best encoder (considering all priority areas)
   - Regardless of how good the finally selected encoder is, this algorithm will always have at least one result:
     - The lazy direct matrix encoder (high information index, but also high imputation ratio) will always be included,
       as its encoding time is close to instant (no need for matrix generation and no need for DV grouping)
-    - If eager encoders are also included, the one var encoder will also always be included, as except for the matrix
-      generation (which is done anyway), its encoding time is close to instant too
+    - If enumeration-based encoders are also included (they always score well), except for the matrix generation (which
+      is done anyway), their encoding times are close to instant too
 - The division-scoring algorithm works as follows:
   - Given a set of encoders and associated imputation ratio and information index scores, divide them into priorities
-  - Define multiple bands of imputation ratios: ==1, 1-3, 3-10, 10-30, 30-100, 100+
-  - Define multiple bands of information indices: 0-.3, .3-.6, .6-1
+  - Define multiple bands of imputation ratios: ==1, 1-40, 40-80, 80-200, 200+
+  - Define multiple bands of information indices: ==0, 0-.3, .3-.6, .6-1
   - This division is done according to the following division (see also the `selector_areas` plot):
     - For the first two imputation ratio bands, priorities are selected in descending information index order
     - After that, priority is selected in descending information index order per imputation ratio band
-  - If not *forced*, only consider the first 4 priorities (i.e. imp ratio <= 3, inf inx >= .3)
   - The best encoder is selected from the division with the highest priority that contains 1 or more encoders:
     - Determine minimum imputation ratio within the division
     - From the encoders that have this minimum imputation ratio, select the one with the highest information index
@@ -256,7 +279,7 @@ Suggested selection:
   - However, increasing the allowed time does not result in better encoding scores and optimization results
   - This could be because the encoders that take most time are the ones that use design variable grouping, which is
     normally used in encoders with very high imputation ratios, and are therefore usually not interesting anyway
-- Selected encoders all reside either on the imputation ratio = 1 or information index = 1 lines
+- Most selected encoders reside either on the imputation ratio = 1 or information index = 1 lines
   - Many even lie at the intersection (which is the best encoding score possible)
   - Maximum imputation ratio was about 30, even for relatively large problems
   - Encoders with information index = 1 all reach very good optimization results

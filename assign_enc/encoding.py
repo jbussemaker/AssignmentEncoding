@@ -114,7 +114,7 @@ class Encoder:
         n_dv_max = np.log2(n_combinations)
         return (n_dv-1.)/(n_dv_max-1.)
 
-    def get_imputation_ratio(self) -> float:
+    def get_imputation_ratio(self, per_existence=False) -> float:
         """Ratio of the total design space size to the actual amount of possible connections"""
         raise NotImplementedError
 
@@ -173,14 +173,16 @@ class EagerEncoder(Encoder):
     def design_vars(self) -> List[DiscreteDV]:
         return self._design_vars
 
-    def get_imputation_ratio(self) -> float:
+    def get_imputation_ratio(self, per_existence=False) -> float:
         n_design_points = self.get_n_design_points()
-        n_total = 0
-        n_valid = 0
+        n_total = []
+        n_valid = []
         for matrix in self._matrix.values():
-            n_total += n_design_points
-            n_valid += max(1, matrix.shape[0])
-        return n_total/n_valid
+            n_total.append(n_design_points)
+            n_valid.append(max(1, matrix.shape[0]))
+        if per_existence:
+            return min([n_tot/n_valid[i] for i, n_tot in enumerate(n_total)])
+        return sum(n_total)/sum(n_valid)
 
     def _correct_vector_size(self, vector: DesignVector) -> Tuple[DesignVector, int, int]:
         n_dv = len(self.design_vars)

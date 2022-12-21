@@ -43,14 +43,17 @@ def get_sbo_rbf(**kwargs):
     return _get_sbo(sm, FunctionEstimateInfill(), **kwargs)
 
 
-def get_sbo_krg(use_mvpf=True, **kwargs):
+def get_sbo_krg(use_mvpf=True, use_ei=False, min_pof=.95, **kwargs):
     sm = KRG(print_global=False)
-    infill = MinVariancePFInfill() if use_mvpf else FunctionEstimatePoFInfill()
+    if use_ei:
+        infill = ExpectedImprovementInfill(min_pof=min_pof)  # For single objective
+    else:
+        infill = MinVariancePFInfill(min_pof=min_pof) if use_mvpf else FunctionEstimatePoFInfill(min_pof=min_pof)
     return _get_sbo(sm, infill, **kwargs)
 
 
 def _get_sbo(sm: SurrogateModel, infill: 'SurrogateInfill', infill_size: int = 1, init_size: int = 100,
-             infill_pop_size: int = 100, infill_gens: int = 100, repair=None, **kwargs):
+             infill_pop_size: int = 100, infill_gens=100, repair=None, **kwargs):
     return SBOInfill(sm, infill, pop_size=infill_pop_size, termination=infill_gens, repair=repair, verbose=True)\
         .algorithm(infill_size=infill_size, init_size=init_size, **kwargs)
 
@@ -293,6 +296,66 @@ class FunctionEstimatePoFInfill(PoFInfill):
         return f_predict
 
 
+class ExpectedImprovementInfill(PoFInfill):
+    """
+    The Expected Improvement (EI) naturally balances exploitation and exploration by representing the expected amount
+    of improvement at some point taking into accounts its probability of improvement.
+
+    EI(x) = (f_min-y(x)) * Phi((f_min - y(x))/s(x)) + s(x) * phi((f_min - y(x)) / s(x))
+    where
+    - f_min is the current best point (real)
+    - y(x) the surrogate model estimate
+    - s(x) the surrogate model variance estimate
+    - Phi is the cumulative distribution function of the normal distribution
+    - phi is the probability density function of the normal distribution
+
+    Implementation based on:
+    Jones, D.R., "Efficient Global Optimization of Expensive Black-Box Functions", 1998, 10.1023/A:1008306431147
+    """
+
+    def get_n_infill_objectives(self) -> int:
+        return self.problem.n_obj
+
+    def _evaluate_f(self, f_predict: np.ndarray, f_var_predict: np.ndarray) -> np.ndarray:
+        return self._evaluate_f_ei(f_predict, f_var_predict, self.y_train[:, :f_predict.shape[1]])
+
+    @classmethod
+    def _evaluate_f_ei(cls, f: np.ndarray, f_var: np.ndarray, f_current: np.ndarray) -> np.ndarray:
+        # Normalize current and predicted objectives
+        f_pareto = cls.get_pareto_front(f_current)
+        nadir_point, ideal_point = np.max(f_pareto, axis=0), np.min(f_pareto, axis=0)
+        f_pareto_norm = normalize(f_pareto, xu=nadir_point, xl=ideal_point)
+        f_norm, f_var_norm = cls._normalize_f_var(f, f_var, nadir_point, ideal_point)
+
+        # Get EI for each point using closest point in the Pareto front
+        f_ei = np.empty(f.shape)
+        for i in range(f.shape[0]):
+            i_par_closest = np.argmin(np.sum((f_pareto_norm-f_norm[i, :])**2, axis=1))
+            f_par_min = f_pareto_norm[i_par_closest, :]
+            ei = cls._ei(f_par_min, f_norm[i, :], f_var_norm[i, :])
+            ei[ei < 0.] = 0.
+            f_ei[i, :] = 1.-ei
+
+        return f_ei
+
+    @staticmethod
+    def _normalize_f_var(f: np.ndarray, f_var: np.ndarray, nadir_point, ideal_point):
+        f_norm = normalize(f, xu=nadir_point, xl=ideal_point)
+        f_var_norm = f_var/((nadir_point-ideal_point+1e-30)**2)
+        return f_norm, f_var_norm
+
+    @staticmethod
+    def _ei(f_min: np.ndarray, f: np.ndarray, f_var: np.ndarray) -> np.ndarray:
+        dy = f_min-f
+        ei = dy*norm.cdf(dy/np.sqrt(f_var)) + f_var*norm.pdf(dy/np.sqrt(f_var))
+
+        is_nan_mask = np.isnan(ei)
+        ei[is_nan_mask & (dy > 0.)] = 1.
+        ei[is_nan_mask & (dy <= 0.)] = 0.
+
+        return ei
+
+
 class MinVariancePFInfill(FunctionEstimatePoFInfill):
     """
     Minimization of the Variance of Kriging-Predicted Front (MVPF).
@@ -344,7 +407,7 @@ class SBOInfill(InfillCriterion):
 
     def __init__(self, surrogate_model: SurrogateModel, infill: SurrogateInfill, pop_size=None,
                  termination: Union[Termination, int] = None, verbose=False, repair: Repair = None,
-                 eliminate_duplicates: DuplicateElimination = None, **kwargs):
+                 eliminate_duplicates: DuplicateElimination = None, force_new_points: bool = True, **kwargs):
 
         if eliminate_duplicates is None:
             eliminate_duplicates = DefaultDuplicateElimination()
@@ -370,6 +433,7 @@ class SBOInfill(InfillCriterion):
         self.pop_size = pop_size or 100
         self.termination = termination
         self.verbose = verbose
+        self.force_new_points = force_new_points
 
         self.opt_results: Optional[List[Result]] = None
 
@@ -414,6 +478,11 @@ class SBOInfill(InfillCriterion):
 
         off = self.repair.do(problem, off, **kwargs)
         off = self.eliminate_duplicates.do(off, pop)
+
+        if self.verbose:
+            n_eval_outer = self._algorithm.evaluator.n_eval if self._algorithm is not None else -1
+            log.info(f'Infill: {len(off)} new (eval {len(self.total_pop)} real unique, {n_eval_outer} eval)')
+
         return off
 
     def _do(self, *args, **kwargs):
@@ -513,7 +582,7 @@ class SBOInfill(InfillCriterion):
         # Create infill problem and algorithm
         problem = self._get_infill_problem()
         algorithm = self._get_infill_algorithm()
-        termination = self._get_termination()
+        termination = self._get_termination(n_obj=problem.n_obj)
 
         n_callback = 20
         if isinstance(termination, MaximumGenerationTermination):
@@ -526,6 +595,8 @@ class SBOInfill(InfillCriterion):
             termination=termination,
             callback=SurrogateInfillCallback(n_gen_report=n_callback, verbose=self.verbose,
                                              n_points_outer=len(self.total_pop), n_eval_outer=n_eval_outer),
+            copy_termination=False,  # Needed for maintaining the patch
+            # verbose=True, progress=True,
         )
         if self.opt_results is None:
             self.opt_results = []
@@ -539,12 +610,26 @@ class SBOInfill(InfillCriterion):
         return Population.new(X=x)
 
     def _get_infill_problem(self):
-        return SurrogateInfillOptimizationProblem(self.infill, self.problem)
+        x_exist_norm = self._normalize(self.total_pop.get('X')) if self.force_new_points else None
+        return SurrogateInfillOptimizationProblem(self.infill, self.problem, x_exist_norm=x_exist_norm)
 
-    def _get_termination(self):
+    def _get_termination(self, n_obj):
         termination = self.termination
         if termination is None or not isinstance(termination, Termination):
-            termination = MaximumGenerationTermination(n_max_gen=termination or 100)
+            # return MaximumGenerationTermination(n_max_gen=termination or 100)
+            from pymoo.termination.default import DefaultMultiObjectiveTermination, DefaultSingleObjectiveTermination
+            robust_period = 5
+            n_max_gen = termination or 100
+            n_max_eval = n_max_gen*self.pop_size
+            if n_obj > 1:
+                termination = DefaultMultiObjectiveTermination(
+                    xtol=5e-4, cvtol=1e-8, ftol=5e-3, n_skip=5, period=robust_period, n_max_gen=n_max_gen,
+                    n_max_evals=n_max_eval)
+            else:
+                termination = DefaultSingleObjectiveTermination(
+                    xtol=1e-8, cvtol=1e-8, ftol=1e-6, period=robust_period, n_max_gen=n_max_gen, n_max_evals=n_max_eval)
+
+        patch_ftol_bug(termination)
         return termination
 
     def _get_infill_algorithm(self):
@@ -555,6 +640,24 @@ class SBOInfill(InfillCriterion):
         if self.repair is None:
             return None
         return NormalizedRepair(self.problem, self.repair)
+
+
+def patch_ftol_bug(term):  # Already fixed in upcoming release: https://github.com/anyoptimization/pymoo/issues/325
+    from pymoo.termination.default import DefaultMultiObjectiveTermination
+    from pymoo.termination.ftol import MultiObjectiveSpaceTermination
+    data_func = None
+
+    def _wrap_data(algorithm):
+        data = data_func(algorithm)
+        if data['ideal'] is None:
+            data['feas'] = False
+        return data
+
+    if isinstance(term, DefaultMultiObjectiveTermination):
+        ftol_term = term.criteria[2].termination
+        if isinstance(ftol_term, MultiObjectiveSpaceTermination):
+            data_func = ftol_term._data
+            ftol_term._data = _wrap_data
 
 
 class SurrogateInfillCallback(Callback):
@@ -576,12 +679,18 @@ class SurrogateInfillCallback(Callback):
 class SurrogateInfillOptimizationProblem(Problem):
     """Problem class representing a surrogate infill problem given a SurrogateInfill instance."""
 
-    def __init__(self, infill: SurrogateInfill, problem: Problem):
+    def __init__(self, infill: SurrogateInfill, problem: Problem, x_exist_norm: np.ndarray = None):
         n_var = problem.n_var
         xl, xu = np.zeros(n_var), np.ones(n_var)
 
         n_obj = infill.get_n_infill_objectives()
         n_constr = infill.get_n_infill_constraints()
+
+        self.pop_exist_norm = Population.new(X=x_exist_norm)
+        self.force_new_points = x_exist_norm is not None
+        if self.force_new_points:
+            n_constr += 1
+        self.eliminate_duplicates = DefaultDuplicateElimination()
 
         super(SurrogateInfillOptimizationProblem, self).__init__(
             n_var=n_var, n_obj=n_obj, n_constr=n_constr, xl=xl, xu=xu)
@@ -597,6 +706,13 @@ class SurrogateInfillOptimizationProblem(Problem):
 
         if g is None and self.n_constr > 0:
             g = np.zeros((x.shape[0], 0))
+
+        if self.force_new_points:
+            g_force_new = np.zeros((x.shape[0],))
+            _, _, is_dup = self.eliminate_duplicates.do(Population.new(X=x), self.pop_exist_norm, return_indices=True)
+            g_force_new[is_dup] = 1.
+
+            g = np.column_stack([g, g_force_new])
 
         if g.shape != (x.shape[0], self.n_constr):
             raise RuntimeError('Wrong constraint results shape: %r != %r' % (g.shape, (x.shape[0], self.n_constr)))

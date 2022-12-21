@@ -153,33 +153,42 @@ class LazyEncoder(Encoder):
     def design_vars(self) -> List[DiscreteDV]:
         return self._design_vars
 
-    def get_imputation_ratio(self, use_real_matrix=True) -> float:
+    def get_imputation_ratio(self, per_existence=False, use_real_matrix=True) -> float:
         if use_real_matrix:
             n_design_points = self.get_n_design_points()
-            n_total = 0
-            n_valid = 0
+            n_total = []
+            n_valid = []
             for matrix in self._matrix_gen.get_agg_matrix(cache=True).values():
-                n_total += n_design_points
-                n_valid += max(1, matrix.shape[0])
-            return n_total/n_valid
+                n_total.append(n_design_points)
+                n_valid.append(max(1, matrix.shape[0]))
+            if per_existence:
+                return min([n_tot/n_valid[i] for i, n_tot in enumerate(n_total)])
+            return sum(n_total)/sum(n_valid)
 
         n_sample = self._n_mc_imputation_ratio
-        n_valid = 0
+        n_total = []
+        n_valid = []
+        for existence in self._matrix_gen.iter_existence():
+            n_total_ex = 0
+            n_valid_ex = 0
+            if n_sample > self.get_n_design_points():
+                # Exhaustive sampling
+                for dv in itertools.product(*[list(range(dv.n_opts)) for dv in self.design_vars]):
+                    n_total_ex += 1
+                    if self.is_valid_vector(list(dv), existence=existence):
+                        n_valid_ex += 1
 
-        if n_sample > self.get_n_design_points():
-            # Exhaustive sampling
-            n_sample = 0
-            for dv in itertools.product(*[list(range(dv.n_opts)) for dv in self.design_vars]):
-                n_sample += 1
-                if self.is_valid_vector(list(dv)):
-                    n_valid += 1
+            else:  # Monte Carlo sampling
+                for _ in range(n_sample):
+                    n_total_ex += 1
+                    if self.is_valid_vector(self.get_random_design_vector(), existence=existence):
+                        n_valid_ex += 1
+            n_total.append(n_total_ex)
+            n_valid.append(n_valid_ex)
 
-        else:  # Monte Carlo sampling
-            for _ in range(n_sample):
-                if self.is_valid_vector(self.get_random_design_vector()):
-                    n_valid += 1
-
-        return n_sample/n_valid
+        if per_existence:
+            return min([n_tot/n_valid[i] for i, n_tot in enumerate(n_total)])
+        return sum(n_total)/sum(n_valid)
 
     def _correct_vector_size(self, vector: DesignVector) -> Tuple[DesignVector, int, int]:
         n_dv = len(self.design_vars)
