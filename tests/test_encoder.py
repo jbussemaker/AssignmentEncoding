@@ -169,6 +169,9 @@ def test_encoder_existence():
     assert enc.design_vars[0].n_opts == 5
     assert enc.design_vars[1].n_opts == 2
 
+    assert enc._design_vectors[exist1].shape[1] == 2
+    assert enc._design_vectors[exist2].shape[1] == 1
+
     assert enc.is_valid_vector([0, 0], existence=exist1)
     assert enc.is_valid_vector([0, 1], existence=exist1)
     assert enc.is_valid_vector([2, 1], existence=exist1)
@@ -185,9 +188,13 @@ def test_encoder_existence():
     assert enc.get_matrix_index([0, 0], existence=exist1)[0] == 0
     assert enc.get_matrix_index([1, 0], existence=exist2)[0] == 1
 
-    dv, mat = enc.get_matrix([1, 1], existence=exist2)
+    dv, mat = enc.get_matrix([1, 1], existence=exist2)  # Correct last des var value
     assert dv == [1, 0]
     assert np.all(mat == enc._matrix[exist2][1, :, :])
+
+    dv, mat = enc.get_matrix([4, 1], existence=exist2)  # Impute
+    assert dv == [0, 0]
+    assert np.all(mat == enc._matrix[exist2][0, :, :])
 
 
 class DuplicateEncoder(EagerEncoder):
@@ -239,13 +246,13 @@ def test_normalize_dvs():
         [2, 3, 2, 0,  1],
     ])
 
-    assert np.all(EagerEncoder._normalize_design_vectors(des_vectors, remove_gaps=False) == np.array([
+    assert np.all(EagerEncoder.normalize_design_vectors(des_vectors, remove_gaps=False) == np.array([
         [0, 0, 0, 2, 0],
         [1, 1, 3, 0, 1],
         [2, 2, 2, 0, 2],
     ]))
 
-    assert np.all(EagerEncoder._normalize_design_vectors(des_vectors) == np.array([
+    assert np.all(EagerEncoder.normalize_design_vectors(des_vectors) == np.array([
         [0, 0, 0, 1, 0],
         [1, 1, 2, 0, 1],
         [2, 2, 1, 0, 2],

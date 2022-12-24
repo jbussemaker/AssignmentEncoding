@@ -34,7 +34,7 @@ class AnalyticalProblemBase(AssignmentProblem):
         return 2
 
     def get_n_valid_design_points(self, n_cont=5) -> int:
-        return self.assignment_manager.matrix_gen.count_all_matrices()
+        return self.assignment_manager.matrix_gen.count_all_matrices(max_by_existence=False)
 
     def _do_evaluate(self, conns: List[Tuple[int, int]], x_aux: Optional[DesignVector]) -> Tuple[List[float], List[float]]:
         coeff_sum = np.zeros((2,))

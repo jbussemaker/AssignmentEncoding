@@ -55,13 +55,12 @@ class EncoderSelector:
     def _get_best_assignment_manager(self) -> AssignmentManager:
         log.info('Counting matrices...')
         self._provision_agg_matrix_cache()
-        n_mat = self._get_n_mat()
-        log.info(f'{n_mat} matrices')
-
-        scoring = {'idx': [], 'n_des_pts': [], 'imp_ratio': [], 'inf_idx': []}
-        assignment_managers = []
+        n_mat, n_exist = self._get_n_mat()
+        log.info(f'{n_mat} matrices ({n_exist} existence scheme{"s" if n_exist != 1 else ""})')
 
         def _create_managers(encoders, imputer_factory):
+            assignment_mgr = []
+            scoring = {'n_des_pts': [], 'imp_ratio': [], 'inf_idx': []}
             for encoder_factory in encoders:
                 # Create encoder
                 encoder = encoder_factory(imputer_factory())
@@ -79,37 +78,44 @@ class EncoderSelector:
                     log.info('Encoding timeout!')
                     continue
 
-                assignment_managers.append(assignment_manager)
+                assignment_mgr.append(assignment_manager)
 
                 # Get score
                 n_design_points = assignment_manager.encoder.get_n_design_points()
-                imputation_ratio = (n_design_points/n_mat) if n_mat is not None else n_design_points
+                imputation_ratio = self._get_imp_ratio(n_design_points, n_mat, n_exist, assignment_manager=assignment_manager)
                 information_index = assignment_manager.encoder.get_information_index()
 
-                scoring['idx'].append(len(scoring['idx']))
                 scoring['n_des_pts'].append(n_design_points)
                 scoring['imp_ratio'].append(imputation_ratio)
                 scoring['inf_idx'].append(information_index)
+            return pd.DataFrame(data=scoring), assignment_mgr
 
         # Try lazy encoders
-        _create_managers(LAZY_ENCODERS, self.lazy_imputer)
+        df_score, assignment_managers = _create_managers(LAZY_ENCODERS, self.lazy_imputer)
         if n_mat is None or n_mat > self.n_mat_max_eager:
-            i_best = self._get_best(pd.DataFrame(data=scoring), knows_n_mat=n_mat is not None, n_priority=4)
+            i_best = self._get_best(df_score, knows_n_mat=n_mat is not None, n_priority=4)
             if i_best is not None:
                 return assignment_managers[i_best]
 
         # Try eager encoders
-        _create_managers(EAGER_ENCODERS, self.eager_imputer)
-        i_best = self._get_best(pd.DataFrame(data=scoring), knows_n_mat=n_mat is not None, n_priority=6)
+        df_eager, eager_assignment_mgr = _create_managers(EAGER_ENCODERS, self.eager_imputer)
+        df_score = pd.concat([df_eager, df_score], ignore_index=True)  # Give preference to eager encoders due to faster imputation
+        assignment_managers = eager_assignment_mgr+assignment_managers
+        i_best = self._get_best(df_score, knows_n_mat=n_mat is not None, n_priority=6)
         if i_best is not None:
             return assignment_managers[i_best]
 
         # Try eager enumeration-based encoders
-        _create_managers(EAGER_ENUM_ENCODERS, self.eager_imputer)
-        i_best = self._get_best(pd.DataFrame(data=scoring), knows_n_mat=n_mat is not None)
+        df_enum, enum_assignment_mgr = _create_managers(EAGER_ENUM_ENCODERS, self.eager_imputer)
+        df_score = pd.concat([df_score, df_enum], ignore_index=True)
+        assignment_managers = assignment_managers+enum_assignment_mgr
+        i_best = self._get_best(df_score, knows_n_mat=n_mat is not None)
         if i_best is None:
             raise RuntimeError(f'Cannot find best encoder, try increasing timeout')
         return assignment_managers[i_best]
+
+    def _get_imp_ratio(self, n_design_points: int, n_mat: int = None, n_exist: int = None, **_) -> float:
+        return ((n_design_points*n_exist)/n_mat) if n_mat is not None else n_design_points
 
     def reset_agg_matrix_cache(self):
         self._get_matrix_gen().reset_agg_matrix_cache()
@@ -121,6 +127,8 @@ class EncoderSelector:
     def _get_best(self, df_scores: pd.DataFrame, knows_n_mat, n_priority: int = None) -> Optional[int]:
         if len(df_scores) == 0:
             return
+        df_scores = df_scores.copy()
+        df_scores['idx'] = df_scores.index
 
         # If we don't accurately know the total amount of matrices, normalize to the lowest imputation ratio
         if not knows_n_mat:
@@ -166,10 +174,13 @@ class EncoderSelector:
                 return _return_best_imp_inf(df)
         raise RuntimeError('No encoders available!')
 
-    def _get_n_mat(self) -> Optional[int]:
+    def _get_n_mat(self) -> Tuple[Optional[int], Optional[int]]:
         try:
+            matrix_gen = self._get_matrix_gen()
             with time_limiter(self.encoding_timeout):
-                return self._get_matrix_gen().count_all_matrices(max_by_existence=True)
+                n_mat_total = matrix_gen.count_all_matrices(max_by_existence=False)
+            n_existence = len(list(matrix_gen.iter_existence()))
+            return n_mat_total, n_existence
         except TimeoutError:
             pass
 

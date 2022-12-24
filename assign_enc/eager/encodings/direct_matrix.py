@@ -16,7 +16,7 @@ class DirectMatrixEncoder(EagerEncoder):
         design_vectors = self.flatten_matrix(matrix)
 
         # Normalize design vectors (move to 0 and optionally remove value gaps)
-        return self._normalize_design_vectors(design_vectors, remove_gaps=self.remove_gaps)
+        return self.normalize_design_vectors(design_vectors, remove_gaps=self.remove_gaps)
 
     def __repr__(self):
         return f'{self.__class__.__name__}({self._imputer!r}, remove_gaps={self.remove_gaps})'

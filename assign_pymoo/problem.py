@@ -185,9 +185,7 @@ class AssignmentProblem(CachedParetoFrontMixin, Problem):
         n_aux = self.n_aux
         x_corr = x.copy().astype(np.int)
         for i_dv in range(x_corr.shape[0]):
-            existence = None
-            if n_aux > 0:
-                x_corr[i_dv, :n_aux], existence, _ = self.correct_x_aux(x_corr[i_dv, :n_aux])
+            x_corr[i_dv, :n_aux], existence, _ = self.correct_x_aux(x_corr[i_dv, :n_aux])
             x_corr[i_dv, n_aux:] = self.assignment_manager.correct_vector(x_corr[i_dv, n_aux:], existence=existence)
         return x_corr
 
@@ -200,14 +198,12 @@ class AssignmentProblem(CachedParetoFrontMixin, Problem):
 
         n_aux = self.n_aux
         for i in range(n):
-            x_aux, existence = None, None
-            if n_aux > 0:
-                x_aux, existence, is_violated = self.correct_x_aux(x[i, :n_aux])
-                x_out[i, :n_aux] = x_aux
-                if is_violated:
-                    f_out[i, :] = 0
-                    g_out[i, 0] = 1
-                    continue
+            x_aux, existence, is_violated = self.correct_x_aux(x[i, :n_aux])
+            x_out[i, :n_aux] = x_aux
+            if is_violated:
+                f_out[i, :] = 0
+                g_out[i, 0] = 1
+                continue
 
             x_out[i, n_aux:], conn_idx = self.assignment_manager.get_conn_idx(x[i, n_aux:], existence=existence)
             if conn_idx is None:
@@ -319,7 +315,7 @@ class AssignmentProblem(CachedParetoFrontMixin, Problem):
     def correct_x_aux(self, x_aux: DesignVector) -> Tuple[DesignVector, Optional[NodeExistence], bool]:
         """Correct auxiliary design vector, return imputed design vector, optional NodeExistence, and flag whether the
         design is invalid"""
-        raise RuntimeError
+        return x_aux, None, False
 
     def _do_evaluate(self, conns: List[Tuple[int, int]], x_aux: Optional[DesignVector]) -> Tuple[List[float], List[float]]:
         """Returns [objectives, constraints]"""

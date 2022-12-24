@@ -12,25 +12,27 @@ from assign_enc.selector import EncoderSelector
 from assign_pymoo.problem import AssignmentProblem
 from assign_experiments.problems.gnc import GNCProblem
 from assign_experiments.experimenter import Experimenter
+from assign_experiments.problems.analytical_multi import *
+from assign_enc.assignment_manager import AssignmentManagerBase
+from assign_experiments.problems.analytical_combinations import *
 from assign_experiments.experiments.exp_04_metric_consistency import Size, get_problems, merge_csv_files
 import matplotlib.pyplot as plt
 
 log = logging.getLogger('assign_exp.exp05')
 
 
-def _get_gnc_factory(**kwargs):
-    def _gnc_factory(enc):
-        return GNCProblem(enc, **kwargs)
-    return _gnc_factory
+def _get_prob_factory(cls, **kwargs):
+    def _prob_factory(enc):
+        return cls(enc, **kwargs)
+    return _prob_factory
 
 
 def get_gnc_problem_factories() -> List[Callable[[Optional[Encoder]], AssignmentProblem]]:
     factories = []
-    factories += [_get_gnc_factory(choose_nr=False, n_max=n, choose_type=False) for n in [3, 4]]  # 265, 41503, [24 997 921]
-    factories += [_get_gnc_factory(choose_nr=True, n_max=n, choose_type=False) for n in [3, 4]]  # 327, 46312
-    factories += [_get_gnc_factory(choose_nr=False, n_max=n, choose_type=True) for n in [2, 3, 4]]  # 252, 26500, [9 338 175]
-    factories += [_get_gnc_factory(choose_nr=True, n_max=n, choose_type=True) for n in [2, 3, 4]]  # 297, 29857, [10 030 642]
-    factories += [_get_gnc_factory(choose_nr=True, n_max=n, choose_type=False) for n in [3, 4]]  # 327, 46312
+    factories += [_get_prob_factory(GNCProblem, choose_nr=False, n_max=n, choose_type=False) for n in [3, 4]]  # 265, 41503, [24 997 921]
+    factories += [_get_prob_factory(GNCProblem, choose_nr=True, n_max=n, choose_type=False) for n in [3, 4]]  # 327, 46312
+    factories += [_get_prob_factory(GNCProblem, choose_nr=False, n_max=n, choose_type=True) for n in [2, 3, 4]]  # 252, 26500, [9 338 175]
+    factories += [_get_prob_factory(GNCProblem, choose_nr=True, n_max=n, choose_type=True) for n in [2, 3, 4]]  # 297, 29857, [10 030 642]
     return factories
 
 
@@ -46,12 +48,181 @@ def show_gnc_problem_sizes(reset_pf=False, plot=False):
         print('')
 
 
+def get_multi_comb_problem_factories() -> List[Callable[[Optional[Encoder]], AssignmentProblem]]:
+    factories = []
+
+    factories += [_get_prob_factory(AnalyticalCombinationDownselectingProblem, n_tgt=n) for n in [5, 9, 12]]  # 160, 4608, 49152
+    factories += [_get_prob_factory(AnalyticalPartitioningPermutingProblem, n_src=n_src, n_tgt=n_tgt)
+                  for n_src, n_tgt in [(3, 3), (3, 4), (4, 4)]]  # 324, 6156, 21264
+    factories += [_get_prob_factory(AnalyticalIterCombBothProblem, n_take=n_take, n_tgt=n_tgt)
+                  for n_take, n_tgt in [(2, 5), (3, 8), (3, 10)]]  # 150, 6720, 26400
+
+    factories += [_get_prob_factory(MultiCombinationProblem, n_multi=n_multi, n_tgt=n_tgt)
+                  for n_multi, n_tgt in [(5, 20), (10, 50)]]  # 100, 500
+    factories += [_get_prob_factory(MultiAssignmentProblem, n_act_src=nas, n_act_tgt=nat, n_src=ns, n_tgt=nt)
+                  for nas, nat, ns, nt in [(2, 3, 3, 4), (2, 3, 5, 5), (3, 3, 5, 5)]]  # 768, 6400, 51200
+    factories += [_get_prob_factory(MultiAssignmentProblem, n_act_src=nas, n_act_tgt=nat, n_src=ns, n_tgt=nt, injective=True)
+                  for nas, nat, ns, nt in [(2, 3, 3, 4), (3, 3, 5, 5), (3, 4, 5, 5)]]  # 324, 6400, 12800
+    factories += [_get_prob_factory(MultiAssignmentProblem, n_act_src=nas, n_act_tgt=nat, n_src=ns, n_tgt=nt, surjective=True)
+                  for nas, nat, ns, nt in [(2, 3, 3, 4), (3, 3, 4, 4), (3, 4, 4, 5)]]  # 324, 5488, 48020
+    factories += [_get_prob_factory(MultiAssignmentProblem, n_act_src=nas, n_act_tgt=nat, n_src=ns, n_tgt=nt, injective=True, surjective=True)
+                  for nas, nat, ns, nt in [(2, 3, 4, 4), (3, 4, 5, 5), (4, 4, 5, 6)]]  # 192, 4050, 19200
+    factories += [_get_prob_factory(MultiAssignmentProblem, n_act_src=nas, n_act_tgt=nat, n_src=ns, n_tgt=nt, repeatable=True)
+                  for nas, nat, ns, nt in [(2, 2, 3, 3), (2, 3, 4, 4)]]  # 630, 23352
+    factories += [_get_prob_factory(MultiPermIterCombProblem, n_take=n_take, n=n)
+                  for n_take, n in [(3, 5), (3, 7), (4, 8)]]  # 130, 5075, 40390
+
+    return factories
+
+
+def show_multi_comb_problem_sizes(reset_pf=False, plot=False):
+    for problem_factory in get_multi_comb_problem_factories():
+        problem = problem_factory(OneVarEncoder(DEFAULT_EAGER_IMPUTER()))
+        show_problem_size(problem)
+        if reset_pf:
+            problem.reset_pf_cache()
+        calc_initial_hv(problem)
+        if plot:
+            problem.plot_pf(show_approx_f_range=True, n_sample=1000)
+        print('')
+
+
 def get_problem_factories() -> List[Callable[[Optional[Encoder]], AssignmentProblem]]:
     factories = []
     for size in Size:
         factories += get_problems(size, return_factories=True)
     factories += get_gnc_problem_factories()
+    factories += get_multi_comb_problem_factories()
     return factories
+
+
+def exp_selector_imp_ratio_type(i_prob: int, n_repeat=4):
+    EncoderSelector._global_disable_cache = True
+    Experimenter.capture_log()
+    EncoderSelector.encoding_timeout = .25
+    EncoderSelector.n_mat_max_eager = 1e3
+
+    def _imp_ratio_max_matrix(self, *args, assignment_manager: AssignmentManagerBase = None):
+        return assignment_manager.encoder.get_imputation_ratio(per_existence=True)
+
+    def _imp_ratio_total(self, n_design_points: int, n_mat: int = None, n_exist: int = None, **_):
+        if n_mat is None:
+            return n_design_points
+        return (n_design_points*n_exist)/n_mat
+
+    def _imp_ratio_min_matrix(self, *args, assignment_manager: AssignmentManagerBase = None):
+        n_design_points = assignment_manager.encoder.get_n_design_points()
+        n_total = []
+        n_valid = []
+        for matrix in assignment_manager.matrix_gen.get_agg_matrix(cache=True).values():
+            n_total.append(n_design_points)
+            n_valid.append(max(1, matrix.shape[0]))
+        return max([n_tot/n_valid[i_ex] for i_ex, n_tot in enumerate(n_total)])
+
+    def _imp_ratio_mean_matrix(self, *args, assignment_manager: AssignmentManagerBase = None):
+        n_design_points = assignment_manager.encoder.get_n_design_points()
+        n_total = []
+        n_valid = []
+        for matrix in assignment_manager.matrix_gen.get_agg_matrix(cache=True).values():
+            n_total.append(n_design_points)
+            n_valid.append(max(1, matrix.shape[0]))
+        return float(np.mean([n_tot/n_valid[i_ex] for i_ex, n_tot in enumerate(n_total)]))
+
+    def _imp_ratio_geo_mean_matrix(self, *args, assignment_manager: AssignmentManagerBase = None):
+        n_design_points = assignment_manager.encoder.get_n_design_points()
+        n_total = []
+        n_valid = []
+        for matrix in assignment_manager.matrix_gen.get_agg_matrix(cache=True).values():
+            n_total.append(n_design_points)
+            n_valid.append(max(1, matrix.shape[0]))
+        return float(np.exp(np.mean([np.log(n_tot/n_valid[i_ex]) for i_ex, n_tot in enumerate(n_total)])))
+
+    imp_ratio_types = [
+        ('max_matrix', _imp_ratio_max_matrix),
+        ('min_matrix', _imp_ratio_min_matrix),
+        ('total', _imp_ratio_total),
+        ('mean', _imp_ratio_mean_matrix),
+        ('geo_mean', _imp_ratio_geo_mean_matrix),
+    ]
+
+    stats = {'prob': [], 'config': [], 'enc': [], 'ir_type': [],
+             'n': [], 'n_des_space': [], 'imp_ratio': [], 'imp_ratio_sel': [], 'inf_idx': [],
+             'n_prob': [], 'n_des_space_prob': [], 'imp_ratio_prob': [], 'inf_idx_prob': [],
+             'sel_time': [], 'sel_time_std': [], 'sel_time_no_cache': [], 'sel_time_no_cache_std': []}
+    found = False
+    problem_factories = get_gnc_problem_factories()+get_multi_comb_problem_factories()
+    for j, problem_factory in enumerate(problem_factories):
+        if j != i_prob:
+            continue
+        found = True
+
+        for i_ir, (ir_name, ir_func) in enumerate(imp_ratio_types):
+            EncoderSelector._get_imp_ratio = ir_func
+
+            sel_times = []
+            sel_times_no_cache = []
+            matrix_gen = problem_factory(DEFAULT_LAZY_ENCODER()).assignment_manager.matrix_gen
+            problem: Optional[AssignmentProblem] = None
+            log.info(f'Encoding problem {j+1}/{len(problem_factories)} ({ir_name} {i_ir+1}/{len(imp_ratio_types)})')
+            failed = False
+            for no_cache in [True, False]:
+                for i in range(n_repeat):
+                    if no_cache:
+                        matrix_gen.reset_agg_matrix_cache()
+                    try:
+                        s = timeit.default_timer()
+                        problem = problem_factory(None)
+                        sel_time = timeit.default_timer()-s
+                        if no_cache:
+                            sel_times_no_cache.append(sel_time)
+                        else:
+                            sel_times.append(sel_time)
+                        log.info(f'Selected best for {problem!s} in {sel_time:.2f} s ({i+1}/{n_repeat}'
+                                 f'{", no cache" if no_cache else ""}): {problem.assignment_manager.encoder!s}')
+                    except RuntimeError:
+                        problem = problem_factory(DEFAULT_LAZY_ENCODER())
+                        raise RuntimeError(f'Failed to select any encoder for {problem!s}!')
+            if failed:
+                problem = problem_factory(DEFAULT_LAZY_ENCODER())
+
+            encoder = problem.assignment_manager.encoder
+
+            stats['sel_time'].append(np.mean(sel_times) if not failed else np.nan)
+            stats['sel_time_std'].append(np.std(sel_times) if not failed else np.nan)
+            stats['sel_time_no_cache'].append(np.mean(sel_times_no_cache) if not failed else np.nan)
+            stats['sel_time_no_cache_std'].append(np.std(sel_times_no_cache) if not failed else np.nan)
+            stats['prob'].append(problem.get_problem_name())
+            stats['config'].append(str(problem))
+            stats['enc'].append(str(encoder))
+            stats['ir_type'].append(ir_name)
+            stats['n'].append(problem.assignment_manager.matrix_gen.count_all_matrices())
+            stats['n_des_space'].append(encoder.get_n_design_points() if not failed else np.nan)
+            imp_ratio = encoder.get_imputation_ratio() if not failed else np.nan
+            stats['imp_ratio'].append(imp_ratio)
+            imp_ratio_sel = encoder.get_imputation_ratio(per_existence=True) if not failed else np.nan
+            stats['imp_ratio_sel'].append(imp_ratio_sel)
+            inf_idx = encoder.get_information_index() if not failed else np.nan
+            stats['inf_idx'].append(inf_idx)
+            stats['n_prob'].append(problem.get_n_valid_design_points())
+            stats['n_des_space_prob'].append(problem.get_n_design_points() if not failed else np.nan)
+            imp_ratio_prob = problem.get_imputation_ratio() if not failed else np.nan
+            stats['imp_ratio_prob'].append(imp_ratio_prob)
+            stats['inf_idx_prob'].append(problem.get_information_index() if not failed else np.nan)
+
+            if not failed:
+                log.info(f'Best encoder for {problem!s} = {encoder!s} (imp ratio = {imp_ratio_sel:.2g} '
+                         f'(enc = {imp_ratio:.2g}, prob = {imp_ratio_prob:.2g}), inf idx = {inf_idx:.2f})')
+
+    if not found:
+        return False
+
+    exp_name = '05_selector_imp_ratio_type'
+    set_results_folder(exp_name)
+    res_folder = Experimenter.results_folder
+    df = pd.DataFrame(data=stats)
+    df.to_csv(f'{res_folder}/stats_{i_prob}.csv')
+    merge_csv_files(res_folder, 'stats', len(problem_factories))
+    return True
 
 
 class SelCompEffort(enum.Enum):
@@ -138,11 +309,12 @@ def run_experiment(i_batch: int, effort: SelCompEffort, sbo=False, n_repeat=8, d
         stats['prob'].append(problem.get_problem_name())
         stats['config'].append(str(problem))
         stats['enc'].append(str(encoder))
-        stats['n'].append(problem.assignment_manager.matrix_gen.count_all_matrices())
-        stats['n_des_space'].append(encoder.get_n_design_points() if not failed else np.nan)
-        imp_ratio = encoder.get_imputation_ratio() if not failed else np.nan
+        stats['n'].append(problem.assignment_manager.matrix_gen.count_all_matrices(max_by_existence=False))
+        n_exist = len(problem.assignment_manager.matrix_gen.existence_patterns.patterns)
+        stats['n_des_space'].append((encoder.get_n_design_points()*n_exist) if not failed else np.nan)
+        imp_ratio = encoder.get_imputation_ratio(per_existence=True) if not failed else np.nan
         stats['imp_ratio'].append(imp_ratio)
-        imp_ratio_sel = encoder.get_imputation_ratio(per_existence=True) if not failed else np.nan
+        imp_ratio_sel = encoder.get_imputation_ratio() if not failed else np.nan
         stats['imp_ratio_sel'].append(imp_ratio_sel)
         inf_idx = encoder.get_information_index() if not failed else np.nan
         stats['inf_idx'].append(inf_idx)
@@ -408,11 +580,17 @@ def plot_selector_areas():
 
 if __name__ == '__main__':
     # show_gnc_problem_sizes(), exit()
-    plot_selector_areas(), exit()
+    # show_multi_comb_problem_sizes(), exit()
+
+    # for ip in list(range(60)):
+    #     if not exp_selector_imp_ratio_type(i_prob=ip, n_repeat=4):
+    #         break
+
+    # plot_selector_areas(), exit()
     # _do_plot(SelCompEffort.LOW), exit()
     for eft in list(SelCompEffort):
         for ib in list(range(30)):
-            if not run_experiment(ib, eft, n_repeat=8):
+            if not run_experiment(ib, eft, n_repeat=4, do_run=False):
                 break
     # for eft in list(SelCompEffort):
     #     for ib in list(range(30)):

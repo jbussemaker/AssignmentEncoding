@@ -122,10 +122,19 @@ class NodeExistence:
     def __eq__(self, other):
         return hash(self) == hash(other)
 
+    def __repr__(self):
+        src_conn_str = '' if self.src_n_conn_override is None else ';'.join([f'{k}:{",".join([str(vv) for vv in v])}' for k, v in self.src_n_conn_override.items()])
+        tgt_conn_str = '' if self.tgt_n_conn_override is None else ';'.join([f'{k}:{",".join([str(vv) for vv in v])}' for k, v in self.tgt_n_conn_override.items()])
+        return f'{src_conn_str} _ {tgt_conn_str}'
+
 
 @dataclass(frozen=False)
 class NodeExistencePatterns:
     patterns: List[NodeExistence]
+
+    def __post_init__(self):
+        if len(set(self.patterns)) != len(self.patterns):
+            raise RuntimeError('Duplicate node existence patterns')
 
     @classmethod
     def always_exists(cls) -> 'NodeExistencePatterns':

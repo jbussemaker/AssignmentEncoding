@@ -132,9 +132,10 @@ existence schemes that are activated based on the other design variables.
 
 This leads to a distinction between different types of imputation ratios:
 - Assignment sub-problem imputation ratio over all existence scheme (*encoder total*)
-- Assignment sub-problem imputation ratio for a specific existence scheme
+- Assignment sub-problem imputation ratio for some aggregation over the existence scheme-specific ratios
+  - For example: max, min, mean, geometric mean (*encoder max*, *encoder min*, etc.)
   - Here, the existence scheme with the lowest imputation ratio represents the largest matrix, and is therefore most
-    relevant for encoder comparison and selection (*encoder min*)
+    relevant for encoder comparison and selection
 - Optimization problem imputation ratio (*problem-level*)
 
 ## Hypotheses
@@ -251,7 +252,8 @@ Suggested selection:
 - The selector algorithm consists of the following steps:
   - Pre-generate the matrix (and cache it)
   - Encode lazy encoders; for each calculate the imputation ratio (using pre-generated matrix) and information index
-    - The minimum encoder imputation ratio is taken, as this represents the largest matrix
+    - Several imputation ratios can be used, with different existence-wise aggregations:
+      the **total imputation** ratio is most effective at selecting suitable encoders
     - Additionally encode eager encoders if `n_mat <= n_mat_eager_max`
     - Stop encoding (and skip) if encoding time exceeds `encoding_time_limit`
   - Select the best lazy encoder according to the division-scoring algorithm (considering priority areas 1 to 4)
@@ -274,6 +276,7 @@ Suggested selection:
   - The best encoder is selected from the division with the highest priority that contains 1 or more encoders:
     - Determine minimum imputation ratio within the division
     - From the encoders that have this minimum imputation ratio, select the one with the highest information index
+    - If there are multiple best encoders, preference is given to eager encoders due to faster imputation
 - Total selection time (not cached) is greatly influenced by `n_mat_eager_max` and `encoding_time_limit`
   - For lower time values (`n_mat_eager_max ~ 1000`, `encoding_time_limit ~ .5`), many encoders are skipped
   - However, increasing the allowed time does not result in better encoding scores and optimization results

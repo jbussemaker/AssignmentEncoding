@@ -80,7 +80,7 @@ class GroupedEncoder(EagerEncoder):
 
         # Normalize design vectors
         if not normalize_within_group:
-            design_vectors = cls._normalize_design_vectors(design_vectors)
+            design_vectors = cls.normalize_design_vectors(design_vectors)
 
         # Remove columns where there are no alternatives
         has_alternatives = np.any(design_vectors > 0, axis=0)

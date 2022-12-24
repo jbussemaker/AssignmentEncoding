@@ -152,7 +152,7 @@ class EagerEncoder(Encoder):
         self._design_vectors = des_vectors = {existence: self._encode(mat) for existence, mat in matrix.items()}
         self._design_vector_map = {existence: {tuple(dv): i for i, dv in enumerate(des_vec)}
                                    for existence, des_vec in des_vectors.items()}
-        self._design_vars = self._get_design_variables(des_vectors)
+        self._design_vars = self.get_design_variables(des_vectors)
         self._imputer.initialize(matrix, self._design_vectors, self._design_vars)
 
     def set_imputer(self, imputer: EagerImputer):
@@ -238,6 +238,8 @@ class EagerEncoder(Encoder):
                 return [0]*len(vector)+extra_vector, null_matrix
 
             vector, matrix = self._imputer.impute(vector, existence, matrix_mask)
+            if len(vector) < n_dv:
+                vector = list(vector)+[0]*(n_dv-len(vector))
             return list(vector)+extra_vector, matrix
 
         # Design vector directly maps to possible matrix
@@ -331,7 +333,8 @@ class EagerEncoder(Encoder):
             mask[i_mat] = True
         return mask
 
-    def _get_design_variables(self, design_vectors: Dict[NodeExistence, np.ndarray]) -> List[DiscreteDV]:
+    @classmethod
+    def get_design_variables(cls, design_vectors: Dict[NodeExistence, np.ndarray]) -> List[DiscreteDV]:
         """Convert possible design vectors to design variable definitions"""
         design_vars_list = []
         for des_vectors in design_vectors.values():
@@ -350,7 +353,7 @@ class EagerEncoder(Encoder):
             design_vars_list.append([DiscreteDV(n_opts=n_opts) for n_opts in n_opts_max])
 
         # Merge design variables
-        design_vars = self.merge_design_vars(design_vars_list)
+        design_vars = cls.merge_design_vars(design_vars_list)
         for dv in design_vars:
             if dv.n_opts <= 1:
                 raise RuntimeError('All design variables must have at least two options')
@@ -373,7 +376,7 @@ class EagerEncoder(Encoder):
         return flatten_matrix(matrix)
 
     @staticmethod
-    def _normalize_design_vectors(design_vectors: np.ndarray, remove_gaps=True) -> np.ndarray:
+    def normalize_design_vectors(design_vectors: np.ndarray, remove_gaps=True) -> np.ndarray:
         """Move lowest values to 0 and eliminate value gaps."""
 
         # Check if there are no design vectors defined
