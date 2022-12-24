@@ -9,7 +9,7 @@ def test_selector():
     tgt = [Node([0, 1], repeated_allowed=False) for _ in range(4)]
     selector = EncoderSelector(src, tgt)
 
-    assert selector._get_n_mat() == 12
+    assert selector._get_n_mat() == (12, 1)
 
     assignment_manager = selector._get_best_assignment_manager()
     assert isinstance(assignment_manager, AssignmentManagerBase)
@@ -24,7 +24,7 @@ def test_selector_inf_idx_filter():
     selector = EncoderSelector(src, tgt)
     selector.n_mat_max_eager = 1
     selector.min_information_index = 1.2
-    assert selector._get_n_mat() == 12
+    assert selector._get_n_mat() == (12, 1)
 
     assignment_manager = selector._get_best_assignment_manager()
     assert isinstance(assignment_manager, AssignmentManagerBase)
