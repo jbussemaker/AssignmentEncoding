@@ -9,6 +9,7 @@ from assign_enc.time_limiter import *
 from assign_enc.lazy_encoding import *
 from assign_enc.encoder_registry import *
 from assign_enc.assignment_manager import *
+from assign_enc.cache import get_cache_path
 
 __all__ = ['EncoderSelector']
 
@@ -193,5 +194,6 @@ class EncoderSelector:
         return AggregateAssignmentMatrixGenerator.get_cache_key(self.src, self.tgt, ex_idx, self.existence_patterns)
 
     def _cache_path(self, sub_path=None):
-        cache_folder = os.path.join(os.path.dirname(__file__), '.encoder_cache')
-        return cache_folder if sub_path is None else os.path.join(cache_folder, sub_path)
+        sel_cache_folder = 'encoder_cache'
+        sub_path = os.path.join(sel_cache_folder, sub_path) if sub_path is not None else sel_cache_folder
+        return get_cache_path(sub_path=sub_path)

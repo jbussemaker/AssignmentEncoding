@@ -8,6 +8,7 @@ import functools
 import numpy as np
 from typing import *
 from dataclasses import dataclass
+from assign_enc.cache import get_cache_path
 
 __all__ = ['Node', 'NodeExistence', 'NodeExistencePatterns', 'AggregateAssignmentMatrixGenerator', 'count_n_pool_take',
            'MatrixMap', 'MatrixMapOptional', 'count_src_to_target']
@@ -369,8 +370,9 @@ class AggregateAssignmentMatrixGenerator:
         return hashlib.md5(cache_str.encode('utf-8')).hexdigest()
 
     def _cache_path(self, sub_path=None):
-        cache_folder = os.path.join(os.path.dirname(__file__), '.matrix_cache')
-        return cache_folder if sub_path is None else os.path.join(cache_folder, sub_path)
+        sel_cache_folder = 'matrix_cache'
+        sub_path = os.path.join(sel_cache_folder, sub_path) if sub_path is not None else sel_cache_folder
+        return get_cache_path(sub_path=sub_path)
 
     def _agg_matrices(self, matrix_gen, ensure_all_existence=False):
         """Aggregate generated matrices into one big matrix, one per existence pattern"""
