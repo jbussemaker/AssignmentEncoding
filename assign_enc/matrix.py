@@ -414,7 +414,8 @@ class AggregateAssignmentMatrixGenerator:
         for matrix, _ in self.iter_matrices():
             yield tuple(self.get_conns(matrix))
 
-    def get_conn_idx(self, matrix: np.ndarray) -> List[Tuple[int, int]]:
+    @staticmethod
+    def get_conn_idx(matrix: np.ndarray) -> List[Tuple[int, int]]:
         """Convert matrix to edge tuples"""
         edges = []
         for i_src in range(matrix.shape[0]):
