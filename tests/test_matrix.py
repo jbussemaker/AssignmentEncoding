@@ -640,3 +640,25 @@ def test_combination_problem():
 
 def test_one_to_one_mapping(gen_one_per_existence: AggregateAssignmentMatrixGenerator):
     assert gen_one_per_existence.count_all_matrices() == 1
+
+
+def test_no_tgt():
+    gen = AggregateAssignmentMatrixGenerator(src=[Node([1])], tgt=[])
+    matrix = gen.get_agg_matrix()[NodeExistence()]
+    assert matrix.shape[0] == 0
+
+    gen = AggregateAssignmentMatrixGenerator(src=[Node([0, 1])], tgt=[])
+    matrix = gen.get_agg_matrix()[NodeExistence()]
+    assert matrix.shape[0] == 1
+    assert gen.get_conn_idx(matrix[0, :, :]) == []
+
+
+def test_no_src():
+    gen = AggregateAssignmentMatrixGenerator(src=[], tgt=[Node([1])])
+    matrix = gen.get_agg_matrix()[NodeExistence()]
+    assert matrix.shape[0] == 0
+
+    gen = AggregateAssignmentMatrixGenerator(src=[], tgt=[Node([0, 1])])
+    matrix = gen.get_agg_matrix()[NodeExistence()]
+    assert matrix.shape[0] == 1
+    assert gen.get_conn_idx(matrix[0, :, :]) == []

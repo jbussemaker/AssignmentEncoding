@@ -501,13 +501,19 @@ class AggregateAssignmentMatrixGenerator:
 
         # If we have an amount constraint, use the matrix generation algorithm
         if n is not None:
-            n_conn_max = [max(n_conn) for n_conn in n_conns]
+            # Check if we have no connection slots available
+            if len(n_conns) == 0:
+                if n == 0:  # If zero connections are allowed, return an empty solution
+                    yield tuple()
+                return
+
+            n_conn_max = [max(n_conn) if len(n_conn) > 0 else 0 for n_conn in n_conns]
             n_tgt_combs = count_src_to_target(n_src=n, n_src_to_target=tuple(n_conn_max))
 
             # Filter out invalid amounts
             for i_tgt, n_conn in enumerate(n_conns):
                 tgt_n_conns = n_tgt_combs[:, i_tgt]
-                n_invalid = set(tgt_n_conns).difference(set(n_conn))
+                n_invalid = set(tgt_n_conns) - set(n_conn)
                 if len(n_invalid) > 0:
                     invalid_mask = np.zeros((len(tgt_n_conns),), dtype=bool)
                     for n in n_invalid:
@@ -620,8 +626,8 @@ class AggregateAssignmentMatrixGenerator:
         """
 
         # Check if we have any source connections
-        if len(n_src_conn) == 0:
-            return np.empty((0, 0, len(n_tgt_conn)), dtype=int)
+        if len(n_src_conn) == 0 or len(n_tgt_conn) == 0:
+            return np.zeros((1, len(n_src_conn), len(n_tgt_conn)), dtype=int)
 
         # Generate matrices
         return self._get_matrices_numpy(n_src_conn, n_tgt_conn)  # No compilation time
