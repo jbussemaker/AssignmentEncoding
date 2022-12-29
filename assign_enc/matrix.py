@@ -65,9 +65,13 @@ class NodeExistence:
             tgt_exists: Union[List[bool], np.ndarray] = None,
             src_n_conn_override: Dict[int, List[int]] = None,
             tgt_n_conn_override: Dict[int, List[int]] = None,
+            max_src_conn_override: int = None,
+            max_tgt_conn_override: int = None,
     ):
         self.src_n_conn_override = self._get_n_conn_override(src_exists, src_n_conn_override)
         self.tgt_n_conn_override = self._get_n_conn_override(tgt_exists, tgt_n_conn_override)
+        self.max_src_conn_override = max_src_conn_override
+        self.max_tgt_conn_override = max_tgt_conn_override
         self._hash = None
 
     @staticmethod
@@ -117,6 +121,7 @@ class NodeExistence:
             self._hash = hash((
                 tuple([(k, tuple(v)) for k, v in self.src_n_conn_override.items()]) if self.src_n_conn_override is not None else -1,
                 tuple([(k, tuple(v)) for k, v in self.tgt_n_conn_override.items()]) if self.tgt_n_conn_override is not None else -1,
+                self.max_src_conn_override, self.max_tgt_conn_override,
             ))
         return self._hash
 
@@ -126,7 +131,9 @@ class NodeExistence:
     def __repr__(self):
         src_conn_str = '' if self.src_n_conn_override is None else ';'.join([f'{k}:{",".join([str(vv) for vv in v])}' for k, v in self.src_n_conn_override.items()])
         tgt_conn_str = '' if self.tgt_n_conn_override is None else ';'.join([f'{k}:{",".join([str(vv) for vv in v])}' for k, v in self.tgt_n_conn_override.items()])
-        return f'{src_conn_str} _ {tgt_conn_str}'
+        max_src_conn_str = f' ms{self.max_src_conn_override}' if self.max_src_conn_override is not None else ''
+        max_tgt_conn_str = f' mt{self.max_tgt_conn_override}' if self.max_tgt_conn_override is not None else ''
+        return f'{src_conn_str} _ {tgt_conn_str}{max_src_conn_str}{max_tgt_conn_str}'
 
 
 @dataclass(frozen=False)
@@ -230,8 +237,8 @@ class AggregateAssignmentMatrixGenerator:
         self._exist = None
         self.existence_patterns = existence_patterns
         self._max_conn = max_conn
-        self._max_src_appear = None
-        self._max_tgt_appear = None
+        self._max_src_appear = {}
+        self._max_tgt_appear = {}
         self._no_repeat_mat = None
         self._conn_blocked_mat = None
 
@@ -273,17 +280,21 @@ class AggregateAssignmentMatrixGenerator:
             self._max_conn = self._get_max_conn()
         return self._max_conn
 
-    @property
-    def max_src_appear(self):
-        if self._max_src_appear is None:
-            self._max_src_appear = self._get_max_appear(self.tgt)
-        return self._max_src_appear
+    def get_max_src_appear(self, existence: NodeExistence = None):
+        if existence is None:
+            existence = NodeExistence()
+        if existence not in self._max_src_appear:
+            self._max_src_appear[existence] = \
+                self._get_max_appear(self.tgt, n_max_override=existence.max_src_conn_override)
+        return self._max_src_appear[existence]
 
-    @property
-    def max_tgt_appear(self):
-        if self._max_tgt_appear is None:
-            self._max_tgt_appear = self._get_max_appear(self.src)
-        return self._max_tgt_appear
+    def get_max_tgt_appear(self, existence: NodeExistence = None):
+        if existence is None:
+            existence = NodeExistence()
+        if existence not in self._max_tgt_appear:
+            self._max_tgt_appear[existence] = \
+                self._get_max_appear(self.src, n_max_override=existence.max_tgt_conn_override)
+        return self._max_tgt_appear[existence]
 
     @property
     def no_repeat_mask(self):
@@ -330,12 +341,14 @@ class AggregateAssignmentMatrixGenerator:
     def _load_agg_matrix_from_cache(self) -> Optional[MatrixMap]:
         return self._load_from_cache(self._get_cache_file())
 
-    def _write_to_cache(self, cache_path, obj):
+    @staticmethod
+    def _write_to_cache(cache_path, obj):
         os.makedirs(os.path.dirname(cache_path), exist_ok=True)
         with open(cache_path, 'wb') as fp:
             pickle.dump(obj, fp)
 
-    def _load_from_cache(self, cache_path):
+    @staticmethod
+    def _load_from_cache(cache_path):
         if os.path.exists(cache_path):
             with open(cache_path, 'rb') as fp:
                 return pickle.load(fp)
@@ -369,7 +382,8 @@ class AggregateAssignmentMatrixGenerator:
         cache_str = '||'.join([src_cache_key, tgt_cache_key, excluded_cache_key, exist_cache_key])
         return hashlib.md5(cache_str.encode('utf-8')).hexdigest()
 
-    def _cache_path(self, sub_path=None):
+    @staticmethod
+    def _cache_path(sub_path=None):
         sel_cache_folder = 'matrix_cache'
         sub_path = os.path.join(sel_cache_folder, sub_path) if sub_path is not None else sel_cache_folder
         return get_cache_path(sub_path=sub_path)
@@ -472,21 +486,28 @@ class AggregateAssignmentMatrixGenerator:
                 for n_tgt_conn in self.iter_targets(n_source=sum(n_src_conn), existence=exist):
                     yield n_src_conn, n_tgt_conn, exist
 
-    def iter_existence(self):
+    def iter_existence(self, include_none=False):
         yield from self.existence_patterns.patterns
+        if include_none:
+            yield NodeExistence()
 
     def iter_sources(self, existence: NodeExistence = None):
         n_conn_override = existence.src_n_conn_override if existence is not None else None
-        yield from self._iter_conn_slots(self.src, n_conn_override=n_conn_override)
+        max_conn = self.get_max_src_appear(existence) if existence is not None else None
+        yield from self._iter_conn_slots(self.src, n_conn_override=n_conn_override, max_conn=max_conn)
 
     def iter_targets(self, n_source, existence: NodeExistence = None):
         n_conn_override = existence.tgt_n_conn_override if existence is not None else None
-        yield from self._iter_conn_slots(self.tgt, is_src=False, n=n_source, n_conn_override=n_conn_override)
+        max_conn = self.get_max_tgt_appear(existence) if existence is not None else None
+        yield from self._iter_conn_slots(
+            self.tgt, is_src=False, n=n_source, n_conn_override=n_conn_override, max_conn=max_conn)
 
-    def _iter_conn_slots(self, nodes: List[Node], is_src=True, n=None, n_conn_override: Dict[int, List[int]] = None):
+    def _iter_conn_slots(self, nodes: List[Node], is_src=True, n=None, n_conn_override: Dict[int, List[int]] = None,
+                         max_conn: int = None):
         """Iterate over all combinations of number of connections per nodes."""
 
-        max_conn = self.max_src_appear if is_src else self.max_tgt_appear
+        if max_conn is None:
+            max_conn = self.get_max_src_appear() if is_src else self.get_max_tgt_appear()
 
         if n_conn_override is None:
             n_conn_override = {}
@@ -548,7 +569,7 @@ class AggregateAssignmentMatrixGenerator:
         if existence is None:
             existence = NodeExistence()
         src_n_conn_override = existence.src_n_conn_override if existence.src_n_conn_override is not None else {}
-        max_conn = self.max_src_appear
+        max_conn = self.get_max_src_appear(existence=existence)
         for i, n_src in enumerate(np.sum(matrix, axis=1)):
             if not existence.has_src(i):
                 if n_src > 0:
@@ -561,7 +582,7 @@ class AggregateAssignmentMatrixGenerator:
                 return False
 
         # Check number of target connections
-        max_conn = self.max_tgt_appear
+        max_conn = self.get_max_tgt_appear(existence=existence)
         tgt_n_conn_override = existence.tgt_n_conn_override if existence.tgt_n_conn_override is not None else {}
         for i, n_tgt in enumerate(np.sum(matrix, axis=0)):
             if not existence.has_tgt(i):
@@ -708,13 +729,16 @@ class AggregateAssignmentMatrixGenerator:
         Calculate the maximum number of connections that will be formed, taking infinite connections into account.
         """
 
-        def _max(slots):
-            n_conn = 0
-            for slot in slots:
-                n_conn += max(slot.conns) if not slot.max_inf else max([1, slot.min_conns])
-            return n_conn
+        def _max(nodes):
+            if len(nodes) == 0:
+                return 0
+            return sum([self.get_node_max_conn(node) for node in nodes])
 
         return max([_max(self.src), _max(self.tgt)])
+
+    @staticmethod
+    def get_node_max_conn(node: Node, n_min_max_inf: int = 1):
+        return max(n_min_max_inf, node.min_conns) if node.max_inf else max(node.conns)
 
     @staticmethod
     def _get_min_conns(node: Node) -> int:
@@ -722,12 +746,12 @@ class AggregateAssignmentMatrixGenerator:
             return node.min_conns
         return node.conns[0]
 
-    def _get_max_appear(self, conn_tgt_nodes: List[Node]) -> int:
+    def _get_max_appear(self, conn_tgt_nodes: List[Node], n_max_override: int = None) -> int:
         """
         Calculate the maximum number of times the connection nodes might appear considering repeated connection
         constraints.
         """
-        n_max = self.max_conn
+        n_max = self.max_conn if n_max_override is None else n_max_override
         n_appear = 0
         for tgt_node in conn_tgt_nodes:
             if tgt_node.rep:

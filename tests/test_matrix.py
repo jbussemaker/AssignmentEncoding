@@ -254,6 +254,9 @@ def test_node_existence():
     assert NodeExistence() == NodeExistence()
     assert NodeExistence(src_exists=[True, False]) != NodeExistence(tgt_exists=[True, False])
     assert NodeExistence(src_exists=[True, False]) == NodeExistence(src_exists=[True, False])
+    assert NodeExistence(src_exists=[True, False]) != NodeExistence(src_exists=[True, False], max_src_conn_override=1)
+    assert NodeExistence(src_exists=[True, False], max_src_conn_override=2) != \
+           NodeExistence(src_exists=[True, False], max_src_conn_override=1)
     d = {NodeExistence(): 1, NodeExistence(src_exists=[True, False]): 6}
     assert NodeExistence() in d
     assert NodeExistence(src_exists=[True, False]) in d
@@ -263,6 +266,9 @@ def test_node_existence():
     assert NodeExistence(src_n_conn_override={0: [3]}) == NodeExistence(src_n_conn_override={0: [3]})
     assert NodeExistence(src_n_conn_override={0: [1, 3]}) != NodeExistence(src_n_conn_override={0: [3]})
     assert NodeExistence(src_n_conn_override={0: [3]}) != NodeExistence(tgt_n_conn_override={0: [3]})
+    assert NodeExistence() != NodeExistence(max_src_conn_override=0)
+    assert NodeExistence() != NodeExistence(max_src_conn_override=1)
+    assert NodeExistence(max_tgt_conn_override=1) != NodeExistence(max_src_conn_override=1)
 
 
 def test_matrix_all_inf():
@@ -662,3 +668,31 @@ def test_no_src():
     matrix = gen.get_agg_matrix()[NodeExistence()]
     assert matrix.shape[0] == 1
     assert gen.get_conn_idx(matrix[0, :, :]) == []
+
+
+def test_max_conn_override():
+    existence = [
+        NodeExistence(),
+        NodeExistence(max_src_conn_override=1),
+        NodeExistence(max_tgt_conn_override=1),
+        NodeExistence(max_src_conn_override=1, max_tgt_conn_override=1),
+    ]
+    gen = AggregateAssignmentMatrixGenerator(
+        src=[Node(min_conn=0) for _ in range(2)], tgt=[Node(min_conn=0) for _ in range(2)],
+        existence_patterns=NodeExistencePatterns(patterns=existence))
+
+    matrix_map = gen.get_agg_matrix()
+    assert matrix_map[existence[0]].shape[0] == 26
+    assert matrix_map[existence[1]].shape[0] == 9
+    assert matrix_map[existence[2]].shape[0] == 9
+    assert not np.all(matrix_map[existence[1]] == matrix_map[existence[2]])
+    assert matrix_map[existence[3]].shape[0] == 7
+    assert np.all(matrix_map[existence[3]] == np.array([
+        [[0, 0], [0, 0]],
+        [[0, 0], [0, 1]],
+        [[0, 0], [1, 0]],
+        [[0, 1], [0, 0]],
+        [[1, 0], [0, 0]],
+        [[1, 0], [0, 1]],
+        [[0, 1], [1, 0]],
+    ]))
