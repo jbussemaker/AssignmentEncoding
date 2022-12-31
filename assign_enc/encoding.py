@@ -108,7 +108,7 @@ class Encoder:
         n_dv = len(n_opts)
         if n_dv == 0:
             return 1.
-        n_combinations = np.cumprod(n_opts)[-1]
+        n_combinations = np.cumprod(n_opts, dtype=float)[-1]
         if n_combinations <= 2:
             return 1.
         n_dv_max = np.log2(n_combinations)

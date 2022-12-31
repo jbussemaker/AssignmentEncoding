@@ -113,6 +113,9 @@ def test_information_index():
     assert Encoder.calc_information_index([2, 2, 2]) == 1
     assert Encoder.calc_information_index([10]) == 0
 
+    assert Encoder.calc_information_index([2, 2, 3, 2, 3, 2, 3, 2, 3, 2, 3, 2, 2, 2, 2, 2,
+                                           2, 2, 2, 2, 2, 2, 2, 2, 3, 2, 3, 2, 3, 2, 3]) <= 1.
+
 
 class TwoEncoder(EagerEncoder):
 
