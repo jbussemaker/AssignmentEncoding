@@ -179,7 +179,7 @@ class EagerEncoder(Encoder):
         n_valid = []
         for matrix in self._matrix.values():
             n_total.append(n_design_points)
-            n_valid.append(max(1, matrix.shape[0]))
+            n_valid.append(matrix.shape[0])
         if per_existence:
             return min([n_tot/n_valid[i] for i, n_tot in enumerate(n_total)])
         return sum(n_total)/sum(n_valid)

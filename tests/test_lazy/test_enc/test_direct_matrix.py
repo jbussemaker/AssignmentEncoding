@@ -121,7 +121,7 @@ def test_one_to_one(gen_one_per_existence: AggregateAssignmentMatrixGenerator):
     assert encoder.design_vars[0].n_opts == 2
 
     assert encoder.get_n_design_points() == 2
-    assert encoder.get_imputation_ratio() == 2
+    assert encoder.get_imputation_ratio() == 2.4
     assert encoder.get_information_index() == 1
 
     for i, existence in enumerate(gen_one_per_existence.existence_patterns.patterns):
