@@ -181,8 +181,8 @@ class EagerEncoder(Encoder):
             n_total.append(n_design_points)
             n_valid.append(matrix.shape[0])
         if per_existence:
-            return min([n_tot/n_valid[i] for i, n_tot in enumerate(n_total)])
-        return sum(n_total)/sum(n_valid)
+            return min([n_tot/n_valid[i] if n_valid[i] > 0 else np.inf for i, n_tot in enumerate(n_total)])
+        return sum(n_total)/sum(n_valid) if sum(n_valid) > 0 else np.inf
 
     def _correct_vector_size(self, vector: DesignVector) -> Tuple[DesignVector, int, int]:
         n_dv = len(self.design_vars)

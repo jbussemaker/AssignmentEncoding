@@ -315,3 +315,18 @@ def test_one_to_one(gen_one_per_existence: AggregateAssignmentMatrixGenerator):
         dv, mat = encoder.get_matrix([], existence=existence)
         assert dv == []
         assert mat.shape[0] == len(gen_one_per_existence.src)
+
+
+def test_no_conn(gen_one_per_existence: AggregateAssignmentMatrixGenerator):
+    gen = AggregateAssignmentMatrixGenerator(
+        src=gen_one_per_existence.src, tgt=gen_one_per_existence.tgt,
+        existence_patterns=NodeExistencePatterns(patterns=[gen_one_per_existence.existence_patterns.patterns[-5]]))
+
+    assert gen.count_all_matrices(max_by_existence=False) == 0
+    encoder = DirectZeroEncoder(EagerImputer())
+    encoder.matrix = gen.get_agg_matrix()
+    assert len(encoder.design_vars) == 0
+
+    assert encoder.get_n_design_points() == 1
+    assert np.isinf(encoder.get_imputation_ratio())
+    assert encoder.get_information_index() == 1
