@@ -34,6 +34,7 @@ EAGER_IMPUTERS = [
     lambda: FirstImputer(),
     lambda: AutoModImputer(),
     lambda: AutoModImputer(reverse=True),
+    lambda: DeltaImputer(),
     lambda: ClosestImputer(),
     lambda: ClosestImputer(euclidean=False),
     lambda: ConstraintViolationImputer(),

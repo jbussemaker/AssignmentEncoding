@@ -90,6 +90,8 @@ class RepairedRandomSampling(FloatRandomSampling):
 
     def __init__(self, repair: Repair = None):
         self._repair = repair
+        self.track_x_last_init = False
+        self.x_last_init = None
         super().__init__()
 
     def _do(self, problem, n_samples, **kwargs):
@@ -113,5 +115,7 @@ class RepairedRandomSampling(FloatRandomSampling):
             for i_x in range(n_samples):
                 x[i_x, :] = [np.random.choice(opt_values_i) for opt_values_i in opt_values]
 
+        if self.track_x_last_init:
+            self.x_last_init = x
         x = self._repair.do(problem, Population.new(X=x)).get("X")
         return x
