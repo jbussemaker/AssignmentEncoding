@@ -59,6 +59,18 @@ class EncoderSelector:
         n_mat, n_exist = self._get_n_mat()
         log.info(f'{n_mat} matrices ({n_exist} existence scheme{"s" if n_exist != 1 else ""})')
 
+        def _instantiate_manager(encoder):
+            args = (self.src, self.tgt, encoder)
+            kwargs = {'excluded': self._ex, 'existence_patterns': self.existence_patterns}
+            cls = LazyAssignmentManager if isinstance(encoder, LazyEncoder) else AssignmentManager
+
+            log.info(f'Encoding {encoder!s}')
+            try:
+                with time_limiter(self.encoding_timeout):
+                    return cls(*args, **kwargs)
+            except (TimeoutError, MemoryError):
+                log.info('Encoding timeout!')
+
         def _create_managers(encoders, imputer_factory):
             assignment_mgr = []
             scoring = {'n_des_pts': [], 'imp_ratio': [], 'inf_idx': []}
@@ -67,16 +79,8 @@ class EncoderSelector:
                 encoder = encoder_factory(imputer_factory())
 
                 # Create assignment manager
-                args = (self.src, self.tgt, encoder)
-                kwargs = {'excluded': self._ex, 'existence_patterns': self.existence_patterns}
-                cls = LazyAssignmentManager if isinstance(encoder, LazyEncoder) else AssignmentManager
-
-                log.info(f'Encoding {encoder!s}')
-                try:
-                    with time_limiter(self.encoding_timeout):
-                        assignment_manager = cls(*args, **kwargs)
-                except (TimeoutError, MemoryError):
-                    log.info('Encoding timeout!')
+                assignment_manager = _instantiate_manager(encoder)
+                if assignment_manager is None:
                     continue
 
                 assignment_mgr.append(assignment_manager)
@@ -90,6 +94,11 @@ class EncoderSelector:
                 scoring['imp_ratio'].append(imputation_ratio)
                 scoring['inf_idx'].append(information_index)
             return pd.DataFrame(data=scoring), assignment_mgr
+
+        # Special case if there are no possible connections
+        if n_mat == 0:
+            selected_encoder = DEFAULT_EAGER_ENCODER()
+            return _instantiate_manager(selected_encoder)
 
         # Try lazy encoders
         df_score, assignment_managers = _create_managers(LAZY_ENCODERS, self.lazy_imputer)

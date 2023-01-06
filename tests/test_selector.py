@@ -76,3 +76,10 @@ def test_one_to_one(gen_one_per_existence: AggregateAssignmentMatrixGenerator):
     assert isinstance(assignment_manager, AssignmentManagerBase)
 
     assert len(assignment_manager.design_vars) == 0
+
+
+def test_selector_no_exist():
+    src = [Node([1], repeated_allowed=False)]
+    tgt = [Node([2], repeated_allowed=False)]
+    selector = EncoderSelector(src, tgt)
+    assert isinstance(selector._get_best_assignment_manager(), AssignmentManager)
