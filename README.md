@@ -233,12 +233,24 @@ Conclusions:
 - For eager Amount First groupers, the (Rel) Flat/Coord Idx groupers are very inefficient for large nr of matrices
   - Inefficient in time, memory usage, and imputation ratio
   - For some problems their imputation is low, but then other encoders with low imputation ratio are also available
-- A time limit must be set for eager encoders to prevent runaway encoding time
+- The following eager encoders can be disregarded for selection:
+  - Direct matrix encoding without gap removal: usually results in same metrics as direct matrix, however might be worse
+  - Element grouping without group normalization: results in same metrics, or worse imputation ratio
+  - The relative versions of flat index and coord index location groupers: are same as their non-relative versions
+- Regarding timings:
+  - Sampling time is important to be low, especially for SBO algorithms that sample orders of magnitude more than
+    EA's when searching for infill points
+  - Both eager and lazy encoders can have relatively long encoding times and therefore a time limit should be set
+  - Lazy encoders tend to be faster (~10x) in encoding due to not needing to generate matrices
+  - However, lazy encoders tend to be slower (1 to 2 orders of magnitude) during sampling/decoding
+    for higher imputation ratios due to slow imputers
 
 Suggested selection:
-- First try lazy encoders: try to select an encoder with as low imp ratio as possible and high inf index as possible
-- If none are available, also try eager encoders
-- If still no good ones are available, try enumeration-based encoders (these are eager)
+- Try to select an encoder with as low imp ratio and high inf index as possible
+- Matrix generation can be cached to speed up eager encoder selection
+- Lazy encoders with low imputation ratios are preferred over eager encoders due to faster encoding times
+  (even if the matrix is already pre-generated), and for low imp ratios lazy encoders are not much slower for sampling
+- Only use enumeration-based (eager) encoders if all other encoders result in very high imputation ratios
 - Set a time limit on the encoding process (for each encoder)
 
 #### 5. Selector Algorithm
@@ -253,12 +265,13 @@ Suggested selection:
   - Pre-generate the matrix (and cache it)
   - Encode lazy encoders; for each calculate the imputation ratio (using pre-generated matrix) and information index
     - Several imputation ratios can be used, with different existence-wise aggregations:
-      the **total imputation** ratio is most effective at selecting suitable encoders
+      the **min imputation** ratio is most effective at selecting suitable encoders, because imputers apply for each
+      existence scheme separately, and the min imputation ratio applies to the largest matrix that needs to be imputed
     - Additionally encode eager encoders if `n_mat <= n_mat_eager_max`
     - Stop encoding (and skip) if encoding time exceeds `encoding_time_limit`
   - Select the best lazy encoder according to the division-scoring algorithm (considering priority areas 1 to 4)
   - If none is selected, encode eager encoders (calculate same metrics as for lazy encoders)
-  - Select the best encoder according to the division-scoring algorithm (considering priority areas 1 to 6)
+  - Select the best encoder according to the division-scoring algorithm (considering priority areas 1 to 8)
   - If none is selected, encode enumeration-based encoders
   - Select the best encoder (considering all priority areas)
   - Regardless of how good the finally selected encoder is, this algorithm will always have at least one result:
@@ -268,7 +281,7 @@ Suggested selection:
       is done anyway), their encoding times are close to instant too
 - The division-scoring algorithm works as follows:
   - Given a set of encoders and associated imputation ratio and information index scores, divide them into priorities
-  - Define multiple bands of imputation ratios: ==1, 1-40, 40-80, 80-200, 200+
+  - Define multiple bands of imputation ratios: ==1, 1-10, 10-40, 40-80, 80-200, 200+
   - Define multiple bands of information indices: ==0, 0-.3, .3-.6, .6-1
   - This division is done according to the following division (see also the `selector_areas` plot):
     - For the first two imputation ratio bands, priorities are selected in descending information index order
@@ -288,8 +301,14 @@ Suggested selection:
   - Encoders with information index = 1 all reach very good optimization results
   - Encoders with imputation ratio = 1 reach very good optimization results if information index > approx .5
     - Below that, results are still acceptable
+- Heuristics wrt imputation ratios apply per (sub) assignment problem (due to the effort required to perform
+  imputation), if an architecting problem contains multiple assignment problems, the total imputation ratio can
+  be relatively large (as imputation ratios of independent assignment problems are (approx.) multiplied to get to
+  problem-level imputation ratio) and still result in good optimization results
 
 Conclusion:
 - The selector algorithm is able to select the best encoder for the problem at hand, in a low amount of initial time
   - The result is cached, however, so subsequent encoding requests are close to instant
-- Setting `n_mat_eager_max = 1000` and `encoding_time_limit = .5` result in good results, within max 8 sec
+- Setting `n_mat_eager_max = 1000` and `encoding_time_limit = .15` result in good results, within max 8 sec
+  - This is a good setting for use in a user interface, where interactivity is beneficial
+  - However, it should also be possible to increase the time limit to get a better result

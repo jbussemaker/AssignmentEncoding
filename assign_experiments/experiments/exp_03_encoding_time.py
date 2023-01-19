@@ -1,3 +1,4 @@
+# NOTE: results of experiment 04 also include the data needed for concluding this experiment!
 import os
 import timeit
 import numpy as np

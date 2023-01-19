@@ -45,7 +45,7 @@ def calc_initial_hv(problem: AssignmentProblem):
 
 
 def run(results_key, problems, algorithms, algo_names, plot_names=None, n_repeat=8, n_eval_max=300, do_run=True,
-        return_exp=False, do_plot=True):
+        return_exp=False, do_plot=True, only_if_needed=False):
     set_results_folder(results_key)
     exp = get_experimenters(problems, algorithms, n_eval_max=n_eval_max, algorithm_names=algo_names,
                             plot_names=plot_names)
@@ -55,7 +55,7 @@ def run(results_key, problems, algorithms, algo_names, plot_names=None, n_repeat
     import matplotlib
     matplotlib.use('Agg')
     if do_run:
-        run_effectiveness_multi(exp, n_repeat=n_repeat)
+        run_effectiveness_multi(exp, n_repeat=n_repeat, only_if_needed=only_if_needed)
     if do_plot:
         plot_metric_values = {
             'delta_hv': ['delta_hv'],
@@ -127,7 +127,8 @@ def get_experimenters(problems: Union[List[Problem], Problem], algorithms: Union
                 for i, problem in enumerate(problems)]
 
 
-def run_effectiveness_multi(experimenters: List[Experimenter], n_repeat=12, reset=False, agg_align_end=False):
+def run_effectiveness_multi(experimenters: List[Experimenter], n_repeat=12, reset=False, agg_align_end=False,
+                            only_if_needed=False):
     """Runs the effectiveness experiment using multiple algorithms, repeated a number of time for each algorithm."""
     Experimenter.capture_log()
     log.info('Running effectiveness experiments: %d algorithms @ %d repetitions (%d total runs)' %
@@ -136,8 +137,12 @@ def run_effectiveness_multi(experimenters: List[Experimenter], n_repeat=12, rese
     if reset:
         reset_results()
     for exp in experimenters:
-        exp.run_effectiveness_parallel(n_repeat=n_repeat)
-        agg_res = exp.get_aggregate_effectiveness_results(force=True, align_end=agg_align_end)
+        if only_if_needed and exp.has_aggregate_effectiveness_results():
+            agg_res = exp.get_aggregate_effectiveness_results(align_end=agg_align_end)
+            log.info(f'Aggregate results already available, skipping {exp.problem.name()} / {exp.algorithm_name}')
+        else:
+            exp.run_effectiveness_parallel(n_repeat=n_repeat)
+            agg_res = exp.get_aggregate_effectiveness_results(force=True, align_end=agg_align_end)
 
         agg_res.export_pandas().to_pickle(exp.get_problem_algo_results_path('result_agg_df.pkl'))
         agg_res.save_csv(exp.get_problem_algo_results_path('result_agg.csv'))

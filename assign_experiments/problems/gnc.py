@@ -3,6 +3,7 @@ import numpy as np
 from typing import *
 from assign_enc.matrix import *
 from assign_enc.encoding import *
+from assign_enc.selector import *
 from assign_pymoo.problem import *
 from assign_enc.assignment_manager import AssignmentManager
 
@@ -69,13 +70,12 @@ class GNCProblem(AssignmentProblem):
             from assign_enc.eager.imputation.closest import ClosestImputer
             from assign_enc.eager.encodings.group_element import ElementGroupedEncoder
             n_nodes_opts = range(1, self.n_max+1) if self.choose_nr else [self.n_max]
-            self._choose_type_manager = manager = AssignmentManager(
+            self._choose_type_manager = manager = EncoderSelector(
                 src=[Node([self.n_max])],
                 tgt=[Node(min_conn=0) for _ in range(3)],  # Connect to three types
-                encoder=ElementGroupedEncoder(ClosestImputer()),
                 existence_patterns=NodeExistencePatterns([  # Make the same nr of connections as we have nodes
                     NodeExistence(src_n_conn_override={0: [n]}) for n in n_nodes_opts]),
-            )
+            ).get_best_assignment_manager()
 
             self._n_dv_type = len(manager.design_vars)
             aux_des_vars += [DiscreteDV(n_opts=dv.n_opts) for i, dv in enumerate(manager.design_vars)]  # Sensor types
@@ -282,6 +282,28 @@ if __name__ == '__main__':
     # p = GNCProblem(DEFAULT_LAZY_ENCODER(), choose_nr=False, n_max=nm, choose_type=True)
     # p = GNCProblem(DEFAULT_LAZY_ENCODER(), choose_nr=True, n_max=nm, choose_type=False)
     # p = GNCProblem(DEFAULT_LAZY_ENCODER(), choose_nr=True, n_max=nm, choose_type=True)
+
+    # import timeit
+    # from assign_enc.lazy_encoding import LazyImputer
+    # from assign_pymoo.sampling import *
+    # problem = GNCProblem(None, choose_nr=False, n_max=4, choose_type=True)
+    # print(f'Encoder: {problem.assignment_manager.encoder!s}')
+    # print(f'Imputation ratio: {problem.get_imputation_ratio()}')
+    # print(f'Information index: {problem.get_information_index()}')
+    # ctm = problem._choose_type_manager.encoder
+    # print(f'Type encoder: {ctm!s} (imp ratio {ctm.get_imputation_ratio()}, inf idx {ctm.get_information_index()})')
+    # sampling_times, n_sample_test = [], 10
+    # for i_test in range(4):
+    #     imputer = problem.assignment_manager.encoder._imputer
+    #     if isinstance(imputer, LazyImputer):
+    #         imputer._impute_cache = {}
+    #
+    #     s = timeit.default_timer()
+    #     sampling = RepairedRandomSampling(repair=problem.get_repair())
+    #     sampling.do(problem, n_sample_test)
+    #     sampling_times.append((timeit.default_timer()-s)/n_sample_test)
+    #     print(f'Time per sample: {sampling_times[-1]:.2g} sec ({i_test+1})')
+    # exit()
 
     print(f'Design space size: {p.get_n_design_points()}')
     print(f'Valid designs: {p.get_n_valid_design_points()}')

@@ -6,19 +6,39 @@ from assign_enc.eager.imputation import *
 
 EAGER_ENCODERS = [
     lambda imp: DirectMatrixEncoder(imp),
-    lambda imp: DirectMatrixEncoder(imp, remove_gaps=False),
+    # lambda imp: DirectMatrixEncoder(imp, remove_gaps=False),
     lambda imp: ElementGroupedEncoder(imp),
-    lambda imp: ElementGroupedEncoder(imp, normalize_within_group=False),
+    # lambda imp: ElementGroupedEncoder(imp, normalize_within_group=False),
 
     lambda imp: AmountFirstGroupedEncoder(imp, TotalAmountGrouper(), OneVarLocationGrouper()),
     lambda imp: AmountFirstGroupedEncoder(imp, SourceAmountGrouper(), OneVarLocationGrouper()),
     lambda imp: AmountFirstGroupedEncoder(imp, SourceAmountFlattenedGrouper(), OneVarLocationGrouper()),
     lambda imp: AmountFirstGroupedEncoder(imp, TargetAmountGrouper(), OneVarLocationGrouper()),
     lambda imp: AmountFirstGroupedEncoder(imp, TargetAmountFlattenedGrouper(), OneVarLocationGrouper()),
+
     lambda imp: AmountFirstGroupedEncoder(imp, TotalAmountGrouper(), FlatIndexLocationGrouper()),
-    lambda imp: AmountFirstGroupedEncoder(imp, TotalAmountGrouper(), RelFlatIndexLocationGrouper()),
+    lambda imp: AmountFirstGroupedEncoder(imp, SourceAmountGrouper(), FlatIndexLocationGrouper()),
+    lambda imp: AmountFirstGroupedEncoder(imp, SourceAmountFlattenedGrouper(), FlatIndexLocationGrouper()),
+    lambda imp: AmountFirstGroupedEncoder(imp, TargetAmountGrouper(), FlatIndexLocationGrouper()),
+    lambda imp: AmountFirstGroupedEncoder(imp, TargetAmountFlattenedGrouper(), FlatIndexLocationGrouper()),
+
+    # lambda imp: AmountFirstGroupedEncoder(imp, TotalAmountGrouper(), RelFlatIndexLocationGrouper()),
+    # lambda imp: AmountFirstGroupedEncoder(imp, SourceAmountGrouper(), RelFlatIndexLocationGrouper()),
+    # lambda imp: AmountFirstGroupedEncoder(imp, SourceAmountFlattenedGrouper(), RelFlatIndexLocationGrouper()),
+    # lambda imp: AmountFirstGroupedEncoder(imp, TargetAmountGrouper(), RelFlatIndexLocationGrouper()),
+    # lambda imp: AmountFirstGroupedEncoder(imp, TargetAmountFlattenedGrouper(), RelFlatIndexLocationGrouper()),
+
     lambda imp: AmountFirstGroupedEncoder(imp, TotalAmountGrouper(), CoordIndexLocationGrouper()),
-    lambda imp: AmountFirstGroupedEncoder(imp, TotalAmountGrouper(), RelCoordIndexLocationGrouper()),
+    lambda imp: AmountFirstGroupedEncoder(imp, SourceAmountGrouper(), CoordIndexLocationGrouper()),
+    lambda imp: AmountFirstGroupedEncoder(imp, SourceAmountFlattenedGrouper(), CoordIndexLocationGrouper()),
+    lambda imp: AmountFirstGroupedEncoder(imp, TargetAmountGrouper(), CoordIndexLocationGrouper()),
+    lambda imp: AmountFirstGroupedEncoder(imp, TargetAmountFlattenedGrouper(), CoordIndexLocationGrouper()),
+
+    # lambda imp: AmountFirstGroupedEncoder(imp, TotalAmountGrouper(), RelCoordIndexLocationGrouper()),
+    # lambda imp: AmountFirstGroupedEncoder(imp, SourceAmountGrouper(), RelCoordIndexLocationGrouper()),
+    # lambda imp: AmountFirstGroupedEncoder(imp, SourceAmountFlattenedGrouper(), RelCoordIndexLocationGrouper()),
+    # lambda imp: AmountFirstGroupedEncoder(imp, TargetAmountGrouper(), RelCoordIndexLocationGrouper()),
+    # lambda imp: AmountFirstGroupedEncoder(imp, TargetAmountFlattenedGrouper(), RelCoordIndexLocationGrouper()),
 ]
 
 DEFAULT_EAGER_ENCODER = lambda: OneVarEncoder(DEFAULT_EAGER_IMPUTER())

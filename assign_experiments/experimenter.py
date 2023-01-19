@@ -341,6 +341,9 @@ class Experimenter:
             i += 1
         return results
 
+    def has_aggregate_effectiveness_results(self) -> bool:
+        return os.path.exists(self._get_agg_effectiveness_result_path())
+
     def get_aggregate_effectiveness_results(self, force=False, align_end=False) -> ExperimenterResult:
         """Returns results aggregated for all individual runs, using mean and std."""
         agg_results_path = self._get_agg_effectiveness_result_path()

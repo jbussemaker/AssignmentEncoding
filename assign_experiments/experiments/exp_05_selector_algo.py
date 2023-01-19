@@ -1,10 +1,15 @@
+import os
 import enum
+import glob
+import shutil
 import timeit
 import logging
 import numpy as np
 import pandas as pd
 from typing import *
 from assign_pymoo.algo import *
+from assign_pymoo.sampling import *
+from assign_enc.lazy_encoding import *
 from assign_experiments.runner import *
 from assign_enc.encoding import Encoder
 from assign_enc.encoder_registry import *
@@ -114,28 +119,44 @@ def exp_selector_imp_ratio_type(i_prob: int, n_repeat=4):
         n_design_points = assignment_manager.encoder.get_n_design_points()
         n_total = []
         n_valid = []
+        all_zero = True
         for matrix in assignment_manager.matrix_gen.get_agg_matrix(cache=True).values():
             n_total.append(n_design_points)
-            n_valid.append(max(1, matrix.shape[0]))
-        return max([n_tot/n_valid[i_ex] for i_ex, n_tot in enumerate(n_total)])
+            n_valid.append(matrix.shape[0])
+            if matrix.shape[0] > 0:
+                all_zero = False
+        if all_zero:
+            return 1.
+        return max([n_tot/n_valid[i_ex] for i_ex, n_tot in enumerate(n_total) if n_valid[i_ex] > 0])
 
     def _imp_ratio_mean_matrix(self, *args, assignment_manager: AssignmentManagerBase = None):
         n_design_points = assignment_manager.encoder.get_n_design_points()
         n_total = []
         n_valid = []
+        all_zero = True
         for matrix in assignment_manager.matrix_gen.get_agg_matrix(cache=True).values():
             n_total.append(n_design_points)
-            n_valid.append(max(1, matrix.shape[0]))
-        return float(np.mean([n_tot/n_valid[i_ex] for i_ex, n_tot in enumerate(n_total)]))
+            n_valid.append(matrix.shape[0])
+            if matrix.shape[0] > 0:
+                all_zero = False
+        if all_zero:
+            return 1.
+        return float(np.mean([n_tot/n_valid[i_ex] for i_ex, n_tot in enumerate(n_total) if n_valid[i_ex] > 0]))
 
     def _imp_ratio_geo_mean_matrix(self, *args, assignment_manager: AssignmentManagerBase = None):
         n_design_points = assignment_manager.encoder.get_n_design_points()
         n_total = []
         n_valid = []
+        all_zero = True
         for matrix in assignment_manager.matrix_gen.get_agg_matrix(cache=True).values():
             n_total.append(n_design_points)
-            n_valid.append(max(1, matrix.shape[0]))
-        return float(np.exp(np.mean([np.log(n_tot/n_valid[i_ex]) for i_ex, n_tot in enumerate(n_total)])))
+            n_valid.append(matrix.shape[0])
+            if matrix.shape[0] > 0:
+                all_zero = False
+        if all_zero:
+            return 1.
+        return float(np.exp(np.mean([
+            np.log(n_tot/n_valid[i_ex]) for i_ex, n_tot in enumerate(n_total) if n_valid[i_ex] > 0])))
 
     imp_ratio_types = [
         ('max_matrix', _imp_ratio_max_matrix),
@@ -146,7 +167,7 @@ def exp_selector_imp_ratio_type(i_prob: int, n_repeat=4):
     ]
 
     stats = {'prob': [], 'config': [], 'enc': [], 'ir_type': [],
-             'n': [], 'n_des_space': [], 'imp_ratio': [], 'imp_ratio_sel': [], 'inf_idx': [],
+             'n': [], 'n_des_space': [], 'imp_ratio': [], 'imp_ratio_tot': [], 'inf_idx': [],
              'n_prob': [], 'n_des_space_prob': [], 'imp_ratio_prob': [], 'inf_idx_prob': [],
              'sel_time': [], 'sel_time_std': [], 'sel_time_no_cache': [], 'sel_time_no_cache_std': []}
     found = False
@@ -197,10 +218,10 @@ def exp_selector_imp_ratio_type(i_prob: int, n_repeat=4):
             stats['ir_type'].append(ir_name)
             stats['n'].append(problem.assignment_manager.matrix_gen.count_all_matrices())
             stats['n_des_space'].append(encoder.get_n_design_points() if not failed else np.nan)
-            imp_ratio = encoder.get_imputation_ratio() if not failed else np.nan
+            imp_ratio = encoder.get_imputation_ratio(per_existence=True) if not failed else np.nan
             stats['imp_ratio'].append(imp_ratio)
-            imp_ratio_sel = encoder.get_imputation_ratio(per_existence=True) if not failed else np.nan
-            stats['imp_ratio_sel'].append(imp_ratio_sel)
+            imp_ratio_tot = encoder.get_imputation_ratio() if not failed else np.nan
+            stats['imp_ratio_tot'].append(imp_ratio_tot)
             inf_idx = encoder.get_information_index() if not failed else np.nan
             stats['inf_idx'].append(inf_idx)
             stats['n_prob'].append(problem.get_n_valid_design_points())
@@ -210,8 +231,8 @@ def exp_selector_imp_ratio_type(i_prob: int, n_repeat=4):
             stats['inf_idx_prob'].append(problem.get_information_index() if not failed else np.nan)
 
             if not failed:
-                log.info(f'Best encoder for {problem!s} = {encoder!s} (imp ratio = {imp_ratio_sel:.2g} '
-                         f'(enc = {imp_ratio:.2g}, prob = {imp_ratio_prob:.2g}), inf idx = {inf_idx:.2f})')
+                log.info(f'Best encoder for {problem!s} = {encoder!s} (imp ratio = {imp_ratio_tot:.2g} '
+                         f'(min = {imp_ratio:.2g}, prob = {imp_ratio_prob:.2g}), inf idx = {inf_idx:.2f})')
 
     if not found:
         return False
@@ -233,7 +254,8 @@ class SelCompEffort(enum.Enum):
     VERY_HIGH = 4
 
 
-def run_experiment(i_batch: int, effort: SelCompEffort, sbo=False, n_repeat=8, do_run=True):
+def run_experiment(i_batch: int, effort: SelCompEffort, sbo=False, n_repeat=8, do_run=True, force_stats=False,
+                   force_plot=False):
     EncoderSelector._global_disable_cache = True
     Experimenter.capture_log()
     pop_size = 30 if sbo else 50
@@ -241,12 +263,14 @@ def run_experiment(i_batch: int, effort: SelCompEffort, sbo=False, n_repeat=8, d
     n_infill = 30
     n_batch = 4
     imp_ratio_limit = 1e4
+    imp_ratio_sample_limit = 100
+    n_sample_test = 100
 
     EncoderSelector.encoding_timeout = {
-        SelCompEffort.VERY_LOW: .25,
-        SelCompEffort.LOW: 2,
-        SelCompEffort.MED: 2,
-        SelCompEffort.HIGH: 10,
+        SelCompEffort.VERY_LOW: .01,
+        SelCompEffort.LOW: .15,
+        SelCompEffort.MED: .5,
+        SelCompEffort.HIGH: 2,
         SelCompEffort.VERY_HIGH: 10,
     }[effort]
     EncoderSelector.n_mat_max_eager = {
@@ -257,11 +281,20 @@ def run_experiment(i_batch: int, effort: SelCompEffort, sbo=False, n_repeat=8, d
         SelCompEffort.VERY_HIGH: 1e5,
     }[effort]
 
+    exp_name = get_exp_name(effort, sbo)
+    set_results_folder(exp_name)
+    res_folder = Experimenter.results_folder
+    stats_init_file = f'{res_folder}/stats_init_{i_batch}.csv'
+    df_init_exists = None
+    if not force_stats and os.path.exists(stats_init_file):
+        df_init_exists = pd.read_csv(stats_init_file)
+
     problems, algorithms, plot_names = [], [], []
     stats = {'prob': [], 'config': [], 'enc': [],
-             'n': [], 'n_des_space': [], 'imp_ratio': [], 'imp_ratio_sel': [], 'inf_idx': [],
+             'n': [], 'n_des_space': [], 'imp_ratio': [], 'imp_ratio_tot': [], 'inf_idx': [],
              'n_prob': [], 'n_des_space_prob': [], 'imp_ratio_prob': [], 'inf_idx_prob': [],
              'sel_time': [], 'sel_time_std': [], 'sel_time_no_cache': [], 'sel_time_no_cache_std': [],
+             'sampling_time_sec': [], 'sampling_time_sec_std': [],
              'hv_doe': [], 'hv_doe_std': [], 'hv_end': [], 'hv_end_std': []}
     i_map = {}
     i_exp = 0
@@ -280,6 +313,7 @@ def run_experiment(i_batch: int, effort: SelCompEffort, sbo=False, n_repeat=8, d
         problem: Optional[AssignmentProblem] = None
         log.info(f'Encoding problem {j+1}/{len(problem_factories)} ({effort.name} effort)')
         failed = False
+        results_exist = False
         for no_cache in [True, False]:
             for i in range(n_repeat):
                 if no_cache:
@@ -297,40 +331,76 @@ def run_experiment(i_batch: int, effort: SelCompEffort, sbo=False, n_repeat=8, d
                 except RuntimeError:
                     problem = problem_factory(DEFAULT_LAZY_ENCODER())
                     raise RuntimeError(f'Failed to select any encoder for {problem!s}!')
+
+                if i == 0 and df_init_exists is not None and \
+                        df_init_exists['enc'].iloc[i_exp] == str(problem.assignment_manager.encoder):
+                    results_exist = True
+                    log.info(f'Results exist for {problem!s} (encoder: {problem.assignment_manager.encoder!s})')
+                    break
+            if results_exist:
+                break
+
         if failed:
             problem = problem_factory(DEFAULT_LAZY_ENCODER())
 
         encoder = problem.assignment_manager.encoder
 
-        stats['sel_time'].append(np.mean(sel_times) if not failed else np.nan)
-        stats['sel_time_std'].append(np.std(sel_times) if not failed else np.nan)
-        stats['sel_time_no_cache'].append(np.mean(sel_times_no_cache) if not failed else np.nan)
-        stats['sel_time_no_cache_std'].append(np.std(sel_times_no_cache) if not failed else np.nan)
-        stats['prob'].append(problem.get_problem_name())
-        stats['config'].append(str(problem))
-        stats['enc'].append(str(encoder))
-        stats['n'].append(problem.assignment_manager.matrix_gen.count_all_matrices(max_by_existence=False))
-        n_exist = len(problem.assignment_manager.matrix_gen.existence_patterns.patterns)
-        stats['n_des_space'].append((encoder.get_n_design_points()*n_exist) if not failed else np.nan)
-        imp_ratio = encoder.get_imputation_ratio(per_existence=True) if not failed else np.nan
-        stats['imp_ratio'].append(imp_ratio)
-        imp_ratio_sel = encoder.get_imputation_ratio() if not failed else np.nan
-        stats['imp_ratio_sel'].append(imp_ratio_sel)
-        inf_idx = encoder.get_information_index() if not failed else np.nan
-        stats['inf_idx'].append(inf_idx)
-        stats['n_prob'].append(problem.get_n_valid_design_points())
-        stats['n_des_space_prob'].append(problem.get_n_design_points() if not failed else np.nan)
-        imp_ratio_prob = problem.get_imputation_ratio() if not failed else np.nan
-        stats['imp_ratio_prob'].append(imp_ratio_prob)
-        stats['inf_idx_prob'].append(problem.get_information_index() if not failed else np.nan)
-        stats['hv_doe'].append(np.nan)
-        stats['hv_doe_std'].append(np.nan)
-        stats['hv_end'].append(np.nan)
-        stats['hv_end_std'].append(np.nan)
+        if results_exist:
+            for col in stats:
+                stats[col].append(df_init_exists[col].iloc[i_exp])
+            imp_ratio_prob = stats['imp_ratio_prob'][-1]
+        else:
+            stats['sel_time'].append(np.mean(sel_times) if not failed else np.nan)
+            stats['sel_time_std'].append(np.std(sel_times) if not failed else np.nan)
+            stats['sel_time_no_cache'].append(np.mean(sel_times_no_cache) if not failed else np.nan)
+            stats['sel_time_no_cache_std'].append(np.std(sel_times_no_cache) if not failed else np.nan)
+            stats['prob'].append(problem.get_problem_name())
+            stats['config'].append(str(problem))
+            stats['enc'].append(str(encoder))
+            stats['n'].append(problem.assignment_manager.matrix_gen.count_all_matrices(max_by_existence=False))
+            n_exist = len(problem.assignment_manager.matrix_gen.existence_patterns.patterns)
+            stats['n_des_space'].append((encoder.get_n_design_points()*n_exist) if not failed else np.nan)
+            imp_ratio = encoder.get_imputation_ratio(per_existence=True) if not failed else np.nan
+            stats['imp_ratio'].append(imp_ratio)
+            imp_ratio_tot = encoder.get_imputation_ratio() if not failed else np.nan
+            stats['imp_ratio_tot'].append(imp_ratio_tot)
+            inf_idx = encoder.get_information_index() if not failed else np.nan
+            stats['inf_idx'].append(inf_idx)
+            stats['n_prob'].append(problem.get_n_valid_design_points())
+            stats['n_des_space_prob'].append(problem.get_n_design_points() if not failed else np.nan)
+            imp_ratio_prob = problem.get_imputation_ratio() if not failed else np.nan
+            stats['imp_ratio_prob'].append(imp_ratio_prob)
+            stats['inf_idx_prob'].append(problem.get_information_index() if not failed else np.nan)
+            stats['hv_doe'].append(np.nan)
+            stats['hv_doe_std'].append(np.nan)
+            stats['hv_end'].append(np.nan)
+            stats['hv_end_std'].append(np.nan)
 
-        if not failed:
-            log.info(f'Best encoder for {problem!s} = {encoder!s} (imp ratio = {imp_ratio_sel:.2g} '
-                     f'(enc = {imp_ratio:.2g}, prob = {imp_ratio_prob:.2g}), inf idx = {inf_idx:.2f})')
+            checked_sampling_time = False
+            if not failed:
+                log.info(f'Best encoder for {problem!s} = {encoder!s} (imp ratio = {imp_ratio_tot:.2g} '
+                         f'(min = {imp_ratio:.2g}, prob = {imp_ratio_prob:.2g}), inf idx = {inf_idx:.2f})')
+
+                if imp_ratio <= imp_ratio_sample_limit:
+                    checked_sampling_time = True
+                    sampling_times = []
+                    for i_test in range(n_repeat):
+                        imputer = problem.assignment_manager.encoder._imputer
+                        if isinstance(imputer, LazyImputer):
+                            imputer._impute_cache = {}
+
+                        s = timeit.default_timer()
+                        sampling = RepairedRandomSampling(repair=problem.get_repair())
+                        sampling.do(problem, n_sample_test)
+                        sampling_times.append((timeit.default_timer()-s)/n_sample_test)
+                        log.info(f'Time per sample: {sampling_times[-1]:.2g} sec ({i_test+1}/{n_repeat})')
+
+                    stats['sampling_time_sec'].append(np.mean(sampling_times))
+                    stats['sampling_time_sec_std'].append(np.std(sampling_times))
+            if not checked_sampling_time:
+                stats['sampling_time_sec'].append(np.nan)
+                stats['sampling_time_sec_std'].append(np.nan)
+
         if failed or imp_ratio_prob > imp_ratio_limit:
             continue
 
@@ -342,24 +412,24 @@ def run_experiment(i_batch: int, effort: SelCompEffort, sbo=False, n_repeat=8, d
             algorithms.append(get_ga_algo(problem, pop_size=pop_size))
         i_map[i_exp] = len(stats['prob'])-1
         i_exp += 1
+
     if not found:
+        _do_plot(effort, sbo=sbo)
         return False
 
     n_eval = pop_size+n_infill if sbo else pop_size*n_gen
     algo_names = ['SBO' if sbo else 'NSGA2']*len(algorithms)
-
-    exp_name = get_exp_name(effort, sbo)
-    set_results_folder(exp_name)
-    res_folder = Experimenter.results_folder
     df = pd.DataFrame(data=stats)
-    df.to_csv(f'{res_folder}/stats_init_{i_batch}.csv')
+    df.to_csv(stats_init_file)
     merge_csv_files(res_folder, 'stats_init', len(problem_factories))
 
     if do_run:
+        if i_batch == 0:
+            pre_copy_exp_04_results(res_folder, effort, sbo)
         if len(problems) == 0:  # Used for testing
             return True
         run(exp_name, problems, algorithms, algo_names=algo_names, plot_names=plot_names, n_repeat=n_repeat,
-            n_eval_max=n_eval, do_run=do_run, do_plot=False)
+            n_eval_max=n_eval, do_run=do_run, do_plot=False, only_if_needed=True)
 
     # Get and plot results
     exp = run(exp_name, problems, algorithms, algo_names=algo_names, plot_names=plot_names, n_repeat=n_repeat,
@@ -374,7 +444,8 @@ def run_experiment(i_batch: int, effort: SelCompEffort, sbo=False, n_repeat=8, d
     stats_file = f'{res_folder}/stats_{i_batch}.csv'
     df.to_csv(stats_file)
     df = merge_csv_files(res_folder, 'stats', len(problem_factories))
-    plot_stats(df, res_folder, effort)
+    if force_plot:
+        plot_stats(df, res_folder, effort)
     return True
 
 
@@ -390,6 +461,24 @@ def _do_plot(effort: SelCompEffort, sbo=False):
 
     df = merge_csv_files(res_folder, 'stats', len(get_problem_factories()))
     plot_stats(df, res_folder, effort, show=False)
+
+
+def pre_copy_exp_04_results(res_folder, effort: SelCompEffort, sbo=False):
+    if effort == SelCompEffort.VERY_LOW:
+        source_folders = glob.glob(f'{res_folder}/../04_metric_consistency*')
+    else:
+        source_folders = [f'{res_folder}/../{get_exp_name(SelCompEffort(effort.value-1), sbo=sbo)}']
+    for source_folder in source_folders:
+        for result_agg_file in glob.glob(f'{source_folder}/*/*/result_agg*'):
+            filename = os.path.basename(result_agg_file)
+            algo_folder = os.path.basename(os.path.dirname(result_agg_file))
+            prob_folder = os.path.basename(os.path.dirname(os.path.dirname(result_agg_file)))
+
+            algo_path = f'{res_folder}/{prob_folder}/{algo_folder}'
+            os.makedirs(algo_path, exist_ok=True)
+            tgt_path = f'{algo_path}/{filename}'
+            if not os.path.exists(tgt_path):
+                shutil.copy(result_agg_file, tgt_path)
 
 
 def plot_stats(df: pd.DataFrame, folder, effort, show=False):
@@ -432,6 +521,7 @@ def plot_stats(df: pd.DataFrame, folder, effort, show=False):
         'inf_idx': 'Information index',
         'sel_time': 'Encoder selection time [s]',
         'sel_time_no_cache': 'Encoder selection time (no matrix cache) [s]',
+        'sampling_time_sec': 'Time per sample [s]',
         'hv_doe': 'HV (doe)',
         'hv_end': 'HV (end)',
         'hv_ratio': 'HV ratio = HV end/doe',
@@ -497,6 +587,7 @@ def plot_stats(df: pd.DataFrame, folder, effort, show=False):
     _plot('n', 'inf_idx', z_col='is_lazy', x_log=True)
     _plot('n', 'sel_time', err_col='sel_time_std', x_log=True, y_log=True)
     _plot('n', 'sel_time_no_cache', err_col='sel_time_no_cache_std', x_log=True, y_log=True)
+    _plot('n', 'sampling_time_sec', err_col='sampling_time_sec_std', x_log=True, y_log=True)
     _plot('n', 'hv_end', err_col='hv_end_std', x_log=True)
     _plot('n', 'hv_end', z_col='imp_ratio', x_log=True, z_log=True)
     _plot('n', 'hv_end', z_col='inf_idx', x_log=True)
@@ -518,6 +609,7 @@ def plot_stats(df: pd.DataFrame, folder, effort, show=False):
     # _plot('imp_ratio', 'inf_idx', z_col='hv_diff', x_log=True)
     _plot('imp_ratio', 'sel_time', x_log=True, y_log=True)
     _plot('imp_ratio', 'sel_time_no_cache', x_log=True, y_log=True)
+    _plot('imp_ratio', 'sampling_time_sec', x_log=True, y_log=True)
     _plot('sel_time', 'sel_time_no_cache', x_log=True, y_log=True, xy_line=True)
 
     if show:
@@ -533,7 +625,7 @@ def plot_selector_areas():
 
     cmap = matplotlib.cm.get_cmap('summer')
 
-    plt.figure(), plt.title('Selector priority areas\n* = only if eager encoders have also been checked')
+    plt.figure(), plt.title('Selector priority areas')  # \n* = only if eager encoders have also been checked')
     ax = plt.gca()
 
     def _add_area(i_area, x, y, only_if_needed=False):
@@ -586,13 +678,13 @@ if __name__ == '__main__':
     #     if not exp_selector_imp_ratio_type(i_prob=ip, n_repeat=4):
     #         break
 
-    # plot_selector_areas(), exit()
+    plot_selector_areas(), exit()
     # _do_plot(SelCompEffort.LOW), exit()
-    for eft in list(SelCompEffort):
-        for ib in list(range(30)):
-            if not run_experiment(ib, eft, n_repeat=4, do_run=False):
-                break
     # for eft in list(SelCompEffort):
+    #     for ib in list(range(30)):
+    #         if not run_experiment(ib, eft, n_repeat=4):
+    #             break
+    # for eft in list(SelCompEffort)[:4]:
     #     for ib in list(range(30)):
     #         if not run_experiment(ib, eft, sbo=True, n_repeat=8):
     #             break

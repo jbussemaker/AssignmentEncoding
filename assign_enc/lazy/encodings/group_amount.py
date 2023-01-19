@@ -142,7 +142,10 @@ class FlatLazyAmountEncoder(LazyAmountEncoder):
         n_existence = self._n_src_n_tgt[existence]
         if len(n_existence) == 0:
             return
-        return n_existence[vector[0]]
+        idx = vector[0]
+        if idx >= len(n_existence):
+            return
+        return n_existence[idx]
 
     def __repr__(self):
         return f'{self.__class__.__name__}()'

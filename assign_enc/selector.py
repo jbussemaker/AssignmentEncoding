@@ -21,9 +21,9 @@ class EncoderSelector:
 
     _global_disable_cache = False  # For testing/experiments
 
-    encoding_timeout = .25  # sec
-    n_mat_max_eager = 1000
-    imputation_ratio_limits = [40, 80, 200]
+    encoding_timeout = .15  # sec
+    n_mat_max_eager = 1e3
+    imputation_ratio_limits = [10, 40, 80, 200]
     min_information_index = .6
 
     def __init__(self, src: List[Node], tgt: List[Node], excluded: List[Tuple[Node, Node]] = None,
@@ -41,13 +41,22 @@ class EncoderSelector:
         if os.path.exists(cache_path):
             os.remove(cache_path)
 
-    def get_best_assignment_manager(self, cache=True) -> AssignmentManager:
+    def get_best_assignment_manager(self, cache=True, limit_time=True) -> AssignmentManager:
         cache_path = self._cache_path(f'{self._get_cache_key()}.pkl')
         if not self._global_disable_cache and cache and os.path.exists(cache_path):
             with open(cache_path, 'rb') as fp:
                 return pickle.load(fp)
 
+        enc_timeout, n_mme = self.encoding_timeout, self.n_mat_max_eager
+        if not limit_time:
+            self.encoding_timeout = 5
+            self.n_mat_max_eager = 1e5
+
         assignment_manager = self._get_best_assignment_manager()
+
+        if not limit_time:
+            self.encoding_timeout, self.n_mat_max_eager = enc_timeout, n_mme
+
         os.makedirs(os.path.dirname(cache_path), exist_ok=True)
         with open(cache_path, 'wb') as fp:
             pickle.dump(assignment_manager, fp)
@@ -111,7 +120,7 @@ class EncoderSelector:
         df_eager, eager_assignment_mgr = _create_managers(EAGER_ENCODERS, self.eager_imputer)
         df_score = pd.concat([df_eager, df_score], ignore_index=True)  # Give preference to eager encoders due to faster imputation
         assignment_managers = eager_assignment_mgr+assignment_managers
-        i_best = self._get_best(df_score, knows_n_mat=n_mat is not None, n_priority=6)
+        i_best = self._get_best(df_score, knows_n_mat=n_mat is not None, n_priority=8)
         if i_best is not None:
             return assignment_managers[i_best]
 
@@ -124,7 +133,10 @@ class EncoderSelector:
             raise RuntimeError(f'Cannot find best encoder, try increasing timeout')
         return assignment_managers[i_best]
 
-    def _get_imp_ratio(self, n_design_points: int, n_mat: int = None, n_exist: int = None, **_) -> float:
+    def _get_imp_ratio(self, n_design_points: int, n_mat: int = None, n_exist: int = None,
+                       assignment_manager: AssignmentManagerBase = None) -> float:
+        if assignment_manager is not None:
+            return assignment_manager.encoder.get_imputation_ratio(per_existence=True)
         return ((n_design_points*n_exist)/n_mat) if n_mat is not None else n_design_points
 
     def reset_agg_matrix_cache(self):
@@ -192,7 +204,7 @@ class EncoderSelector:
             n_existence = len(list(matrix_gen.iter_existence()))
             return n_mat_total, n_existence
         except TimeoutError:
-            pass
+            return None, None
 
     def _get_matrix_gen(self) -> AggregateAssignmentMatrixGenerator:
         return AggregateAssignmentMatrixGenerator(

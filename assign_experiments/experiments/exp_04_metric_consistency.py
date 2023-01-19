@@ -6,7 +6,9 @@ import numpy as np
 import pandas as pd
 from typing import *
 from assign_pymoo.algo import *
+from assign_pymoo.sampling import *
 from assign_enc.time_limiter import *
+from assign_enc.lazy_encoding import *
 from assign_experiments.runner import *
 from assign_enc.encoding import Encoder
 from assign_enc.encoder_registry import *
@@ -16,6 +18,33 @@ from assign_experiments.experimenter import Experimenter
 import matplotlib.pyplot as plt
 
 log = logging.getLogger('assign_exp.exp04')
+
+EXP4_EAGER_ENCODERS = [
+    lambda imp: DirectMatrixEncoder(imp),
+    lambda imp: DirectMatrixEncoder(imp, remove_gaps=False),
+    lambda imp: ElementGroupedEncoder(imp),
+    lambda imp: ElementGroupedEncoder(imp, normalize_within_group=False),
+
+    lambda imp: AmountFirstGroupedEncoder(imp, TotalAmountGrouper(), OneVarLocationGrouper()),
+    lambda imp: AmountFirstGroupedEncoder(imp, SourceAmountGrouper(), OneVarLocationGrouper()),
+    lambda imp: AmountFirstGroupedEncoder(imp, SourceAmountFlattenedGrouper(), OneVarLocationGrouper()),
+    lambda imp: AmountFirstGroupedEncoder(imp, TargetAmountGrouper(), OneVarLocationGrouper()),
+    lambda imp: AmountFirstGroupedEncoder(imp, TargetAmountFlattenedGrouper(), OneVarLocationGrouper()),
+
+    lambda imp: AmountFirstGroupedEncoder(imp, TotalAmountGrouper(), FlatIndexLocationGrouper()),
+    lambda imp: AmountFirstGroupedEncoder(imp, TotalAmountGrouper(), RelFlatIndexLocationGrouper()),
+    lambda imp: AmountFirstGroupedEncoder(imp, SourceAmountGrouper(), FlatIndexLocationGrouper()),
+    lambda imp: AmountFirstGroupedEncoder(imp, SourceAmountFlattenedGrouper(), FlatIndexLocationGrouper()),
+    lambda imp: AmountFirstGroupedEncoder(imp, TargetAmountGrouper(), FlatIndexLocationGrouper()),
+    lambda imp: AmountFirstGroupedEncoder(imp, TargetAmountFlattenedGrouper(), FlatIndexLocationGrouper()),
+
+    lambda imp: AmountFirstGroupedEncoder(imp, TotalAmountGrouper(), CoordIndexLocationGrouper()),
+    lambda imp: AmountFirstGroupedEncoder(imp, TotalAmountGrouper(), RelCoordIndexLocationGrouper()),
+    lambda imp: AmountFirstGroupedEncoder(imp, SourceAmountGrouper(), CoordIndexLocationGrouper()),
+    lambda imp: AmountFirstGroupedEncoder(imp, SourceAmountFlattenedGrouper(), CoordIndexLocationGrouper()),
+    lambda imp: AmountFirstGroupedEncoder(imp, TargetAmountGrouper(), CoordIndexLocationGrouper()),
+    lambda imp: AmountFirstGroupedEncoder(imp, TargetAmountFlattenedGrouper(), CoordIndexLocationGrouper()),
+]
 
 
 class Size(enum.Enum):
@@ -88,8 +117,8 @@ def exp_sbo_convergence(size: Size, n_repeat=8, i_prob=None, do_run=True):
     n_hv_test = [10, 20, 30]
 
     encoders, imputers = [], []
-    assert len(EAGER_ENCODERS) == 13
-    eager_encoders = EAGER_ENCODERS[:9] if size == Size.LG else EAGER_ENCODERS
+    assert len(EXP4_EAGER_ENCODERS) == 21
+    eager_encoders = EXP4_EAGER_ENCODERS[:9] if size == Size.LG else EXP4_EAGER_ENCODERS
 
     encoders += eager_encoders
     imputers += [DEFAULT_EAGER_IMPUTER]*len(eager_encoders)
@@ -223,18 +252,21 @@ def exp_sbo_convergence(size: Size, n_repeat=8, i_prob=None, do_run=True):
     return True
 
 
-def run_experiment(size: Size, sbo=False, n_repeat=8, i_prob=None, do_run=True):
+def run_experiment(size: Size, sbo=False, n_repeat=8, i_prob=None, do_run=True, force_plot=False):
     Experimenter.capture_log()
     pop_size = 30 if sbo else 50
     n_gen = 4 if size == Size.SM else 6
     n_infill = 20
     imp_ratio_limit = 500 if sbo else 1e4
+    imp_ratio_sample_limit = 100
+    n_sample_test = 100
+    n_repeat_timing = (n_repeat*2) if sbo else n_repeat
 
     encoders, imputers = [], []
 
     # For large problems exclude Flat/Coord Idx location groupers
-    assert len(EAGER_ENCODERS) == 13
-    eager_encoders = EAGER_ENCODERS[:9] if size == Size.LG else EAGER_ENCODERS
+    assert len(EXP4_EAGER_ENCODERS) == 21
+    eager_encoders = EXP4_EAGER_ENCODERS  # [:9] if size == Size.LG else EXP4_EAGER_ENCODERS
 
     encoders += eager_encoders
     imputers += [DEFAULT_EAGER_IMPUTER]*len(eager_encoders)
@@ -244,7 +276,8 @@ def run_experiment(size: Size, sbo=False, n_repeat=8, i_prob=None, do_run=True):
     imputers += [DEFAULT_LAZY_IMPUTER]*len(LAZY_ENCODERS)
 
     problems, algorithms, plot_names = [], [], []
-    stats = {'prob': [], 'enc': [], 'n': [], 'n_des_space': [], 'imp_ratio': [], 'inf_idx': [], 'enc_time_sec': [],
+    stats = {'prob': [], 'enc': [], 'n': [], 'n_des_space': [], 'imp_ratio': [], 'inf_idx': [],
+             'enc_time_sec': [], 'enc_time_sec_std': [], 'sampling_time_sec': [], 'sampling_time_sec_std': [],
              'hv_doe': [], 'hv_doe_std': [], 'hv_end': [], 'hv_end_std': []}
     i_map = {}
     i_exp = 0
@@ -257,16 +290,21 @@ def run_experiment(size: Size, sbo=False, n_repeat=8, i_prob=None, do_run=True):
             encoder = encoder_factory(imputers[i]())
             log.info(f'Encoding {problem!s} ({j+1}/{len(base_problems)}) with {encoder!s} ({i+1}/{len(encoders)})')
 
-            s = timeit.default_timer()
+            enc_times = []
             has_encoding_error = False
-            try:
-                with time_limiter(20.):
-                    enc_prob = problem.get_for_encoder(encoder)
-            except (TimeoutError, MemoryError) as e:
-                log.info(f'Could not encode: {e.__class__.__name__}')
-                has_encoding_error = True
+            for i_test in range(n_repeat_timing):
+                try:
+                    with time_limiter(20.):
+                        s = timeit.default_timer()
+                        enc_prob = problem.get_for_encoder(encoder)
+                except (TimeoutError, MemoryError) as e:
+                    log.info(f'Could not encode: {e.__class__.__name__}')
+                    has_encoding_error = True
+                    enc_times.append(timeit.default_timer()-s)
+                    break
+                enc_times.append(timeit.default_timer()-s)
+                log.info(f'Encoded in {enc_times[-1]:.2g} sec ({i_test+1}/{n_repeat_timing})')
 
-            stats['enc_time_sec'].append(timeit.default_timer()-s)
             stats['prob'].append(str(enc_prob))
             stats['enc'].append(str(encoder))
             stats['n'].append(n_valid)
@@ -278,6 +316,27 @@ def run_experiment(size: Size, sbo=False, n_repeat=8, i_prob=None, do_run=True):
             stats['hv_doe_std'].append(np.nan)
             stats['hv_end'].append(np.nan)
             stats['hv_end_std'].append(np.nan)
+
+            stats['enc_time_sec'].append(np.mean(enc_times) if len(enc_times) > 0 else np.nan)
+            stats['enc_time_sec_std'].append(np.std(enc_times))
+            if has_encoding_error or imp_ratio > imp_ratio_sample_limit:
+                stats['sampling_time_sec'].append(np.nan)
+                stats['sampling_time_sec_std'].append(np.nan)
+            else:
+                sampling_times = []
+                for i_test in range(n_repeat_timing):
+                    imputer = enc_prob.assignment_manager.encoder._imputer
+                    if isinstance(imputer, LazyImputer):
+                        imputer._impute_cache = {}
+
+                    s = timeit.default_timer()
+                    sampling = RepairedRandomSampling(repair=enc_prob.get_repair())
+                    sampling.do(enc_prob, n_sample_test)
+                    sampling_times.append((timeit.default_timer()-s)/n_sample_test)
+                    log.info(f'Time per sample: {sampling_times[-1]:.2g} sec ({i_test+1}/{n_repeat_timing})')
+
+                stats['sampling_time_sec'].append(np.mean(sampling_times))
+                stats['sampling_time_sec_std'].append(np.std(sampling_times))
 
             if has_encoding_error or imp_ratio > imp_ratio_limit:
                 continue
@@ -293,7 +352,7 @@ def run_experiment(size: Size, sbo=False, n_repeat=8, i_prob=None, do_run=True):
 
     n_eval = pop_size+n_infill if sbo else pop_size*n_gen
     algo_names = ['SBO' if sbo else 'NSGA2']*len(algorithms)
-    exp_name = f'04_metric_consistency_{size.value}{size.name.lower()}_{algo_names[0].lower()}'
+    exp_name = get_exp_name(size, sbo=sbo)
 
     set_results_folder(exp_name)
     res_folder = Experimenter.results_folder
@@ -306,7 +365,7 @@ def run_experiment(size: Size, sbo=False, n_repeat=8, i_prob=None, do_run=True):
 
     if do_run:
         run(exp_name, problems, algorithms, algo_names=algo_names, plot_names=plot_names, n_repeat=n_repeat,
-            n_eval_max=n_eval, do_run=do_run, do_plot=False)
+            n_eval_max=n_eval, do_run=do_run, do_plot=False, only_if_needed=True)
 
     # Get and plot results
     exp = run(exp_name, problems, algorithms, algo_names=algo_names, plot_names=plot_names, n_repeat=n_repeat,
@@ -327,7 +386,22 @@ def run_experiment(size: Size, sbo=False, n_repeat=8, i_prob=None, do_run=True):
 
     if i_prob is not None:
         df = merge_csv_files(res_folder, 'stats', len(base_problems))
-    plot_stats(df, res_folder, show=not do_run)
+    if force_plot or i_prob is None or i_prob == len(base_problems)-1:
+        plot_stats(df, res_folder, show=not do_run)
+
+
+def get_exp_name(size: Size, sbo=False):
+    algo_name = 'SBO' if sbo else 'NSGA2'
+    return f'04_metric_consistency_{size.value}{size.name.lower()}_{algo_name.lower()}'
+
+
+def _do_plot(size: Size, sbo=False):
+    exp_name = get_exp_name(size, sbo)
+    set_results_folder(exp_name)
+    res_folder = Experimenter.results_folder
+
+    df = merge_csv_files(res_folder, 'stats', len(get_problems(size)))
+    plot_stats(df, res_folder, show=False)
 
 
 def merge_csv_files(res_folder, filename, n):
@@ -337,8 +411,14 @@ def merge_csv_files(res_folder, filename, n):
         if os.path.exists(csv_path):
             df_i = pd.read_csv(csv_path)
             df_merged = df_i if df_merged is None else pd.concat([df_merged, df_i], ignore_index=True)
-    if df_merged is not None:
-        df_merged.to_csv(f'{res_folder}/{filename}.csv')
+    merged_path = f'{res_folder}/{filename}.csv'
+    if df_merged is None:
+        if os.path.exists(merged_path):
+            df_merged = pd.read_csv(merged_path)
+        else:
+            raise RuntimeError(f'Merged data not found: {merged_path}')
+    else:
+        df_merged.to_csv(merged_path)
     return df_merged
 
 
@@ -347,74 +427,90 @@ def plot_stats(df: pd.DataFrame, folder, show=False):
     df['hv_ratio_std'] = df['hv_end_std']/df['hv_doe']
     df['hv_diff'] = df['hv_end']-df['hv_doe']
     df['hv_diff_std'] = df['hv_end_std']-df['hv_doe_std']
-    for col, name in [('hv_end', 'HV end'), ('hv_ratio', 'HV ratio')]:  # , ('hv_diff', r'\delta HV')]:
-        for filter_high_imp_ratio in [False]:  # [False, True]:
-            x, y = df['imp_ratio'].values, df['inf_idx'].values
-            z, z_std = df[col].values, df[col+'_std'].values
-            keep = ~np.isnan(z)
-            if filter_high_imp_ratio:
-                keep &= x < 100
-            x, y, z, z_std = x[keep], y[keep], z[keep], z_std[keep]
 
-            plt.figure(), plt.title(name)
-            c = plt.scatter(x, y, s=50, c=z, cmap='summer')
+    df['has_result'] = has_result = ~np.isnan(df['hv_end'])
+    df['has_timing'] = has_timing = ~np.isnan(df['sampling_time_sec'])
+    df['enc_type'] = np.array([enc.startswith('Lazy') for enc in df.enc.values], dtype=float)
+    df.enc_type[np.array([enc.startswith('Recursive') or enc.startswith('One Var') for enc in df.enc.values])] = .5
+
+    col_names = {
+        'n': 'Nr of valid points',
+        'n_des_space': 'Nr of points in design space',
+        'imp_ratio': 'Imputation ratio',
+        'inf_idx': 'Information index',
+        'enc_time_sec': 'Encoding time [s]',
+        'sampling_time_sec': 'Time per sample [s]',
+        'hv_doe': 'HV (doe)',
+        'hv_doe_std': 'HV (doe) std',
+        'hv_end': 'HV (end)',
+        'hv_end_std': 'HV (end) std',
+        'hv_ratio': 'HV ratio = HV end/doe',
+        'hv_ratio_std': 'HV ratio = HV end/doe (std)',
+        'hv_diff': 'HV diff = HV end-doe',
+        'enc_type': 'Encoder Type (0 = eager, .5 = enum, 1 = lazy)',
+    }
+
+    def _plot(x_col, y_col, err_col=None, z_col=None, x_log=False, y_log=False, z_log=False, xy_line=False, mask=None):
+        x_name, y_name = col_names[x_col], col_names[y_col]
+        z_name = col_names[z_col] if z_col is not None else None
+        plt.figure(figsize=(8, 4))
+        plt.title(f'{x_name} vs {y_name}')
+
+        if mask is None:
+            mask = np.ones((len(df),), dtype=bool)
+        x_all, y_all, z_all, plot_color = [], [], [], False
+        x, y = df[x_col].values[mask], df[y_col].values[mask]
+        z = df[z_col].values[mask] if z_col is not None else None
+        fmt = ''  # '--' if i >= 10 else '-'
+        if err_col is not None:
+            err = df[err_col].values[mask] if err_col is not None else None
+            plt.errorbar(x, y, yerr=err, fmt=fmt, marker='.', markersize=5, capsize=3,
+                         elinewidth=.5, linewidth=.5)
+        if err_col is None or (err_col is not None and z_col is not None):
+            if z_col is None:
+                plt.plot(x, y, fmt, marker='.', markersize=5, linewidth=.5)
+            else:
+                plot_color = True
+        x_all += list(x)
+        y_all += list(y)
+        if z_col is not None:
+            z_all += list(np.log10(z) if z_log else z)
+
+        if plot_color:
+            cmap = 'viridis' if z_col == 'enc_type' else 'inferno'
+            c = plt.scatter(x_all, y_all, s=50, c=z_all, cmap=cmap)
+            plt.colorbar(c).set_label((z_name + ' (log)') if z_log else z_name)
+
+        if xy_line:
+            xy_min, xy_max = min(x_all+y_all), max(x_all+y_all)
+            plt.plot([xy_min, xy_max], [xy_min, xy_max], '--k', linewidth=.5, label='X = Y')
+
+        if x_log:
             plt.gca().set_xscale('log')
-            plt.colorbar(c).set_label('HV (lower is better)')
-            plt.xlabel('Imputation Ratio (min)'), plt.ylabel('Information Index (max)')
+        if y_log:
+            plt.gca().set_yscale('log')
+        plt.xlabel(x_name), plt.ylabel(y_name)
 
-            fig_filename = f'{folder}/{col}'
-            if filter_high_imp_ratio:
-                fig_filename += '_filtered'
-            plt.savefig(fig_filename+'.png')
-            plt.savefig(fig_filename+'.svg')
+        # if err_col is not None or z_col is None:
+        #     plt.legend(loc='center left', bbox_to_anchor=(1, 0.5))
+        plt.tight_layout()
 
-            plt.figure(), plt.title(name)
-            c = plt.scatter(x, y, s=50, c=z_std, cmap='inferno')
-            plt.gca().set_xscale('log')
-            plt.colorbar(c).set_label('Std dev')
-            plt.xlabel('Imputation Ratio (min)'), plt.ylabel('Information Index (max)')
-            plt.savefig(fig_filename+'_std.png')
-            plt.savefig(fig_filename+'_std.svg')
+        filename = f'{folder}/{x_col}_{y_col}{f"_{z_col}" if z_col is not None else ""}' \
+                   f'{f"_{err_col}" if err_col is not None else ""}'
+        plt.savefig(filename+'.png')
+        plt.savefig(filename+'.svg')
 
-            plt.figure(), plt.title(name)
-            enc_time = df['enc_time_sec'].values[keep]
-            is_lazy = np.array([enc.startswith('Lazy') for enc in df['enc'].values[keep]])
-            plt.scatter(x[~is_lazy], enc_time[~is_lazy], s=20, label='Eager')
-            plt.scatter(x[is_lazy], enc_time[is_lazy], s=20, label='Lazy')
-            plt.gca().set_xscale('log'), plt.gca().set_yscale('log')
-            plt.legend(), plt.xlabel('Imputation Ratio (min)'), plt.ylabel('Encoding time [s]')
-            plt.savefig(fig_filename+'_enc_time.png')
-            plt.savefig(fig_filename+'_enc_time.svg')
+    for col in ['hv_end', 'hv_ratio']:
+        _plot('imp_ratio', 'inf_idx', z_col=col, x_log=True, mask=has_result)
+        _plot('imp_ratio', col, z_col=col+'_std', x_log=True, mask=has_result)
+        _plot('imp_ratio', col, z_col='inf_idx', x_log=True, mask=has_result)
+        _plot('imp_ratio', col, z_col='enc_type', x_log=True, mask=has_result)
+        _plot('inf_idx', col, z_col=col+'_std', mask=has_result)
+        _plot('inf_idx', col, z_col='imp_ratio', z_log=True, mask=has_result)
+        _plot('inf_idx', col, z_col='enc_type', mask=has_result)
 
-            plt.figure(), plt.title(name)
-            c = plt.scatter(x, z, s=20, c=z_std, cmap='inferno')
-            plt.gca().set_xscale('log')
-            plt.colorbar(c).set_label('Std dev')
-            plt.xlabel('Imputation Ratio (min)'), plt.ylabel('HV (min)')
-            plt.savefig(fig_filename+'_x.png')
-            plt.savefig(fig_filename+'_x.svg')
-
-            plt.figure(), plt.title(name)
-            c = plt.scatter(y, z, s=20, c=z_std, cmap='inferno')
-            plt.colorbar(c).set_label('Std dev')
-            plt.xlabel('Information Index (max)'), plt.ylabel('HV (min)')
-            plt.savefig(fig_filename+'_y.png')
-            plt.savefig(fig_filename+'_y.svg')
-
-            plt.figure(), plt.title(name)
-            c = plt.scatter(x, z, s=20, c=y, cmap='summer_r')
-            plt.gca().set_xscale('log')
-            plt.colorbar(c).set_label('Information Index (max)')
-            plt.xlabel('Imputation Ratio (min)'), plt.ylabel('HV (min)')
-            plt.savefig(fig_filename+'_x_y.png')
-            plt.savefig(fig_filename+'_x_y.svg')
-
-            plt.figure(), plt.title(name)
-            c = plt.scatter(y, z, s=20, c=np.log10(x), cmap='summer')
-            plt.colorbar(c).set_label('Imputation Ratio (min), log_10')
-            plt.xlabel('Information Index (max)'), plt.ylabel('HV (min)')
-            plt.savefig(fig_filename+'_y_x.png')
-            plt.savefig(fig_filename+'_y_x.svg')
+    _plot('imp_ratio', 'enc_time_sec', z_col='enc_type', x_log=True, y_log=True, mask=has_timing)
+    _plot('imp_ratio', 'sampling_time_sec', z_col='enc_type', x_log=True, y_log=True, mask=has_timing)
 
     if show:
         plt.show()
@@ -434,8 +530,11 @@ if __name__ == '__main__':
     # for ipr in list(range(len(get_problems(Size.MD)))):
     #     exp_sbo_convergence(Size.MD, n_repeat=4, i_prob=ipr)
 
+    # _do_plot(Size.SM), _do_plot(Size.MD), _do_plot(Size.LG), exit()
+    # _do_plot(Size.SM, sbo=True), _do_plot(Size.MD, sbo=True), _do_plot(Size.LG, sbo=True), exit()
+
     run_experiment(Size.SM, n_repeat=8)
-    run_experiment(Size.MD, n_repeat=8)
+    # run_experiment(Size.MD, n_repeat=8)
     # for ipr in list(range(len(get_problems(Size.LG)))):
     #     run_experiment(Size.LG, n_repeat=8, i_prob=ipr)
     # for ipr in list(range(len(get_problems(Size.SM)))):

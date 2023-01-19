@@ -342,8 +342,24 @@ class EagerEncoder(Encoder):
                 continue
 
             # Check if all design vectors are unique
-            if np.unique(des_vectors, axis=0).shape[0] < des_vectors.shape[0]:
-                raise RuntimeError('Not all design vectors are unique!')
+            try:
+                if np.unique(des_vectors, axis=0).shape[0] < des_vectors.shape[0]:
+                    raise RuntimeError('Not all design vectors are unique!')
+            except TypeError:
+                r"""
+                Might be this obscure error:
+                
+                File "<__array_function__ internals>", line 180, in unique
+                  File "C:\Anaconda3\envs\AssignmentEncoding\lib\site-packages\numpy\lib\arraysetops.py", line 317, in unique
+                    output = _unique1d(consolidated, return_index,
+                  File "C:\Anaconda3\envs\AssignmentEncoding\lib\site-packages\numpy\lib\arraysetops.py", line 352, in _unique1d
+                    mask[1:] = aux[1:] != aux[:-1]
+                TypeError: Cannot compare structured arrays unless they have a common dtype.  I.e. `np.result_type(arr1, arr2)` must be defined.
+                """
+                print(f'Des vectors shape: {des_vectors.shape}, dtype: {des_vectors.dtype}')
+                print(repr(des_vectors))
+                print(f'Class: {cls.__name__}; design_vectors: {design_vectors!r}')
+                raise
 
             # Check bounds
             if np.min(des_vectors) != 0:

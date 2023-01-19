@@ -1,3 +1,4 @@
+# NOTE: results of experiment 04 also include the data needed for concluding this experiment!
 from assign_pymoo.algo import *
 from assign_experiments.runner import *
 from assign_enc.encoder_registry import *
