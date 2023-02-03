@@ -27,6 +27,7 @@ def test_encoding():
 
     assert encoder.get_n_design_points() == 48
     assert encoder.get_imputation_ratio() == 48/21
+    assert encoder.get_distance_correlation()
 
 
 def test_encoder_excluded():
@@ -123,6 +124,7 @@ def test_one_to_one(gen_one_per_existence: AggregateAssignmentMatrixGenerator):
     assert encoder.get_n_design_points() == 2
     assert encoder.get_imputation_ratio() == 2.4
     assert encoder.get_information_index() == 1
+    assert encoder.get_distance_correlation() == 1
 
     for i, existence in enumerate(gen_one_per_existence.existence_patterns.patterns):
         dv, mat = encoder.get_matrix([1], existence=existence)

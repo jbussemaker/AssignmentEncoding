@@ -15,23 +15,21 @@ class LazyFirstImputer(LazyImputer):
         if len(vector) == 0:
             return vector, np.zeros((0, 0), dtype=int)
 
+        cache_key = ('found_first', hash(existence))
+        if cache_key in self._impute_cache:
+            return self._impute_cache[cache_key]
+
         # Loop through possible design vectors until one is found that has not been tried yet
-        for dv in itertools.product(*[list(range(dv.n_opts)) for dv in self._des_vars]):
-            dv = tuple(dv)
-            if dv in tried_vectors:
-                continue
-            break
-        else:
-            return vector, np.zeros((0, 0), dtype=int)
+        for dv in itertools.product(*[list(range(dv.n_opts)) for dv in self._des_vars[::-1]]):
+            # Validate this design vector and associated matrix
+            vector = np.array(dv[::-1])
+            matrix = self._decode(vector, existence)
+            if validate(matrix):
+                self._impute_cache[cache_key] = vector, matrix
+                return vector, matrix
 
-        # Validate this design vector and associated matrix
-        vector = np.array(dv)
-        matrix = self._decode(vector, existence)
-        if validate(matrix):
-            return vector, matrix
-
-        # Otherwise, continue imputation
-        return self.impute(vector, matrix, existence, tried_vectors)
+        self._impute_cache[cache_key] = vector, np.zeros((0, 0), dtype=int)
+        return self._impute_cache[cache_key]
 
     def __repr__(self):
         return f'{self.__class__.__name__}()'

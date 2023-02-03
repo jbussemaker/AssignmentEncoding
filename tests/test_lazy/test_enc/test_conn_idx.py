@@ -24,6 +24,8 @@ def test_encoding():
     assert np.all(dv == [0, 0])
     assert mat[0, 0] == -1
 
+    assert encoder.get_distance_correlation()
+
 
 def test_encoding_transpose():
     encoder = LazyConnIdxMatrixEncoder(LazyConstraintViolationImputer(), FlatConnCombsEncoder(), by_src=False)
@@ -96,6 +98,7 @@ def test_one_to_one(gen_one_per_existence: AggregateAssignmentMatrixGenerator):
     assert encoder.get_n_design_points() == 1
     assert encoder.get_imputation_ratio() == 1.2
     assert encoder.get_information_index() == 1
+    assert encoder.get_distance_correlation() == 1
 
     for i, existence in enumerate(gen_one_per_existence.existence_patterns.patterns):
         dv, mat = encoder.get_matrix([], existence=existence)

@@ -12,8 +12,10 @@ from assign_enc.lazy_encoding import *
 from assign_experiments.runner import *
 from assign_enc.encoding import Encoder
 from assign_enc.encoder_registry import *
+from werkzeug.utils import secure_filename
 from assign_pymoo.problem import AssignmentProblem
 from assign_experiments.problems.analytical import *
+from assign_experiments.problems.analytical_multi import *
 from assign_experiments.experimenter import Experimenter
 import matplotlib.pyplot as plt
 
@@ -62,20 +64,15 @@ def _get_problem_factory(cls, **kwargs) -> Callable[[Encoder], AssignmentProblem
 def get_problems(size: Size, return_factories=False) -> Union[List[AssignmentProblem], List[Callable[[Encoder], AssignmentProblem]]]:
     init_enc = lambda: OneVarEncoder(DEFAULT_EAGER_IMPUTER())
     prob_kwargs = [
-        (AnalyticalCombinationProblem, {Size.SM: {'n_tgt': 100}, Size.MD: {'n_tgt': 150},
-                                        Size.LG: {'n_tgt': 200}}, init_enc()),  # Small problem sizes due to extremely large possible imputation ratios
         (AnalyticalAssignmentProblem, {Size.SM: {'n_src': 2, 'n_tgt': 4}, Size.MD: {'n_src': 3, 'n_tgt': 4},
                                        Size.LG: {'n_src': 4, 'n_tgt': 4}}, init_enc()),
         (AnalyticalAssignmentProblem, {Size.SM: {'n_src': 2, 'n_tgt': 4, 'injective': True},
                                        Size.MD: {'n_src': 5, 'n_tgt': 5, 'injective': True},
                                        Size.LG: {'n_src': 6, 'n_tgt': 6, 'injective': True}}, init_enc()),
-        (AnalyticalAssignmentProblem, {Size.SM: {'n_src': 3, 'n_tgt': 4, 'injective': True, 'surjective': True},
-                                       Size.MD: {'n_src': 4, 'n_tgt': 6, 'injective': True, 'surjective': True},
-                                       Size.LG: {'n_src': 5, 'n_tgt': 7, 'injective': True, 'surjective': True}}, init_enc()),
         (AnalyticalAssignmentProblem, {Size.SM: {'n_src': 2, 'n_tgt': 3, 'repeatable': True},
                                        Size.MD: {'n_src': 2, 'n_tgt': 4, 'repeatable': True},
                                        Size.LG: {'n_src': 3, 'n_tgt': 4, 'repeatable': True}}, init_enc()),
-        (AnalyticalPartitioningProblem, {Size.SM: {'n_src': 3, 'n_tgt': 4}, Size.MD: {'n_src': 4, 'n_tgt': 6},
+        (AnalyticalPartitioningProblem, {Size.SM: {'n_src': 3, 'n_tgt': 4}, Size.MD: {'n_src': 4, 'n_tgt': 6},  # Same as bijective assignment problem
                                          Size.LG: {'n_src': 5, 'n_tgt': 7}}, init_enc()),
         (AnalyticalPartitioningProblem, {Size.SM: {'n_src': 2, 'n_tgt': 4, 'covering': True},  # Same as surjective assignment problem
                                          Size.MD: {'n_src': 3, 'n_tgt': 4, 'covering': True},
@@ -108,6 +105,76 @@ def _get_recursive_encoder_factory(n_divide: int):
     def _encoder_factory(imp):
         return RecursiveEncoder(imp, n_divide=n_divide)
     return _encoder_factory
+
+
+def exp_dist_corr_convergence(n_repeat=8):
+    Experimenter.capture_log()
+    n_dist_corr = [10, 20, 50, 100, 200, 500, 1000, 2000, -1]
+
+    problems = [
+        (_get_problem_factory(AnalyticalAssignmentProblem, **{'n_src': 2, 'n_tgt': 4, 'injective': True}), False),
+        (_get_problem_factory(AnalyticalAssignmentProblem, **{'n_src': 5, 'n_tgt': 5, 'injective': True}), False),
+        (_get_problem_factory(AnalyticalAssignmentProblem, **{'n_src': 2, 'n_tgt': 4, 'repeatable': True}), False),
+        (_get_problem_factory(MultiPermIterCombProblem, n_take=3, n=5), True),
+        (_get_problem_factory(MultiPermIterCombProblem, n_take=3, n=7), True),
+    ]
+    lazy_imputer = LazyFirstImputer
+    encoders = [
+        DirectMatrixEncoder(DEFAULT_EAGER_IMPUTER()),
+        AmountFirstGroupedEncoder(DEFAULT_EAGER_IMPUTER(), TotalAmountGrouper(), OneVarLocationGrouper()),
+        AmountFirstGroupedEncoder(DEFAULT_EAGER_IMPUTER(), SourceAmountGrouper(), FlatIndexLocationGrouper()),
+        RecursiveEncoder(DEFAULT_EAGER_IMPUTER(), n_divide=2),
+        LazyDirectMatrixEncoder(lazy_imputer()),
+        LazyConnIdxMatrixEncoder(lazy_imputer(), FlatConnCombsEncoder()),
+        LazyConnIdxMatrixEncoder(lazy_imputer(), FlatConnCombsEncoder(), amount_first=True),
+        LazyConnIdxMatrixEncoder(lazy_imputer(), FlatConnCombsEncoder(), by_src=False),
+        LazyConnIdxMatrixEncoder(lazy_imputer(), GroupedConnCombsEncoder(), amount_first=True),
+        LazyAmountFirstEncoder(lazy_imputer(), SourceTargetLazyAmountEncoder(), FlatLazyConnectionEncoder()),
+    ]
+
+    stats = {'prob': [], 'enc': [], 'type': [], 'n': [], 'imp_ratio': [], 'n_dist_corr': [], 'dist_corr': [], 'dist_corr_std': [],
+             'time_dist_corr': [], 'time_dist_corr_std': []}
+    for i_prob, (prob_factory, min_relevant) in enumerate(problems):
+        for i_enc, encoder in enumerate(encoders):
+            problem = prob_factory(encoder)
+            prob_enc = problem.assignment_manager.encoder
+            for use_min in ([False, True] if min_relevant else [False]):
+                min_str = ' (MIN)' if use_min else ''
+                for n in n_dist_corr:
+                    stats['prob'].append(str(problem))
+                    stats['enc'].append(str(encoder))
+                    stats['type'].append('min' if use_min else 'all')
+                    stats['n'].append(problem.get_n_valid_design_points())
+                    imp_ratio = problem.get_imputation_ratio()
+                    stats['imp_ratio'].append(imp_ratio)
+                    log.info(f'{i_prob+1}/{len(problems)}; {i_enc+1}/{len(encoders)}; @ {n}{min_str}: {problem!s} w/ {encoder!s} (imp ratio = {imp_ratio:.1f})')
+
+                    dist_corr = []
+                    time_dist_corr = []
+                    for i_repeat in range(n_repeat):
+                        s = timeit.default_timer()
+                        if n == -1:
+                            dist_corr_sample = prob_enc.get_distance_correlation(minimum=use_min)
+                        else:
+                            dv_dist, mat_dist = prob_enc._get_distance_correlation(n=n)
+                            if use_min:
+                                dist_corr_sample = min([prob_enc._calc_distance_corr(dvd, mat_dist[idv]) for idv, dvd in enumerate(dv_dist)])
+                            else:
+                                dist_corr_sample = prob_enc._calc_distance_corr(dv_dist, mat_dist)
+                        time_dist_corr.append(timeit.default_timer()-s)
+                        dist_corr.append(dist_corr_sample)
+                        log.info(f'Distance correlation: {dist_corr_sample:.2f} ({time_dist_corr[-1]:.2g} sec, {i_repeat+1}/{n_repeat})')
+
+                    stats['n_dist_corr'].append(n)
+                    stats['dist_corr'].append(np.nanmean(dist_corr))
+                    stats['dist_corr_std'].append(np.nanstd(dist_corr))
+                    stats['time_dist_corr'].append(np.mean(time_dist_corr))
+                    stats['time_dist_corr_std'].append(np.std(time_dist_corr))
+
+    set_results_folder('04_dist_corr_convergence')
+    res_folder = Experimenter.results_folder
+    df = pd.DataFrame(data=stats)
+    df.to_csv(f'{res_folder}/stats.csv')
 
 
 def exp_sbo_convergence(size: Size, n_repeat=8, i_prob=None, do_run=True):
@@ -252,12 +319,12 @@ def exp_sbo_convergence(size: Size, n_repeat=8, i_prob=None, do_run=True):
     return True
 
 
-def run_experiment(size: Size, sbo=False, n_repeat=8, i_prob=None, do_run=True, force_plot=False):
+def run_experiment(size: Size, sbo=False, n_repeat=8, i_prob=None, do_run=True, force_plot=False, force_stats=False):
     Experimenter.capture_log()
     pop_size = 30 if sbo else 50
     n_gen = 4 if size == Size.SM else 6
     n_infill = 20
-    imp_ratio_limit = 500 if sbo else 1e4
+    imp_ratio_limit = 200 if sbo else 500
     imp_ratio_sample_limit = 100
     n_sample_test = 100
     n_repeat_timing = (n_repeat*2) if sbo else n_repeat
@@ -275,12 +342,22 @@ def run_experiment(size: Size, sbo=False, n_repeat=8, i_prob=None, do_run=True, 
     encoders += LAZY_ENCODERS
     imputers += [DEFAULT_LAZY_IMPUTER]*len(LAZY_ENCODERS)
 
+    exp_name = get_exp_name(size, sbo=sbo)
+    set_results_folder(exp_name)
+    res_folder = Experimenter.results_folder
+    stats_file_post = '' if i_prob is None else f'_{i_prob+1}'
+    stats_init_file = f'{res_folder}/stats_init{stats_file_post}.csv'
+    df_init_exists = None
+    if not force_stats and os.path.exists(stats_init_file):
+        df_init_exists = pd.read_csv(stats_init_file)
+
     problems, algorithms, plot_names = [], [], []
-    stats = {'prob': [], 'enc': [], 'n': [], 'n_des_space': [], 'imp_ratio': [], 'inf_idx': [],
-             'enc_time_sec': [], 'enc_time_sec_std': [], 'sampling_time_sec': [], 'sampling_time_sec_std': [],
+    stats = {'prob': [], 'enc': [], 'n': [], 'n_des_space': [], 'imp_ratio': [], 'inf_idx': [], 'dist_corr': [],
+             'enc_time_sec': [], 'enc_time_sec_std': [], 'dist_corr_time_sec': [], 'dist_corr_time_sec_std': [],
+             'sampling_time_sec': [], 'sampling_time_sec_std': [],
              'hv_doe': [], 'hv_doe_std': [], 'hv_end': [], 'hv_end_std': []}
     i_map = {}
-    i_exp = 0
+    i_exp, i_stats = 0, 0
     base_problems = get_problems(size)
     for j, problem in enumerate(base_problems):
         if i_prob is not None and i_prob != j:
@@ -290,54 +367,111 @@ def run_experiment(size: Size, sbo=False, n_repeat=8, i_prob=None, do_run=True, 
             encoder = encoder_factory(imputers[i]())
             log.info(f'Encoding {problem!s} ({j+1}/{len(base_problems)}) with {encoder!s} ({i+1}/{len(encoders)})')
 
-            enc_times = []
             has_encoding_error = False
-            for i_test in range(n_repeat_timing):
-                try:
-                    with time_limiter(20.):
-                        s = timeit.default_timer()
-                        enc_prob = problem.get_for_encoder(encoder)
-                except (TimeoutError, MemoryError) as e:
-                    log.info(f'Could not encode: {e.__class__.__name__}')
+            if df_init_exists is not None and df_init_exists['enc'].iloc[i_stats] == str(encoder):
+                log.info(f'Results exist for {problem!s} (encoder: {encoder!s})')
+                enc_prob = None
+                if np.isnan(df_init_exists['imp_ratio'].iloc[i_stats]):
                     has_encoding_error = True
-                    enc_times.append(timeit.default_timer()-s)
-                    break
-                enc_times.append(timeit.default_timer()-s)
-                log.info(f'Encoded in {enc_times[-1]:.2g} sec ({i_test+1}/{n_repeat_timing})')
+                else:
+                    try:
+                        with time_limiter(20.):
+                            enc_prob = problem.get_for_encoder(encoder)
+                    except (TimeoutError, MemoryError) as e:
+                        log.info(f'Could not encode: {e.__class__.__name__}')
+                        has_encoding_error = True
 
-            stats['prob'].append(str(enc_prob))
-            stats['enc'].append(str(encoder))
-            stats['n'].append(n_valid)
-            stats['n_des_space'].append(enc_prob.get_n_design_points() if not has_encoding_error else np.nan)
-            imp_ratio = enc_prob.get_imputation_ratio() if not has_encoding_error else np.nan
-            stats['imp_ratio'].append(imp_ratio)
-            stats['inf_idx'].append(enc_prob.get_information_index() if not has_encoding_error else np.nan)
-            stats['hv_doe'].append(np.nan)
-            stats['hv_doe_std'].append(np.nan)
-            stats['hv_end'].append(np.nan)
-            stats['hv_end_std'].append(np.nan)
+                imp_ratio = df_init_exists['imp_ratio'].iloc[i_stats]
+                for col in stats:
+                    if col not in df_init_exists.columns:  # or col in ['dist_corr_time_sec', 'dist_corr_time_sec_std']:
+                        if col == 'dist_corr':
+                            stats[col].append(enc_prob.assignment_manager.encoder.get_distance_correlation()
+                                              if not has_encoding_error and imp_ratio < imp_ratio_sample_limit else np.nan)
+                            continue
 
-            stats['enc_time_sec'].append(np.mean(enc_times) if len(enc_times) > 0 else np.nan)
-            stats['enc_time_sec_std'].append(np.std(enc_times))
-            if has_encoding_error or imp_ratio > imp_ratio_sample_limit:
-                stats['sampling_time_sec'].append(np.nan)
-                stats['sampling_time_sec_std'].append(np.nan)
+                        elif col == 'dist_corr_time_sec':
+                            dist_corr_times = []
+                            if not has_encoding_error and imp_ratio < imp_ratio_sample_limit:
+                                enc_prob.assignment_manager.encoder.get_distance_correlation()  # Once for numba jit
+                                for i_test in range(n_repeat_timing):
+                                    s = timeit.default_timer()
+                                    enc_prob.assignment_manager.encoder.get_distance_correlation()
+                                    dist_corr_times.append(timeit.default_timer() - s)
+
+                            log.info(f'Dist corr time: {np.mean(dist_corr_times):.2g}')
+                            stats[col].append(np.mean(dist_corr_times) if len(dist_corr_times) > 0 else np.nan)
+                            stats[col+'_std'].append(np.std(dist_corr_times) if len(dist_corr_times) > 0 else np.nan)
+                            continue
+                        elif col == 'dist_corr_time_sec_std':
+                            continue
+
+                        raise RuntimeError(f'Column not found: {col}')
+                    stats[col].append(df_init_exists[col].iloc[i_stats])
+
             else:
-                sampling_times = []
+                enc_times = []
                 for i_test in range(n_repeat_timing):
-                    imputer = enc_prob.assignment_manager.encoder._imputer
-                    if isinstance(imputer, LazyImputer):
-                        imputer._impute_cache = {}
+                    try:
+                        with time_limiter(20.):
+                            s = timeit.default_timer()
+                            enc_prob = problem.get_for_encoder(encoder)
+                    except (TimeoutError, MemoryError) as e:
+                        log.info(f'Could not encode: {e.__class__.__name__}')
+                        has_encoding_error = True
+                        enc_times.append(timeit.default_timer()-s)
+                        break
+                    enc_times.append(timeit.default_timer()-s)
+                    log.info(f'Encoded in {enc_times[-1]:.2g} sec ({i_test+1}/{n_repeat_timing})')
 
-                    s = timeit.default_timer()
-                    sampling = RepairedRandomSampling(repair=enc_prob.get_repair())
-                    sampling.do(enc_prob, n_sample_test)
-                    sampling_times.append((timeit.default_timer()-s)/n_sample_test)
-                    log.info(f'Time per sample: {sampling_times[-1]:.2g} sec ({i_test+1}/{n_repeat_timing})')
+                stats['prob'].append(str(enc_prob))
+                stats['enc'].append(str(encoder))
+                stats['n'].append(n_valid)
+                stats['n_des_space'].append(enc_prob.get_n_design_points() if not has_encoding_error else np.nan)
+                imp_ratio = enc_prob.get_imputation_ratio() if not has_encoding_error else np.nan
+                stats['imp_ratio'].append(imp_ratio)
+                stats['inf_idx'].append(enc_prob.get_information_index() if not has_encoding_error else np.nan)
+                stats['hv_doe'].append(np.nan)
+                stats['hv_doe_std'].append(np.nan)
+                stats['hv_end'].append(np.nan)
+                stats['hv_end_std'].append(np.nan)
 
-                stats['sampling_time_sec'].append(np.mean(sampling_times))
-                stats['sampling_time_sec_std'].append(np.std(sampling_times))
+                stats['enc_time_sec'].append(np.mean(enc_times) if len(enc_times) > 0 else np.nan)
+                stats['enc_time_sec_std'].append(np.std(enc_times))
+                if has_encoding_error or imp_ratio > imp_ratio_sample_limit:
+                    stats['sampling_time_sec'].append(np.nan)
+                    stats['sampling_time_sec_std'].append(np.nan)
+                    stats['dist_corr'].append(np.nan)
+                    stats['dist_corr_time_sec'].append(np.nan)
+                    stats['dist_corr_time_sec_std'].append(np.nan)
+                else:
+                    sampling_times = []
+                    dist_corr_times = []
+                    dist_corr = np.nan
+                    enc_prob.assignment_manager.encoder.get_distance_correlation()  # Once for numba jit
+                    for i_test in range(n_repeat_timing):
+                        imputer = enc_prob.assignment_manager.encoder._imputer
+                        if isinstance(imputer, LazyImputer):
+                            imputer._impute_cache = {}
 
+                        s = timeit.default_timer()
+                        sampling = RepairedRandomSampling(repair=enc_prob.get_repair())
+                        sampling.do(enc_prob, n_sample_test)
+                        sampling_times.append((timeit.default_timer()-s)/n_sample_test)
+
+                        s = timeit.default_timer()
+                        dist_corr = enc_prob.assignment_manager.encoder.get_distance_correlation()
+                        dist_corr_times.append(timeit.default_timer()-s)
+
+                        log.info(f'Time per sample: {sampling_times[-1]:.2g} sec; '
+                                 f'dist corr time: {dist_corr_times[-1]:.2f} ({i_test+1}/{n_repeat_timing})')
+
+                    stats['sampling_time_sec'].append(np.mean(sampling_times))
+                    stats['sampling_time_sec_std'].append(np.std(sampling_times))
+                    stats['dist_corr'].append(dist_corr)
+                    stats['dist_corr_time_sec'].append(np.mean(dist_corr_times))
+                    stats['dist_corr_time_sec_std'].append(np.std(dist_corr_times))
+
+            i_stats += 1
             if has_encoding_error or imp_ratio > imp_ratio_limit:
                 continue
 
@@ -352,13 +486,8 @@ def run_experiment(size: Size, sbo=False, n_repeat=8, i_prob=None, do_run=True, 
 
     n_eval = pop_size+n_infill if sbo else pop_size*n_gen
     algo_names = ['SBO' if sbo else 'NSGA2']*len(algorithms)
-    exp_name = get_exp_name(size, sbo=sbo)
-
-    set_results_folder(exp_name)
-    res_folder = Experimenter.results_folder
     df = pd.DataFrame(data=stats)
-    stats_file_post = '' if i_prob is None else f'_{i_prob}'
-    df.to_csv(f'{res_folder}/stats_init{stats_file_post}.csv')
+    df.to_csv(stats_init_file)
 
     if i_prob is not None:
         merge_csv_files(res_folder, 'stats_init', len(base_problems))
@@ -438,7 +567,9 @@ def plot_stats(df: pd.DataFrame, folder, show=False):
         'n_des_space': 'Nr of points in design space',
         'imp_ratio': 'Imputation ratio',
         'inf_idx': 'Information index',
+        'dist_corr': 'Distance correlation',
         'enc_time_sec': 'Encoding time [s]',
+        'dist_corr_time_sec': 'Distance correlation time [s]',
         'sampling_time_sec': 'Time per sample [s]',
         'hv_doe': 'HV (doe)',
         'hv_doe_std': 'HV (doe) std',
@@ -450,11 +581,15 @@ def plot_stats(df: pd.DataFrame, folder, show=False):
         'enc_type': 'Encoder Type (0 = eager, .5 = enum, 1 = lazy)',
     }
 
-    def _plot(x_col, y_col, err_col=None, z_col=None, x_log=False, y_log=False, z_log=False, xy_line=False, mask=None):
+    def _plot(x_col, y_col, err_col=None, z_col=None, x_log=False, y_log=False, z_log=False, xy_line=False, mask=None,
+              prefix='', subtitle=None):
         x_name, y_name = col_names[x_col], col_names[y_col]
         z_name = col_names[z_col] if z_col is not None else None
         plt.figure(figsize=(8, 4))
-        plt.title(f'{x_name} vs {y_name}')
+        title = f'{x_name} vs {y_name}'
+        if subtitle is not None:
+            title += '\n'+subtitle
+        plt.title(title)
 
         if mask is None:
             mask = np.ones((len(df),), dtype=bool)
@@ -495,22 +630,50 @@ def plot_stats(df: pd.DataFrame, folder, show=False):
         #     plt.legend(loc='center left', bbox_to_anchor=(1, 0.5))
         plt.tight_layout()
 
-        filename = f'{folder}/{x_col}_{y_col}{f"_{z_col}" if z_col is not None else ""}' \
+        filename = f'{folder}/{prefix}{x_col}_{y_col}{f"_{z_col}" if z_col is not None else ""}' \
                    f'{f"_{err_col}" if err_col is not None else ""}'
         plt.savefig(filename+'.png')
-        plt.savefig(filename+'.svg')
+        if not prefix:
+            plt.savefig(filename+'.svg')
 
-    for col in ['hv_end', 'hv_ratio']:
+    for col in ['hv_end']:  # , 'hv_ratio']:
         _plot('imp_ratio', 'inf_idx', z_col=col, x_log=True, mask=has_result)
+        _plot('imp_ratio', 'dist_corr', z_col=col, x_log=True, mask=has_result)
+        _plot('imp_ratio', 'enc_time_sec', z_col=col, x_log=True, y_log=True, mask=has_result)
+        _plot('inf_idx', 'dist_corr', z_col=col, mask=has_result)
         _plot('imp_ratio', col, z_col=col+'_std', x_log=True, mask=has_result)
         _plot('imp_ratio', col, z_col='inf_idx', x_log=True, mask=has_result)
+        _plot('imp_ratio', col, z_col='dist_corr', x_log=True, mask=has_result)
         _plot('imp_ratio', col, z_col='enc_type', x_log=True, mask=has_result)
+        _plot('imp_ratio', col, z_col='enc_time_sec', x_log=True, z_log=True, mask=has_result)
         _plot('inf_idx', col, z_col=col+'_std', mask=has_result)
         _plot('inf_idx', col, z_col='imp_ratio', z_log=True, mask=has_result)
+        _plot('inf_idx', col, z_col='dist_corr', mask=has_result)
         _plot('inf_idx', col, z_col='enc_type', mask=has_result)
+        _plot('dist_corr', col, z_col=col+'_std', mask=has_result)
+        _plot('dist_corr', col, z_col='imp_ratio', z_log=True, mask=has_result)
+        _plot('dist_corr', col, z_col='enc_type', mask=has_result)
 
     _plot('imp_ratio', 'enc_time_sec', z_col='enc_type', x_log=True, y_log=True, mask=has_timing)
+    _plot('imp_ratio', 'dist_corr_time_sec', z_col='enc_type', x_log=True, y_log=True, mask=has_timing)
     _plot('imp_ratio', 'sampling_time_sec', z_col='enc_type', x_log=True, y_log=True, mask=has_timing)
+    _plot('dist_corr', 'dist_corr_time_sec', z_col='enc_type', y_log=True, mask=has_timing)
+    _plot('inf_idx', 'dist_corr', z_col='enc_type', mask=has_timing)
+    _plot('inf_idx', 'dist_corr', z_col='imp_ratio', z_log=True, mask=has_timing)
+
+    for i, prob in enumerate(list(df.prob.unique())):
+        prob_mask = df.prob == prob
+        prob_prefix = f'{i:02d}_{secure_filename(prob)}'
+        kw = {'mask': prob_mask, 'prefix': prob_prefix, 'subtitle': prob}
+        _plot('imp_ratio', 'inf_idx', z_col='hv_end', x_log=True, **kw)
+        _plot('imp_ratio', 'dist_corr', z_col='hv_end', x_log=True, **kw)
+        _plot('dist_corr', 'hv_end', z_col='imp_ratio', z_log=True, **kw)
+        _plot('dist_corr', 'hv_end', z_col='enc_type', **kw)
+        _plot('inf_idx', 'dist_corr', z_col='hv_end', **kw)
+        _plot('inf_idx', 'dist_corr', z_col='enc_type', **kw)
+        # _plot('inf_idx', 'dist_corr', z_col='imp_ratio', z_log=True, **kw)
+        _plot('imp_ratio', 'enc_time_sec', z_col='enc_type', x_log=True, y_log=True, **kw)
+        _plot('imp_ratio', 'sampling_time_sec', z_col='enc_type', x_log=True, y_log=True, **kw)
 
     if show:
         plt.show()
@@ -525,6 +688,8 @@ if __name__ == '__main__':
     # show_problem_sizes(Size.MD), exit()
     # show_problem_sizes(Size.LG), exit()
 
+    # exp_dist_corr_convergence(), exit()
+
     # for ipr in list(range(len(get_problems(Size.SM)))):
     #     exp_sbo_convergence(Size.SM, n_repeat=4, i_prob=ipr)
     # for ipr in list(range(len(get_problems(Size.MD)))):
@@ -533,10 +698,10 @@ if __name__ == '__main__':
     # _do_plot(Size.SM), _do_plot(Size.MD), _do_plot(Size.LG), exit()
     # _do_plot(Size.SM, sbo=True), _do_plot(Size.MD, sbo=True), _do_plot(Size.LG, sbo=True), exit()
 
-    run_experiment(Size.SM, n_repeat=8)
+    # run_experiment(Size.SM, n_repeat=8)
     # run_experiment(Size.MD, n_repeat=8)
-    # for ipr in list(range(len(get_problems(Size.LG)))):
-    #     run_experiment(Size.LG, n_repeat=8, i_prob=ipr)
+    for ipr in list(range(len(get_problems(Size.LG)))):
+        run_experiment(Size.LG, n_repeat=8, i_prob=ipr)
     # for ipr in list(range(len(get_problems(Size.SM)))):
     #     run_experiment(Size.SM, sbo=True, n_repeat=4, i_prob=ipr)
     # for ipr in list(range(len(get_problems(Size.MD)))):

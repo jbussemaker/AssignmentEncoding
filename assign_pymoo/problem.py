@@ -5,6 +5,7 @@ import hashlib
 import numpy as np
 from typing import *
 import concurrent.futures
+import matplotlib.pyplot as plt
 from assign_enc.matrix import *
 from assign_enc.encoding import *
 from assign_enc.selector import *
@@ -98,8 +99,10 @@ class CachedParetoFrontMixin(Problem):
         print('Running PF discovery %d/%d (%d pop, %d gen)' % (i+1, n, pop_size, n_gen))
         return minimize(self, NSGA2(pop_size=pop_size), termination=('n_gen', n_gen))
 
-    def plot_pf(self: Union[Problem, 'CachedParetoFrontMixin'], show_approx_f_range=False, n_sample=100, **kwargs):
-        scatter = Scatter()
+    def plot_pf(self: Union[Problem, 'CachedParetoFrontMixin'], show_approx_f_range=False, n_sample=100,
+                filename=None, show=True, **kwargs):
+        pf = self.pareto_front(**kwargs)
+        scatter = Scatter(close_on_destroy=False)
         if show_approx_f_range:
             scatter.add(self.get_approx_f_range(), s=.1, color='white')
 
@@ -107,8 +110,12 @@ class CachedParetoFrontMixin(Problem):
             Evaluator().eval(self, pop)
             scatter.add(pop.get('F'), s=5)
 
-        scatter.add(self.pareto_front(**kwargs))
-        scatter.show()
+        scatter.add(pf)
+        if filename is not None:
+            scatter.save(filename)
+        if show:
+            scatter.show()
+        plt.close(scatter.fig)
 
     def get_approx_f_range(self, n_sample=1000):
         pop = Initialization(LatinHypercubeSampling()).do(self, n_sample)
@@ -137,9 +144,11 @@ class AssignmentProblem(CachedParetoFrontMixin, Problem):
         src, tgt = self.get_src_tgt_nodes()
         excluded = self.get_excluded_edges()
         existence_patterns = self.get_existence_patterns()
+        self._selector_stage = None
         if encoder is None:
-            assignment_manager = EncoderSelector(
-                src, tgt, excluded=excluded, existence_patterns=existence_patterns).get_best_assignment_manager()
+            selector = EncoderSelector(src, tgt, excluded=excluded, existence_patterns=existence_patterns)
+            assignment_manager = selector.get_best_assignment_manager()
+            self._selector_stage = selector._last_selection_stage
         elif isinstance(encoder, (LazyEncoder, EagerEncoder)):
             args, kwargs = (src, tgt, encoder), {'excluded': excluded, 'existence_patterns': existence_patterns}
             cls = LazyAssignmentManager if isinstance(encoder, LazyEncoder) else AssignmentManager

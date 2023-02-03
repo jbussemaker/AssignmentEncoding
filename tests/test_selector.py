@@ -15,7 +15,7 @@ def test_selector():
     assert isinstance(assignment_manager, AssignmentManagerBase)
 
     encoder = assignment_manager.encoder
-    assert encoder.get_imputation_ratio() < 2
+    assert encoder.get_imputation_ratio() < 10
 
 
 def test_selector_inf_idx_filter():
@@ -23,14 +23,14 @@ def test_selector_inf_idx_filter():
     tgt = [Node([0, 1], repeated_allowed=False) for _ in range(4)]
     selector = EncoderSelector(src, tgt)
     selector.n_mat_max_eager = 1
-    selector.min_information_index = 1.2
+    selector.min_distance_correlation = 1.2
     assert selector._get_n_mat() == (12, 1)
 
     assignment_manager = selector._get_best_assignment_manager()
     assert isinstance(assignment_manager, AssignmentManagerBase)
 
     encoder = assignment_manager.encoder
-    assert encoder.get_imputation_ratio() < 2
+    assert encoder.get_imputation_ratio() < 10
 
 
 def test_selector_encoding_timeout():

@@ -14,20 +14,20 @@ class AnalyticalProblemBase(AssignmentProblem):
     """Test problem where the objective is calculated from the sum of the products of the coefficient of each
     connection, defined by an exponential function."""
 
-    _invert_f2 = False
-
     def __init__(self, encoder, n_src: int = 2, n_tgt: int = 3):
         self._n_src = n_src
         self._n_tgt = n_tgt
-        self.src_coeff, self.tgt_coeff = self.get_coefficients()
+        self.coeff = self.get_coefficients(self._n_src, self._n_tgt)
+        self._invert_f2 = False
+        self._skew_f2 = False
         super().__init__(encoder)
 
     def get_init_kwargs(self) -> dict:
         return {'n_src': self._n_src, 'n_tgt': self._n_tgt}
 
     def get_src_tgt_nodes(self) -> Tuple[List[Node], List[Node]]:
-        src_nodes = [self._get_node(True, i) for i in range(self.src_coeff.shape[1])]
-        tgt_nodes = [self._get_node(False, i) for i in range(self.tgt_coeff.shape[1])]
+        src_nodes = [self._get_node(True, i) for i in range(self.coeff.shape[0])]
+        tgt_nodes = [self._get_node(False, i) for i in range(self.coeff.shape[1])]
         return src_nodes, tgt_nodes
 
     def get_n_obj(self) -> int:
@@ -37,32 +37,26 @@ class AnalyticalProblemBase(AssignmentProblem):
         return self.assignment_manager.matrix_gen.count_all_matrices(max_by_existence=False)
 
     def _do_evaluate(self, conns: List[Tuple[int, int]], x_aux: Optional[DesignVector]) -> Tuple[List[float], List[float]]:
-        coeff_sum = np.zeros((2,))
+        f = np.zeros((2,))
         for i_src, i_tgt in conns:
-            coeff_sum += self.src_coeff[:, i_src]*self.tgt_coeff[:, i_tgt]
-        coeff_sum[0] = -coeff_sum[0]
+            f += self.coeff[i_src, i_tgt, :]
+        f[0] = -f[0]
         if self._invert_f2:
-            coeff_sum[1] = -coeff_sum[1]
+            f[1] = -f[1]
+        if self._skew_f2:
+            f[1] -= .25*f[0]
+            f[0] -= .25*f[1]
         if self.n_obj == 1:
-            return list(coeff_sum)[:1], []
-        return list(coeff_sum), []
-
-    def get_coefficients(self):
-        src_coeff = np.row_stack([self._get_sin_coeff(self._n_src), self._get_cos_coeff(self._n_src)])
-        tgt_coeff = np.row_stack([self._get_sin_coeff(self._n_tgt), self._get_cos_coeff(self._n_tgt)])
-        return src_coeff, tgt_coeff
+            return list(f)[:1], []
+        return list(f), []
 
     @staticmethod
-    def _get_exp_coeff(n):
-        return np.exp(((np.arange(n)+1)/n)-1)
-
-    @staticmethod
-    def _get_sin_coeff(n):
-        return 1-np.sin(np.linspace(.75*np.pi, 2.*np.pi, n))
-
-    @staticmethod
-    def _get_cos_coeff(n):
-        return np.cos(np.linspace(.25*np.pi, 2.25*np.pi, n))+1
+    def get_coefficients(n_src, n_tgt):
+        coeff = np.ones((n_src, n_tgt, 2))
+        for i in range(n_src):
+            coeff[i, :, 0] = 1-np.sin(np.linspace(0, 3*np.pi, n_tgt) + .25*np.pi*i)
+            coeff[i, :, 1] = 1+np.cos(np.linspace(-np.pi, 1.5*np.pi, n_tgt) - .5*np.pi*i)
+        return coeff
 
     def _get_node(self, src: bool, idx: int) -> Node:
         raise NotImplementedError
@@ -104,18 +98,18 @@ class AnalyticalAssignmentProblem(AnalyticalProblemBase):
     """Assignment pattern: connect any source to any target, optionally with injective/surjective/bijective constraints:
     sources and target have any number of connections, no repetitions;
     - injective: targets have max 1 connection
-    - surjective: targets have min 1 connection (note: this is the same as a partitioning problem!)
-    - bijective (= injective & surjective): targets have exactly 1 connection"""
+    - surjective: targets have min 1 connection (note: this is the same as a covering partitioning problem!)
+    - bijective (= injective & surjective): targets have exactly 1 connection (same as non-covering partitioning)"""
 
     def __init__(self, *args, injective=False, surjective=False, repeatable=False, **kwargs):
         self.injective = injective
         self.surjective = surjective
         self.repeatable = repeatable
-        self._is_so = injective and surjective
         super().__init__(*args, **kwargs)
-
-    def get_n_obj(self) -> int:
-        return 1 if self._is_so else 2
+        if (injective and surjective) or repeatable:
+            self._invert_f2 = True
+        if repeatable:
+            self._skew_f2 = True
 
     def get_init_kwargs(self) -> dict:
         return {**super().get_init_kwargs(), **{
@@ -145,16 +139,14 @@ class AnalyticalAssignmentProblem(AnalyticalProblemBase):
 
 class AnalyticalPartitioningProblem(AnalyticalProblemBase):
     """Partitioning pattern: sources have any connections, targets 1, no repetitions; if changed into a covering
-    partitioning pattern, targets have no max connections"""
-
-    # _invert_f2 = True
+    partitioning pattern, targets have no max connections
+    Note: in reverse (and non-covering), this represents multiple combination choices"""
 
     def __init__(self, *args, covering=False, **kwargs):
         self.covering = covering
         super().__init__(*args, **kwargs)
-
-    def get_n_obj(self) -> int:
-        return 1
+        if not covering:
+            self._invert_f2 = True
 
     def get_init_kwargs(self) -> dict:
         return {**super().get_init_kwargs(), **{'covering': self.covering}}
@@ -239,6 +231,13 @@ class AnalyticalPermutingProblem(AnalyticalProblemBase):
 
     def __init__(self, encoder, n: int = 3):
         super().__init__(encoder, n_src=n, n_tgt=n)
+        cs = np.zeros((n, n))
+        di = np.diag_indices(n)
+        for i in range(n):
+            if i > 0:
+                cs[di[0][i:], di[1][:-i]] = i
+                cs[di[0][:-i], di[1][i:]] = -i
+        self._conns_sum = cs[:, ::-1]
 
     def get_init_kwargs(self) -> dict:
         return {'n': self._n_src}
@@ -260,8 +259,6 @@ class AnalyticalIterCombinationsProblem(AnalyticalProblemBase):
     """Itertools combinations function (select n_take elements from n_tgt targets):
     1 source has n_take connections to n_tgt targets, no repetition
     Note: combination problem with more n_take"""
-
-    _invert_f2 = True
 
     def __init__(self, encoder, n_take: int = 2, n_tgt: int = 3):
         self._n_take = min(n_take, n_tgt)
@@ -367,12 +364,12 @@ if __name__ == '__main__':
     # p = AnalyticalPartitioningProblem(DEFAULT_EAGER_ENCODER(), covering=True, n_src=3, n_tgt=4)
     # p = AnalyticalPartitioningProblem(LazyAmountFirstEncoder(DEFAULT_LAZY_IMPUTER(), FlatLazyAmountEncoder(), FlatLazyConnectionEncoder()), n_src=2, n_tgt=4, covering=True)
     # p = AnalyticalDownselectingProblem(DEFAULT_EAGER_ENCODER())
-    # p = AnalyticalConnectingProblem(DEFAULT_EAGER_ENCODER())  # Low information errors
+    # p = AnalyticalConnectingProblem(DEFAULT_EAGER_ENCODER())
     # p = AnalyticalPermutingProblem(DEFAULT_EAGER_ENCODER())
     # p = AnalyticalIterCombinationsProblem(DEFAULT_EAGER_ENCODER())
-    # p = AnalyticalIterCombinationsReplacementProblem(DEFAULT_EAGER_ENCODER(), n_take=3, n_tgt=3)  # Low inf err
-    # p.reset_pf_cache()
-    # p.plot_pf(show_approx_f_range=True), exit()
+    # p = AnalyticalIterCombinationsReplacementProblem(DEFAULT_EAGER_ENCODER(), n_take=3, n_tgt=3)
+    p.reset_pf_cache()
+    p.plot_pf(show_approx_f_range=True, n_sample=1000), exit()
     enc = []
     enc += [e(DEFAULT_EAGER_IMPUTER()) for e in EAGER_ENCODERS]
     enc += [e(DEFAULT_EAGER_IMPUTER()) for e in EAGER_ENUM_ENCODERS]

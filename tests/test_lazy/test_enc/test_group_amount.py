@@ -38,6 +38,7 @@ def test_flat_connection_encoder():
     assert encoder.get_n_design_points() == 32
     # assert encoder._matrix_gen.count_all_matrices() == 21
     assert encoder.get_imputation_ratio() == 32/21
+    assert encoder.get_distance_correlation()
 
 
 def test_flat_connection_encoder_multi_max():
@@ -178,6 +179,7 @@ def test_one_to_one(gen_one_per_existence: AggregateAssignmentMatrixGenerator):
     assert encoder.get_n_design_points() == 1
     assert encoder.get_imputation_ratio() == 1.2
     assert encoder.get_information_index() == 1
+    assert encoder.get_distance_correlation() == 1
 
     for i, existence in enumerate(gen_one_per_existence.existence_patterns.patterns):
         dv, mat = encoder.get_matrix([], existence=existence)

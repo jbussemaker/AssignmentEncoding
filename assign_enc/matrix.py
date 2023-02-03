@@ -74,6 +74,10 @@ class NodeExistence:
         self.max_tgt_conn_override = max_tgt_conn_override
         self._hash = None
 
+        self._src_exists_mask = None
+        self._tgt_exists_mask = None
+        self._none_exists = None
+
     @staticmethod
     def _get_n_conn_override(exists: Union[List[bool], np.ndarray] = None,
                              n_conn_override: Dict[int, List[int]] = None) -> Dict[int, List[int]]:
@@ -96,25 +100,38 @@ class NodeExistence:
         return self.tgt_n_conn_override.get(i) != [0]
 
     def src_exists_mask(self, n_src: int):
+        if self._src_exists_mask is not None:
+            return self._src_exists_mask
+
         exist_mask = np.ones((n_src,), dtype=bool)
         for i in range(n_src):
             if not self.has_src(i):
                 exist_mask[i] = False
+        self._src_exists_mask = exist_mask
         return exist_mask
 
     def tgt_exists_mask(self, n_tgt: int):
+        if self._tgt_exists_mask is not None:
+            return self._tgt_exists_mask
+
         exist_mask = np.ones((n_tgt,), dtype=bool)
         for i in range(n_tgt):
             if not self.has_tgt(i):
                 exist_mask[i] = False
+        self._tgt_exists_mask = exist_mask
         return exist_mask
 
     def none_exists(self, n_src: int, n_tgt: int):
-        if np.any(self.src_exists_mask(n_src)):
-            return False
-        if np.any(self.tgt_exists_mask(n_tgt)):
-            return False
-        return True
+        def _none_exists():
+            if np.any(self.src_exists_mask(n_src)):
+                return False
+            if np.any(self.tgt_exists_mask(n_tgt)):
+                return False
+            return True
+
+        if self._none_exists is None:
+            self._none_exists = _none_exists()
+        return self._none_exists
 
     def __hash__(self):
         if self._hash is None:
@@ -241,6 +258,8 @@ class AggregateAssignmentMatrixGenerator:
         self._max_tgt_appear = {}
         self._no_repeat_mat = None
         self._conn_blocked_mat = None
+        self._node_settings = None
+        self._n_conn_override_map = {}
 
     @property
     def ex(self) -> Optional[Set[Tuple[int, int]]]:
@@ -554,48 +573,59 @@ class AggregateAssignmentMatrixGenerator:
 
             yield tuple(n_conn_nodes)
 
+    def _get_node_settings(self):  # For numba-jit-compiled _check_conns
+        def _get_node_settings(nodes: List[Node]):
+            n_conns_check = [max(node.conns) for node in nodes if not node.max_inf]
+            n_conns_check = 0 if len(n_conns_check) == 0 else max(n_conns_check)
+            node_settings = np.zeros((len(nodes), 2+n_conns_check+1), dtype=np.int32)
+            for i, node in enumerate(nodes):
+                if node.max_inf:
+                    node_settings[i, 0] = 1
+                    node_settings[i, 1] = node.min_conns
+                else:
+                    node_settings[i, 2+np.array(node.conns)] = 1
+            return node_settings
+
+        if self._node_settings is None:
+            self._node_settings = (_get_node_settings(self.src), _get_node_settings(self.tgt))
+        return self._node_settings
+
+    def _get_n_conn_override(self, existence: NodeExistence = None):
+        if existence is None:
+            existence = NodeExistence()
+
+        def _make_n_conn_override(nodes: List[Node], override_map, node_settings):
+            if override_map is None or len(override_map) == 0:
+                return np.zeros((len(nodes), 0), dtype=np.int8)
+
+            n_override_max = max(max([max(n_conns) for n_conns in override_map.values()]), node_settings.shape[1]-2)
+            override_settings = np.zeros((len(nodes), n_override_max+1), dtype=np.int8)
+            for i in range(len(nodes)):
+                if i in override_map:
+                    override_settings[i, np.array(override_map[i])] = 1
+                else:
+                    override_settings[i, :] = -1
+            return override_settings
+
+        if existence not in self._n_conn_override_map:
+            src_settings, tgt_settings = self._get_node_settings()
+            self._n_conn_override_map[existence] = (_make_n_conn_override(self.src, existence.src_n_conn_override, src_settings),
+                                                    _make_n_conn_override(self.tgt, existence.tgt_n_conn_override, tgt_settings))
+        return self._n_conn_override_map[existence]
+
     def validate_matrix(self, matrix: np.ndarray, existence: NodeExistence = None) -> bool:
         """Checks whether a connection matrix is valid"""
 
-        # Check if any connections have repetitions that are not allowed
-        if np.any((matrix > 1) & self.no_repeat_mask):
-            return False
-
-        # Check if any connections are made that are not allowed
-        if np.any((matrix > 0) & self.conn_blocked_mask):
-            return False
-
-        # Check number of source connections
         if existence is None:
             existence = NodeExistence()
-        src_n_conn_override = existence.src_n_conn_override if existence.src_n_conn_override is not None else {}
-        max_conn = self.get_max_src_appear(existence=existence)
-        for i, n_src in enumerate(np.sum(matrix, axis=1)):
-            if not existence.has_src(i):
-                if n_src > 0:
-                    return False
-                else:
-                    continue
-            if i in src_n_conn_override and n_src not in src_n_conn_override[i]:
-                return False
-            if not self._check_conns(n_src, self.src[i], max_conn):
-                return False
 
-        # Check number of target connections
-        max_conn = self.get_max_tgt_appear(existence=existence)
-        tgt_n_conn_override = existence.tgt_n_conn_override if existence.tgt_n_conn_override is not None else {}
-        for i, n_tgt in enumerate(np.sum(matrix, axis=0)):
-            if not existence.has_tgt(i):
-                if n_tgt > 0:
-                    return False
-                else:
-                    continue
-            if i in tgt_n_conn_override and n_tgt not in tgt_n_conn_override[i]:
-                return False
-            if not self._check_conns(n_tgt, self.tgt[i], max_conn):
-                return False
+        src_node_settings, tgt_node_settings = self._get_node_settings()
+        src_n_override, tgt_n_override = self._get_n_conn_override(existence=existence)
+        max_src = self.get_max_src_appear(existence=existence)
+        max_tgt = self.get_max_tgt_appear(existence=existence)
 
-        return True
+        return _validate_matrix(matrix, self.no_repeat_mask, self.conn_blocked_mask, src_node_settings,
+                                tgt_node_settings, src_n_override, tgt_n_override, max_src, max_tgt)
 
     @staticmethod
     def _check_conns(n_conns: int, node: Node, max_conn: int) -> bool:
@@ -761,6 +791,53 @@ class AggregateAssignmentMatrixGenerator:
             else:
                 n_appear += 1
         return min(n_appear, n_max)
+
+
+@numba.jit()
+def _validate_matrix(matrix: np.ndarray, no_repeat_mask: np.ndarray, conn_blocked_mask: np.ndarray,
+                     src_node_settings: np.ndarray, tgt_node_settings: np.ndarray, src_n_override: np.ndarray,
+                     tgt_n_override: np.ndarray, max_src: int, max_tgt: int) -> bool:
+    # Check repeated or blocked connections
+    if np.any((matrix > 1) & no_repeat_mask) or np.any((matrix > 0) & conn_blocked_mask):
+        return False
+
+    # Check source connections
+    for i in range(matrix.shape[0]):
+        n_src = np.sum(matrix[i, :])
+        if n_src < src_n_override.shape[1]:
+            override_ok = src_n_override[i, n_src]
+            if override_ok == 0:
+                return False
+            elif override_ok == 1:
+                continue
+        if not _check_conns(n_src, src_node_settings[i, :], max_src):
+            return False
+
+    # Check target connections
+    for i in range(matrix.shape[1]):
+        n_tgt = np.sum(matrix[:, i])
+        if n_tgt < tgt_n_override.shape[1]:
+            override_ok = tgt_n_override[i, n_tgt]
+            if override_ok == 0:
+                return False
+            elif override_ok == 1:
+                continue
+        if not _check_conns(n_tgt, tgt_node_settings[i, :], max_tgt):
+            return False
+
+    return True
+
+
+@numba.jit()
+def _check_conns(n_conns, node_settings: np.ndarray, max_conn: int) -> bool:  # See get_node_settings for data structure
+    if n_conns > max_conn:
+        return False
+    if node_settings[0]:  # 0 = max_inf
+        return node_settings[1] <= n_conns  # 1 = min_conns
+
+    if n_conns+2 >= len(node_settings):
+        return False
+    return node_settings[n_conns+2] == 1
 
 
 @numba.njit()

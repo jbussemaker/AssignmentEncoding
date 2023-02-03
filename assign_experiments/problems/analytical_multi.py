@@ -67,10 +67,9 @@ class MultiAnalyticalProblemBase(AnalyticalProblemBase):
 class MultiCombinationProblem(MultiAnalyticalProblemBase):
     """Multiple independent combination problems"""
 
-    _invert_f2 = True
-
     def __init__(self, encoder, n_multi: int = 3, n_tgt: int = 10):
         super().__init__(encoder, n_src=n_multi, n_tgt=n_tgt)
+        self._skew_f2 = True
 
     def get_init_kwargs(self) -> dict:
         return {'n_multi': self._n_src, 'n_tgt': self._n_tgt}
@@ -100,13 +99,13 @@ class MultiAssignmentProblem(MultiAnalyticalProblemBase):
         self.injective = injective
         self.surjective = surjective
         self.repeatable = repeatable
-        self._is_so = injective and surjective
         self._n_act_src = n_act_src
         self._n_act_tgt = n_act_tgt
         super().__init__(*args, n_src=n_src, n_tgt=n_tgt)
-
-    def get_n_obj(self) -> int:
-        return 1 if self._is_so else 2
+        if (injective and surjective) or repeatable:
+            self._invert_f2 = True
+        if repeatable:
+            self._skew_f2 = True
 
     def get_init_kwargs(self) -> dict:
         return {'injective': self.injective, 'surjective': self.surjective, 'repeatable': self.repeatable,
@@ -197,7 +196,7 @@ if __name__ == '__main__':
     # p = MultiAssignmentProblem(DEFAULT_EAGER_ENCODER())
     p = MultiPermIterCombProblem(DEFAULT_EAGER_ENCODER())
 
-    # p.reset_pf_cache(), p.plot_pf(show_approx_f_range=True), exit()
+    p.reset_pf_cache(), p.plot_pf(show_approx_f_range=True, n_sample=1000), exit()
     enc = []
     enc += [e(DEFAULT_EAGER_IMPUTER()) for e in EAGER_ENCODERS]
     enc += [e(DEFAULT_EAGER_IMPUTER()) for e in EAGER_ENUM_ENCODERS]

@@ -82,6 +82,9 @@ def test_lazy_encoder():
     assert enc._matrix_gen.count_all_matrices() == 7
     assert enc.get_n_design_points() == 16
     assert enc.get_imputation_ratio() == (16/7)
+    for _ in range(3):
+        assert enc.get_distance_correlation()
+        assert enc.get_distance_correlation(minimum=True)
 
 
 def test_lazy_imputer_none_exist():

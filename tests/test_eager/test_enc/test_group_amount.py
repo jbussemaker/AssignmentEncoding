@@ -16,6 +16,9 @@ def test_encoder():
         assert len(encoder.design_vars) <= 2
         assert encoder.get_imputation_ratio() >= 1.
 
+        assert encoder.get_distance_correlation()
+        assert encoder.get_distance_correlation(minimum=True)
+
         n_tot_unique = np.unique(n_tot)
         assert encoder.design_vars[0].n_opts == len(n_tot_unique)
         n_tot_max = max([np.sum(n_tot == n_val) for n_val in n_tot_unique])
@@ -343,3 +346,4 @@ def test_one_to_one(gen_one_per_existence: AggregateAssignmentMatrixGenerator):
     assert encoder.get_n_design_points() == 1
     assert encoder.get_imputation_ratio() == 1.2
     assert encoder.get_information_index() == 1
+    assert encoder.get_distance_correlation() == 1

@@ -108,8 +108,10 @@ The different encoding schemes will be compared based on the following metrics:
   - A derived metric can be the "Relative imputation ratio", which would apply to a set of encoders and simply compares
     relative design space sizes `prod(n_i)` (i.e. `n_pat` is divided out), which would prevent the need for counting
     the total number of matrices
+4. Maximization of distance correlation: the correlation between Manhattan distances between connection matrices and 
+   associated design vectors: the higher the correlation, the more information can be extracted from the design vectors
 
-Note that the latter two can be calculated directly from the problem formulation itself, whereas the first one needs
+Note that the latter three can be calculated directly from the problem formulation itself, whereas the first one needs
 objective/constraint evaluation and repeated surrogate model training.
 
 Then to test them for real optimization performance, the following tests should be performed:
@@ -225,9 +227,14 @@ Conclusions:
 #### 4. Metric Consistency
 04_metric_consistency
 
-- GA and SBO algorithms are most effective for low imputation ratios or high information indices
-  - Enumeration-based encoders (one-var and recursive) are always able to create low imputation ratios, however are
-    only efficient for high information indices (i.e. one-var is never efficient)
+- Determining distance correlation depends on random sampling of design vectors
+  - For lazy encoders, no imputation should be done to reduce runtime; should not influence too much for low imp ratios
+  - Distance correlation can be found reliably by taking max 2000 samples but stopping early if convergence is reached
+  - For very high imputation ratios (> ~500), distance correlation is unreliable
+  - Lazy encoder distance correlation runtime is similar to eager encoder for low imputation ratios (<10)
+- GA and SBO algorithms are most effective for low imputation ratios or high distance correlations
+  - Enumeration-based encoders (one-var and recursive) are always able to create low imputation ratios, however usually
+    result in low distance correlations
   - For recursive encoder, higher than `n_divide=4` yields inf idx < .5
   - Connection-based encoders are to be preferred over enumeration-based encoders
 - For eager Amount First groupers, the (Rel) Flat/Coord Idx groupers are very inefficient for large nr of matrices
@@ -246,7 +253,9 @@ Conclusions:
     for higher imputation ratios due to slow imputers
 
 Suggested selection:
-- Try to select an encoder with as low imp ratio and high inf index as possible
+- Distance correlation can be accurately predicted with an adaptive stopping procedure,
+  however should only be predicted for low (<500) imputation ratios
+- Try to select an encoder with as low imp ratio and high dist corr as possible
 - Matrix generation can be cached to speed up eager encoder selection
 - Lazy encoders with low imputation ratios are preferred over eager encoders due to faster encoding times
   (even if the matrix is already pre-generated), and for low imp ratios lazy encoders are not much slower for sampling
@@ -263,32 +272,46 @@ Suggested selection:
     - Main time cost comes from design variable grouping (`GroupedEncoder.group_by_values`)
 - The selector algorithm consists of the following steps:
   - Pre-generate the matrix (and cache it)
-  - Encode lazy encoders; for each calculate the imputation ratio (using pre-generated matrix) and information index
+  - If `n_mat <= n_mat_eager_max`, encode both eager and lazy encoders, otherwise only encode lazy encoders
+    - For each, calculate the imputation ratio, information index, and distance correlation
+    - Do no calculate distance correlation if imputation ratio is higher than
+      the last (eager) or first (lazy) band of imputation ratios
     - Several imputation ratios can be used, with different existence-wise aggregations:
       the **min imputation** ratio is most effective at selecting suitable encoders, because imputers apply for each
       existence scheme separately, and the min imputation ratio applies to the largest matrix that needs to be imputed
-    - Additionally encode eager encoders if `n_mat <= n_mat_eager_max`
+    - For distance correlation, the **minimum distance correlation** (compared to total) is chosen, as within each
+      existence scheme the correlation should be high enough to enable the algorithm to understand the design space
     - Stop encoding (and skip) if encoding time exceeds `encoding_time_limit`
-  - Select the best lazy encoder according to the division-scoring algorithm (considering priority areas 1 to 4)
-  - If none is selected, encode eager encoders (calculate same metrics as for lazy encoders)
-  - Select the best encoder according to the division-scoring algorithm (considering priority areas 1 to 8)
-  - If none is selected, encode enumeration-based encoders
+    - For encoders of same type (eager/lazy/enum) and with same imp ratio and inf idx, equalize the distance corr
+  - Select the best encoder according to the division-scoring algorithm (considering priority areas 1 to 4)
+  - If none is selected, encode remaining encoders incl enumeration-based encoders
   - Select the best encoder (considering all priority areas)
+  - If none is selected, select best encoder using information index (instead of distance correlation)
   - Regardless of how good the finally selected encoder is, this algorithm will always have at least one result:
     - The lazy direct matrix encoder (high information index, but also high imputation ratio) will always be included,
       as its encoding time is close to instant (no need for matrix generation and no need for DV grouping)
     - If enumeration-based encoders are also included (they always score well), except for the matrix generation (which
       is done anyway), their encoding times are close to instant too
 - The division-scoring algorithm works as follows:
-  - Given a set of encoders and associated imputation ratio and information index scores, divide them into priorities
-  - Define multiple bands of imputation ratios: ==1, 1-10, 10-40, 40-80, 80-200, 200+
-  - Define multiple bands of information indices: ==0, 0-.3, .3-.6, .6-1
+  - Given a set of encoders and associated imputation ratio and distance correlation scores, divide them into priorities
+  - Define multiple bands of imputation ratios: ==1, 1-10, 10-40, 40-100, 100+
+  - Define multiple bands of distance correlation: ==0, 0-.35, .35-.7, .7-1
   - This division is done according to the following division (see also the `selector_areas` plot):
-    - For the first two imputation ratio bands, priorities are selected in descending information index order
-    - After that, priority is selected in descending information index order per imputation ratio band
+    - For the first two imputation ratio bands, priorities are as follows (when selecting by dist corr):
+      - imputation ratio = 1,  distance correlation .7-1
+      - imputation ratio < 10, distance correlation .7-1
+      - imputation ratio = 1,  distance correlation .35-.7
+      - imputation ratio < 10, distance correlation .35-.7
+      - imputation ratio < 10, distance correlation < .35, information index > 0
+      - imputation ratio < 10, distance correlation < .35
+    - After that, priority is selected in descending distance correlation order per imputation ratio band
   - The best encoder is selected from the division with the highest priority that contains 1 or more encoders:
-    - Determine minimum imputation ratio within the division
-    - From the encoders that have this minimum imputation ratio, select the one with the highest information index
+    - If selecting based on distance correlation:
+      - Determine maximum distance correlation within the division
+      - From the encoders that have this max dist corr, select the one with the lowest imputation index
+    - If selecting based on information index:
+      - Determine minimum imputation ratio within the division
+      - From the encoders that have this minimum imputation ratio, select the one with the highest information index
     - If there are multiple best encoders, preference is given to eager encoders due to faster imputation
 - Total selection time (not cached) is greatly influenced by `n_mat_eager_max` and `encoding_time_limit`
   - For lower time values (`n_mat_eager_max ~ 1000`, `encoding_time_limit ~ .5`), many encoders are skipped

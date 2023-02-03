@@ -114,6 +114,88 @@ class Encoder:
         n_dv_max = np.log2(n_combinations)
         return (n_dv-1.)/(n_dv_max-1.)
 
+    def get_distance_correlation(self, n=100, minimum=False, n_max=2000, n_samples_min=200, limit=.005) -> Optional[float]:
+        """Correlation between distances between design vectors and associated matrices;
+        optionally returning the minimum across all existence schemes"""
+        dv_dist_all = None
+        mat_dist_all = None
+        n_check = max(2, int(np.floor(n_samples_min/n)))
+        sampled_dvs = {}
+        n_iter_max = int(np.ceil(n_max / n))
+        metric_values, i_iter = None, 0
+        for i_iter in range(n_iter_max):
+            # Extend current samples
+            dv_dist, mat_dist = self._get_distance_correlation(n=n, sampled_dvs=sampled_dvs)
+            if dv_dist_all is None:
+                dv_dist_all = dv_dist
+                mat_dist_all = mat_dist
+                metric_values = np.nan*np.empty((n_iter_max, len(dv_dist) if minimum else 1))
+            else:
+                dv_dist_all = [dists+dv_dist[i_mat] for i_mat, dists in enumerate(dv_dist_all)]
+                mat_dist_all = [dists+mat_dist[i_mat] for i_mat, dists in enumerate(mat_dist_all)]
+
+            # Calculate new metric value
+            if minimum:
+                for i_mat, dv_dists in enumerate(dv_dist_all):
+                    metric_values[i_iter, i_mat] = self._calc_distance_corr(dv_dists, mat_dist_all[i_mat])
+            else:
+                metric_values[i_iter, 0] = self._calc_distance_corr(dv_dist_all, mat_dist_all)
+
+            # Check convergence
+            if i_iter+1 >= n_check:
+                n_samples = [len(samples) for samples in dv_dist_all]
+                if (min(n_samples) if minimum else sum(n_samples)) >= n_samples_min:
+                    last_values = metric_values[:i_iter+1, :][-n_check:, :]
+                    max_diff = np.max(np.max(last_values, axis=0)-np.min(last_values, axis=0))
+                    if max_diff <= limit:
+                        break
+
+                # Correlation of 1 is usually quickly found
+                if np.max(np.abs(metric_values-1)) < 1e-3:
+                    break
+
+        metrics_mean = np.mean(metric_values[:i_iter+1, :][-n_check:, :], axis=0)
+        return float(np.min(metrics_mean) if minimum else metrics_mean[0])
+
+    def _get_distance_correlation(self, n: int, sampled_dvs=None) -> Tuple[List[List[float]], List[List[float]]]:
+        if sampled_dvs is None:
+            sampled_dvs = {}
+        dv_dist_all = []
+        mat_dist_all = []
+        for matrix, des_vectors in self._iter_sampled_dv_mat(n, sampled_dvs):
+            if len(des_vectors) <= 1 or len(matrix) <= 1:
+                dv_dist_all.append([])
+                mat_dist_all.append([])
+                continue
+
+            matrix = matrix[:n]
+            des_vectors = des_vectors[:n]
+            dv_dist_all.append(list(self._calc_internal_distance(des_vectors)[np.triu_indices(des_vectors.shape[0], k=1)]))
+            mat_dist_all.append(list(self._calc_internal_distance(matrix)[np.triu_indices(matrix.shape[0], k=1)]))
+
+        return dv_dist_all, mat_dist_all
+
+    def _iter_sampled_dv_mat(self, n: int, sampled_dvs: dict):
+        raise NotImplementedError
+
+    @staticmethod
+    def _calc_internal_distance(arr: np.ndarray) -> np.ndarray:
+        from scipy.spatial import distance
+        return distance.cdist(arr, arr, 'cityblock')  # Manhattan distance
+
+    @staticmethod
+    def _calc_distance_corr(dist1, dist2) -> float:
+        from scipy.stats import pearsonr
+        if isinstance(dist1, list) and len(dist1) > 0 and isinstance(dist1[0], list):
+            dist1 = np.array([val for values in dist1 for val in values])
+            dist2 = np.array([val for values in dist2 for val in values])
+        if len(dist1) != len(dist2):
+            raise RuntimeError(f'Different lengths: {len(dist1)} != {len(dist2)}')
+        if len(dist1) < 2:
+            return 1.
+        corr = pearsonr(dist1, dist2).statistic
+        return 1. if np.isnan(corr) else corr
+
     def get_imputation_ratio(self, per_existence=False) -> float:
         """Ratio of the total design space size to the actual amount of possible connections"""
         raise NotImplementedError
@@ -172,6 +254,28 @@ class EagerEncoder(Encoder):
     @property
     def design_vars(self) -> List[DiscreteDV]:
         return self._design_vars
+
+    def _iter_sampled_dv_mat(self, n: int, sampled_dvs: dict):
+        for existence, matrix in self._matrix.items():
+            matrix = self.flatten_matrix(matrix)
+            des_vectors = self._design_vectors[existence]
+            if des_vectors.shape[0] == 0:
+                continue
+
+            if existence not in sampled_dvs:
+                sampled_dvs[existence] = np.ones((matrix.shape[0],), dtype=bool)
+            unsampled_mask = sampled_dvs[existence]
+
+            matrix = matrix[unsampled_mask, :]
+            des_vectors = des_vectors[unsampled_mask, :]
+
+            if matrix.shape[0] > n:
+                i_random = np.random.choice(matrix.shape[0], size=n, replace=False)
+                matrix = matrix[i_random, :]
+                des_vectors = des_vectors[i_random, :]
+                unsampled_mask[np.where(unsampled_mask)[0][i_random]] = False
+
+            yield matrix, des_vectors
 
     def get_imputation_ratio(self, per_existence=False) -> float:
         n_design_points = self.get_n_design_points()
@@ -342,24 +446,8 @@ class EagerEncoder(Encoder):
                 continue
 
             # Check if all design vectors are unique
-            try:
-                if np.unique(des_vectors, axis=0).shape[0] < des_vectors.shape[0]:
-                    raise RuntimeError('Not all design vectors are unique!')
-            except TypeError:
-                r"""
-                Might be this obscure error:
-                
-                File "<__array_function__ internals>", line 180, in unique
-                  File "C:\Anaconda3\envs\AssignmentEncoding\lib\site-packages\numpy\lib\arraysetops.py", line 317, in unique
-                    output = _unique1d(consolidated, return_index,
-                  File "C:\Anaconda3\envs\AssignmentEncoding\lib\site-packages\numpy\lib\arraysetops.py", line 352, in _unique1d
-                    mask[1:] = aux[1:] != aux[:-1]
-                TypeError: Cannot compare structured arrays unless they have a common dtype.  I.e. `np.result_type(arr1, arr2)` must be defined.
-                """
-                print(f'Des vectors shape: {des_vectors.shape}, dtype: {des_vectors.dtype}')
-                print(repr(des_vectors))
-                print(f'Class: {cls.__name__}; design_vectors: {design_vectors!r}')
-                raise
+            if len({tuple(dv) for dv in des_vectors}) < des_vectors.shape[0]:
+                raise RuntimeError('Not all design vectors are unique!')
 
             # Check bounds
             if np.min(des_vectors) != 0:

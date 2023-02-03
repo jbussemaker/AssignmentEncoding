@@ -74,3 +74,4 @@ def test_one_to_one(gen_one_per_existence: AggregateAssignmentMatrixGenerator):
     assert encoder.get_n_design_points() == 1
     assert encoder.get_imputation_ratio() == 1.2
     assert encoder.get_information_index() == 1
+    assert encoder.get_distance_correlation() == 1

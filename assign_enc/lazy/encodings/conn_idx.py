@@ -189,7 +189,10 @@ class LazyConnIdxMatrixEncoder(LazyEncoder):
                 if len(keys) > 1:
                     i_key = vector_i[0]
                     vector_i = vector_i[1:]
-            key, n_dv_i = keys[i_key]
+            try:
+                key, n_dv_i = keys[i_key]
+            except IndexError:
+                return
             sub_matrix = self._conn_enc.decode(key, vector_i[:n_dv_i])
             if sub_matrix is None:
                 return

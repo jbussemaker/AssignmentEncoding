@@ -21,6 +21,9 @@ def test_encoding():
         assert enc.get_imputation_ratio() == n_des_points/n
         assert enc.get_imputation_ratio() > 6000
 
+        assert enc.get_distance_correlation() >= .99
+        assert enc.get_distance_correlation(minimum=True) >= .99
+
         for i in range(n_src):
             for j in range(n_tgt):
                 i_dv = i*n_tgt+j
@@ -79,6 +82,7 @@ def test_one_to_one(gen_one_per_existence: AggregateAssignmentMatrixGenerator):
     assert encoder.get_n_design_points() == 1
     assert encoder.get_imputation_ratio() == 1.2
     assert encoder.get_information_index() == 1
+    assert encoder.get_distance_correlation() == 1
 
     for i, existence in enumerate(gen_one_per_existence.existence_patterns.patterns):
         dv, mat = encoder.get_matrix([], existence=existence)

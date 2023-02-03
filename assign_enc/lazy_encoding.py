@@ -153,6 +153,49 @@ class LazyEncoder(Encoder):
     def design_vars(self) -> List[DiscreteDV]:
         return self._design_vars
 
+    def _iter_sampled_dv_mat(self, n: int, sampled_dvs: dict):
+        n_sample = n*5
+        for existence in self._matrix_gen.iter_existence():
+            if existence not in sampled_dvs:
+                sampled_dvs[existence] = set()
+            sampled = sampled_dvs[existence]
+            sampled = sampled.copy()
+
+            random_dvs = np.empty((n_sample, len(self._design_vars)), dtype=int)
+            for i_dv, dv in enumerate(self._design_vars):
+                random_dvs[:, i_dv] = dv.n_opts*np.random.random((n_sample,))
+
+            matrix, des_vectors = [], []
+            n_sampled = 0
+            for i in range(n*5):
+                dv_ = random_dvs[i, :]
+                dv_init_hash = hash(tuple(dv_))
+                if dv_init_hash in sampled:
+                    continue
+
+                # Get matrix without imputation to save time
+                dv, extra_dv, _, mat, valid = self._get_validate_matrix(dv_, existence=existence)
+                dv = list(dv)+extra_dv
+                if not valid:
+                    sampled.add(dv_init_hash)
+                    continue
+
+                dv_hash = hash(tuple(dv))
+                if dv_hash in sampled:
+                    continue
+                sampled.add(dv_init_hash)
+                sampled.add(dv_hash)
+
+                matrix.append(mat.ravel())
+                des_vectors.append(dv)
+                n_sampled += 1
+                if n_sampled >= n:
+                    break
+
+            matrix = np.array(matrix, dtype=int)
+            des_vectors = np.array(des_vectors, dtype=int)
+            yield matrix, des_vectors
+
     def get_imputation_ratio(self, per_existence=False, use_real_matrix=True) -> float:
         if use_real_matrix:
             n_design_points = self.get_n_design_points()
@@ -197,7 +240,15 @@ class LazyEncoder(Encoder):
 
     def get_matrix(self, vector: DesignVector, existence: NodeExistence = None) -> Tuple[DesignVector, np.ndarray]:
         """Select a connection matrix (n_src x n_tgt) and impute the design vector if needed."""
+        vector, extra_vector, existence, matrix, valid = self._get_validate_matrix(vector, existence=existence)
+        if valid:
+            return list(vector)+extra_vector, matrix
 
+        vector, matrix = self._imputer.impute(vector, matrix, existence)
+        return list(vector)+extra_vector, matrix
+
+    def _get_validate_matrix(self, vector: DesignVector, existence: NodeExistence = None) \
+            -> Tuple[List[int], List[int], NodeExistence, np.ndarray, bool]:
         vector, n_dv, n_extra = self._correct_vector_size(vector)
         extra_vector = [0]*n_extra
         vector, _ = EagerEncoder.correct_vector_bounds(vector, self.design_vars)
@@ -206,11 +257,8 @@ class LazyEncoder(Encoder):
         matrix, existence = self._decode_vector(vector, existence)
 
         # Validate matrix
-        if matrix is not None and self._matrix_gen.validate_matrix(matrix, existence=existence):
-            return list(vector)+extra_vector, matrix
-
-        vector, matrix = self._imputer.impute(vector, matrix, existence)
-        return list(vector)+extra_vector, matrix
+        valid = matrix is not None and self._matrix_gen.validate_matrix(matrix, existence=existence)
+        return vector, extra_vector, existence, matrix, valid
 
     def is_valid_vector(self, vector: DesignVector, existence: NodeExistence = None):
 

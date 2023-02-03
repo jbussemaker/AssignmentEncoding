@@ -546,6 +546,10 @@ class Experimenter:
                 },
             },
             'loggers': {
+                'assign_enc': {
+                    'handlers': ['console'],
+                    'level': level,
+                },
                 'assign_exp': {
                     'handlers': ['console'],
                     'level': level,

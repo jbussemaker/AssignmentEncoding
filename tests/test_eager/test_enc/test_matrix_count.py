@@ -17,6 +17,7 @@ def test_encoding():
         assert enc.design_vars[0].n_opts == n
 
         assert enc.get_imputation_ratio() == 1.
+        assert enc.get_distance_correlation()
 
         for i in range(n):
             dv, mat = enc.get_matrix([i])
@@ -32,6 +33,7 @@ def test_one_to_one(gen_one_per_existence: AggregateAssignmentMatrixGenerator):
     assert encoder.get_n_design_points() == 1
     assert encoder.get_imputation_ratio() == 1.2
     assert encoder.get_information_index() == 1
+    assert encoder.get_distance_correlation() == 1
 
 
 def test_recursive_encoding():
@@ -70,3 +72,4 @@ def test_one_to_one_recursive(gen_one_per_existence: AggregateAssignmentMatrixGe
         assert encoder.get_n_design_points() == 1
         assert encoder.get_imputation_ratio() == 1.2
         assert encoder.get_information_index() == 1
+        assert encoder.get_distance_correlation() == 1

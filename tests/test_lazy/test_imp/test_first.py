@@ -16,8 +16,8 @@ def test_imputer():
     encoder.set_nodes(src=[Node([0, 1]), Node([0, 1])], tgt=[Node([0, 1]), Node(min_conn=1)])
 
     dv, mat = encoder.get_matrix([1, 1, 1, 1])
-    assert np.all(dv == [0, 0, 0, 1])
-    assert np.all(mat == np.array([[0, 0], [0, 1]]))
+    assert np.all(dv == [0, 1, 0, 0])
+    assert np.all(mat == np.array([[0, 1], [0, 0]]))
 
 
 def test_one_to_one(gen_one_per_existence: AggregateAssignmentMatrixGenerator):
