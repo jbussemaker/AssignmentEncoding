@@ -9,6 +9,8 @@ EAGER_ENCODERS = [
     # lambda imp: DirectMatrixEncoder(imp, remove_gaps=False),
     lambda imp: ElementGroupedEncoder(imp),
     # lambda imp: ElementGroupedEncoder(imp, normalize_within_group=False),
+    lambda imp: ConnIdxGroupedEncoder(imp),
+    lambda imp: ConnIdxGroupedEncoder(imp, by_src=False),
 
     lambda imp: AmountFirstGroupedEncoder(imp, TotalAmountGrouper(), OneVarLocationGrouper()),
     lambda imp: AmountFirstGroupedEncoder(imp, SourceAmountGrouper(), OneVarLocationGrouper()),
@@ -78,6 +80,10 @@ LAZY_ENCODERS = [
     lambda imp: LazyConnIdxMatrixEncoder(imp, GroupedConnCombsEncoder(), by_src=False),
     lambda imp: LazyConnIdxMatrixEncoder(imp, GroupedConnCombsEncoder(), amount_first=True),
     lambda imp: LazyConnIdxMatrixEncoder(imp, GroupedConnCombsEncoder(), by_src=False, amount_first=True),
+    lambda imp: LazyConnIdxMatrixEncoder(imp, ConnIdxCombsEncoder()),
+    lambda imp: LazyConnIdxMatrixEncoder(imp, ConnIdxCombsEncoder(), by_src=False),
+    lambda imp: LazyConnIdxMatrixEncoder(imp, ConnIdxCombsEncoder(), amount_first=True),
+    lambda imp: LazyConnIdxMatrixEncoder(imp, ConnIdxCombsEncoder(), by_src=False, amount_first=True),
 ]
 
 DEFAULT_LAZY_ENCODER = lambda: LazyDirectMatrixEncoder(DEFAULT_LAZY_IMPUTER())

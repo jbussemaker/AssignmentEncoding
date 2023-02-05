@@ -75,3 +75,97 @@ def test_one_to_one(gen_one_per_existence: AggregateAssignmentMatrixGenerator):
     assert encoder.get_imputation_ratio() == 1.2
     assert encoder.get_information_index() == 1
     assert encoder.get_distance_correlation() == 1
+
+
+def test_conn_idx_grouper():
+    for by_src in [True, False]:
+        matrix = np.array([
+            [[0, 1, 0],
+             [1, 1, 0]],
+            [[2, 0, 0],
+             [1, 1, 2]],
+            [[1, 1, 0],
+             [1, 1, 2]],
+            [[1, 1, 0],
+             [1, 2, 2]],
+        ])
+
+        encoder = ConnIdxGroupedEncoder(FirstImputer(), matrix, by_src=by_src)
+        encoder.matrix = matrix
+
+        if by_src:
+            assert np.all(list(encoder._design_vectors.values())[0] == np.array([
+                [1, 0, 0],
+                [0, 0, 0],
+                [0, 1, 1],
+                [0, 1, 0],
+            ]))
+        else:
+            assert np.all(list(encoder._design_vectors.values())[0] == np.array([
+                [1, 0, 0],
+                [0, 0, 0],
+                [0, 1, 0],
+                [0, 1, 1],
+            ]))
+
+        assert [dv.n_opts for dv in encoder.design_vars] == [2, 2, 2]
+        assert encoder.get_n_design_points() == 8
+        assert encoder.get_imputation_ratio() == 2
+
+        encoder.matrix = np.array([
+            [[1, 0, 0], [0, 1, 0], [0, 0, 1]],
+            [[1, 0, 0], [0, 0, 1], [0, 1, 0]],
+            [[0, 1, 0], [1, 0, 0], [0, 0, 1]],
+            [[0, 1, 0], [0, 0, 1], [1, 0, 0]],
+            [[0, 0, 1], [1, 0, 0], [0, 1, 0]],
+            [[0, 0, 1], [0, 1, 0], [1, 0, 0]],
+        ])
+        if by_src:
+            assert np.all(list(encoder._design_vectors.values())[0] == np.array([
+                [0, 0], [0, 1], [1, 0], [1, 1], [2, 0], [2, 1],
+            ]))
+        else:
+            assert np.all(list(encoder._design_vectors.values())[0] == np.array([
+                [0, 0], [0, 1], [1, 0], [2, 0], [1, 1], [2, 1],
+            ]))
+        assert [dv.n_opts for dv in encoder.design_vars] == [3, 2]
+        assert encoder.get_n_design_points() == 6
+        assert encoder.get_imputation_ratio() == 1
+
+
+def test_conn_idx_encoder():
+    for by_src in [True, False]:
+        # Permutations
+        src = [Node([1], repeated_allowed=False) for _ in range(3)]
+        tgt = [Node([1], repeated_allowed=False) for _ in range(3)]
+        gen = AggregateAssignmentMatrixGenerator(src=src, tgt=tgt)
+
+        matrix = gen.get_agg_matrix()[NodeExistence()]
+        encoder = ConnIdxGroupedEncoder(ClosestImputer(), matrix, by_src=by_src)
+        assert encoder.n_mat_max == 6
+
+        assert len(encoder.design_vars) == 2
+        assert encoder.design_vars[0].n_opts == 3
+        assert encoder.design_vars[1].n_opts == 2
+
+        dv_seen = set()
+        for i0 in range(encoder.design_vars[0].n_opts):
+            for i1 in range(encoder.design_vars[1].n_opts):
+                dv, mat = encoder.get_matrix([i0, i1])
+                assert encoder.is_valid_vector(dv)
+                assert dv == [i0, i1]
+                assert gen.validate_matrix(mat)
+                dv_seen.add(tuple(dv))
+
+        assert len(dv_seen) == 6
+
+
+def test_one_to_one_conn_idx(gen_one_per_existence: AggregateAssignmentMatrixGenerator):
+    encoder = ConnIdxGroupedEncoder(ClosestImputer())
+    encoder.matrix = gen_one_per_existence.get_agg_matrix()
+    assert len(encoder.design_vars) == 0
+
+    assert encoder.get_n_design_points() == 1
+    assert encoder.get_imputation_ratio() == 1.2
+    assert encoder.get_information_index() == 1
+    assert encoder.get_distance_correlation() == 1

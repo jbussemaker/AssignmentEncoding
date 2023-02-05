@@ -89,6 +89,26 @@ def test_encoding_grouped():
     assert mat[0, 0] == -1
 
 
+def test_encoding_conn_idx():
+    encoder = LazyConnIdxMatrixEncoder(LazyConstraintViolationImputer(), ConnIdxCombsEncoder())
+    src, tgt = [Node([0, 1, 2]) for _ in range(3)], [Node(min_conn=1, repeated_allowed=False) for _ in range(2)]
+    encoder.set_nodes(src=src, tgt=tgt, excluded=[(src[0], tgt[1])],
+                      existence_patterns=NodeExistencePatterns([NodeExistence(src_n_conn_override={0: [2]})]))
+    assert len(encoder.design_vars) == 0
+
+    encoder.set_nodes(src=src, tgt=tgt, excluded=[(src[0], tgt[1])],
+                      existence_patterns=NodeExistencePatterns([NodeExistence(src_n_conn_override={0: [1]})]))
+    assert len(encoder.design_vars) == 4
+
+    dv, mat = encoder.get_matrix([1, 0, 1, 1], existence=encoder.existence_patterns.patterns[0])
+    assert np.all(dv == [1, 0, 1, 1])
+    assert np.all(mat == np.array([[1, 0], [1, 0], [1, 1]]))
+
+    dv, mat = encoder.get_matrix([0, 1, 0, 1], existence=encoder.existence_patterns.patterns[0])
+    assert np.all(dv == [0, 1, 0, 1])
+    assert mat[0, 0] == -1
+
+
 def test_one_to_one(gen_one_per_existence: AggregateAssignmentMatrixGenerator):
     g = gen_one_per_existence
     encoder = LazyConnIdxMatrixEncoder(LazyClosestImputer(), FlatConnCombsEncoder())

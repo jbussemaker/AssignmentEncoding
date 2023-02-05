@@ -329,7 +329,7 @@ def run_experiment(i_prob: int, effort: SelCompEffort, sbo=False, n_repeat=8, do
     stats_init_file = f'{res_folder}/stats_init_{i_prob}.csv'
     df_init_exists = None
     if not force_stats and os.path.exists(stats_init_file):
-        df_init_exists = pd.read_csv(stats_init_file)
+        df_init_exists = pd.read_csv(stats_init_file).set_index('prob')
 
     # Lazy dist corr for numba jit
     get_problem_factories()[0](DEFAULT_LAZY_ENCODER()).assignment_manager.encoder.get_distance_correlation()
@@ -376,8 +376,8 @@ def run_experiment(i_prob: int, effort: SelCompEffort, sbo=False, n_repeat=8, do
                     problem = problem_factory(DEFAULT_LAZY_ENCODER())
                     raise RuntimeError(f'Failed to select any encoder for {problem!s}!')
 
-                if i == 0 and df_init_exists is not None and \
-                        df_init_exists['enc'].iloc[i_exp] == str(problem.assignment_manager.encoder):
+                if i == 0 and df_init_exists is not None and str(problem) in df_init_exists.index and \
+                        df_init_exists.loc[str(problem)]['enc'] == str(problem.assignment_manager.encoder):
                     results_exist = True
                     log.info(f'Results exist for {problem!s} (encoder: {problem.assignment_manager.encoder!s})')
                     break
@@ -390,8 +390,12 @@ def run_experiment(i_prob: int, effort: SelCompEffort, sbo=False, n_repeat=8, do
         encoder = problem.assignment_manager.encoder
 
         if results_exist:
+            df_init_row = df_init_exists.loc[str(problem)]
             for col in stats:
-                stats[col].append(df_init_exists[col].iloc[i_exp])
+                if col == 'prob':
+                    stats['prob'].append(str(problem))
+                else:
+                    stats[col].append(df_init_row[col])
             imp_ratio_tot = stats['imp_ratio_tot'][-1]
         else:
             stats['sel_time'].append(np.mean(sel_times) if not failed else np.nan)

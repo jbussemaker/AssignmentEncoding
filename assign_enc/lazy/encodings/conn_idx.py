@@ -3,11 +3,14 @@ from typing import *
 from assign_enc.matrix import *
 from assign_enc.lazy_encoding import *
 from assign_enc.eager.encodings.grouped_base import GroupedEncoder
+from assign_enc.eager.encodings.group_element import ConnIdxGroupedEncoder
 
-__all__ = ['LazyConnIdxMatrixEncoder', 'ConnCombsEncoder', 'FlatConnCombsEncoder', 'GroupedConnCombsEncoder']
+__all__ = ['LazyConnIdxMatrixEncoder', 'ConnCombsEncoder', 'FlatConnCombsEncoder', 'GroupedConnCombsEncoder',
+           'ConnIdxCombsEncoder']
 
 
 class ConnCombsEncoder:
+    """Base class for an encoder that encodes a specific set of connections coming from a particular node"""
 
     def __init__(self):
         self._registry = {}
@@ -29,6 +32,7 @@ class ConnCombsEncoder:
 
 
 class FlatConnCombsEncoder(ConnCombsEncoder):
+    """Encode by counting the nr of possible matrices"""
 
     def encode(self, key, matrix: np.ndarray) -> List[DiscreteDV]:
         self._registry[key] = matrix
@@ -52,16 +56,24 @@ class FlatConnCombsEncoder(ConnCombsEncoder):
 
 
 class GroupedConnCombsEncoder(ConnCombsEncoder):
+    """Encode by grouping the values of the connection matrix"""
 
     def encode(self, key, matrix: np.ndarray) -> List[DiscreteDV]:
         if matrix.shape[0] == 0:
             self._registry[key] = ({}, matrix)
             return []
 
-        dv_values = GroupedEncoder.group_by_values(matrix)
+        dv_values = self._get_dv_values(matrix)
+        if dv_values is None:
+            self._registry[key] = ({}, matrix)
+            return []
+
         dv_map = {tuple(dv): i for i, dv in enumerate(dv_values)}
         self._registry[key] = (dv_map, matrix)
         return [DiscreteDV(n_opts=n+1) for n in np.max(dv_values, axis=0)]
+
+    def _get_dv_values(self, matrix: np.ndarray) -> Optional[np.ndarray]:
+        return GroupedEncoder.group_by_values(matrix)
 
     def decode(self, key, vector: DesignVector) -> Optional[np.ndarray]:
         dv_map, matrix = self._registry[key]
@@ -82,6 +94,19 @@ class GroupedConnCombsEncoder(ConnCombsEncoder):
 
     def __str__(self):
         return 'Grouped'
+
+
+class ConnIdxCombsEncoder(GroupedConnCombsEncoder):
+    """Encode by grouping the indices of connections in the connection matrix"""
+
+    def _get_dv_values(self, matrix: np.ndarray) -> Optional[np.ndarray]:
+        conn_idx_values = ConnIdxGroupedEncoder.get_conn_indices(matrix)
+        if conn_idx_values is None:
+            return
+        return GroupedEncoder.group_by_values(conn_idx_values)
+
+    def __str__(self):
+        return 'ConnIdx'
 
 
 class LazyConnIdxMatrixEncoder(LazyEncoder):
@@ -106,6 +131,7 @@ class LazyConnIdxMatrixEncoder(LazyEncoder):
         blocked_mask = matrix_gen.conn_blocked_mask
         no_repeat_mask = matrix_gen.no_repeat_mask
 
+        # We can either encode connection from each source node or to each target node
         if self._by_src:
             from_nodes, to_nodes = self.src, self.tgt
             has_from, has_to = existence.src_exists_mask(len(self.src)), existence.tgt_exists_mask(len(self.tgt))
@@ -116,14 +142,17 @@ class LazyConnIdxMatrixEncoder(LazyEncoder):
             from_n_conn_override, to_n_conn_override = existence.tgt_n_conn_override, existence.src_n_conn_override
             blocked_mask, no_repeat_mask = blocked_mask.T, no_repeat_mask.T
 
+        # Encode each reference node separately
         self._dv_idx_map[existence] = dv_idx_map = {}
         all_dvs = []
         for i, node in enumerate(from_nodes):
+            # Check if node exists
             if not has_from[i]:
                 continue
+            # Get a list of possible nr of outgoing/incoming connections
             n_from_conn = from_n_conn_override.get(i, matrix_gen.get_node_conns(node, overall_max))
 
-            # Get maximum nr of connections for this source node
+            # Get maximum nr of connections to each target (source) node for this source (target) node
             n_tgt_conns = np.zeros((len(to_nodes),), dtype=np.int64)
             for j, to_node in enumerate(to_nodes):
                 if not has_to[j] or blocked_mask[i, j]:

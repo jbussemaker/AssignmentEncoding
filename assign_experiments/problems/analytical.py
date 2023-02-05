@@ -40,7 +40,6 @@ class AnalyticalProblemBase(AssignmentProblem):
         f = np.zeros((2,))
         for i_src, i_tgt in conns:
             f += self.coeff[i_src, i_tgt, :]
-        f[0] = -f[0]
         if self._invert_f2:
             f[1] = -f[1]
         if self._skew_f2:
@@ -54,8 +53,8 @@ class AnalyticalProblemBase(AssignmentProblem):
     def get_coefficients(n_src, n_tgt):
         coeff = np.ones((n_src, n_tgt, 2))
         for i in range(n_src):
-            coeff[i, :, 0] = 1-np.sin(np.linspace(0, 3*np.pi, n_tgt) + .25*np.pi*i)
-            coeff[i, :, 1] = 1+np.cos(np.linspace(-np.pi, 1.5*np.pi, n_tgt) - .5*np.pi*i)
+            coeff[i, :, 0] = np.sin(np.linspace(0, 3*np.pi, n_tgt) + .25*np.pi*i)-1
+            coeff[i, :, 1] = np.cos(np.linspace(-np.pi, 1.5*np.pi, n_tgt) - .5*np.pi*i)+1
         return coeff
 
     def _get_node(self, src: bool, idx: int) -> Node:
@@ -231,13 +230,6 @@ class AnalyticalPermutingProblem(AnalyticalProblemBase):
 
     def __init__(self, encoder, n: int = 3):
         super().__init__(encoder, n_src=n, n_tgt=n)
-        cs = np.zeros((n, n))
-        di = np.diag_indices(n)
-        for i in range(n):
-            if i > 0:
-                cs[di[0][i:], di[1][:-i]] = i
-                cs[di[0][:-i], di[1][i:]] = -i
-        self._conns_sum = cs[:, ::-1]
 
     def get_init_kwargs(self) -> dict:
         return {'n': self._n_src}

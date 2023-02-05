@@ -170,13 +170,18 @@ class Encoder:
 
             matrix = matrix[:n]
             des_vectors = des_vectors[:n]
-            dv_dist_all.append(list(self._calc_internal_distance(des_vectors)[np.triu_indices(des_vectors.shape[0], k=1)]))
+            dv_dist_all.append(list(self._calc_internal_dv_distance(des_vectors)[np.triu_indices(des_vectors.shape[0], k=1)]))
             mat_dist_all.append(list(self._calc_internal_distance(matrix)[np.triu_indices(matrix.shape[0], k=1)]))
 
         return dv_dist_all, mat_dist_all
 
     def _iter_sampled_dv_mat(self, n: int, sampled_dvs: dict):
         raise NotImplementedError
+
+    @staticmethod
+    def _calc_internal_dv_distance(arr: np.ndarray) -> np.ndarray:
+        from scipy.spatial import distance
+        return distance.cdist(arr, arr, 'cityblock')  # Manhattan distance
 
     @staticmethod
     def _calc_internal_distance(arr: np.ndarray) -> np.ndarray:
