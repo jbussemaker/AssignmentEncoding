@@ -3,11 +3,41 @@ from typing import *
 from assign_enc.matrix import *
 from assign_enc.encoding import *
 from assign_pymoo.problem import *
+from pymoo.core.repair import Repair
+from assign_enc.lazy_encoding import *
+from pymoo.algorithms.moo.nsga2 import NSGA2
 
 __all__ = ['AnalyticalProblemBase', 'AnalyticalCombinationProblem', 'AnalyticalAssignmentProblem',
            'AnalyticalPartitioningProblem', 'AnalyticalDownselectingProblem', 'AnalyticalConnectingProblem',
            'AnalyticalPermutingProblem', 'AnalyticalIterCombinationsProblem',
-           'AnalyticalIterCombinationsReplacementProblem']
+           'AnalyticalIterCombinationsReplacementProblem', 'ManualBestEncoder']
+
+
+class ManualBestEncoder(LazyEncoder):
+    """Manual encoder for an analytical optimization problem"""
+
+    def _impute(self, vector, matrix, existence: NodeExistence) -> Tuple[DesignVector, np.ndarray]:
+        raise RuntimeError('Manual best encoder should never (automatically) impute!')
+
+    def _encode(self, existence: NodeExistence) -> List[DiscreteDV]:
+        """Encode the assignment problem (given by src and tgt nodes) directly to design variables"""
+        raise NotImplementedError
+
+    def _decode(self, vector: DesignVector, existence: NodeExistence) -> Optional[np.ndarray]:
+        """Return the connection matrix as would be encoded by the given design vector"""
+        raise NotImplementedError
+
+    def _pattern_name(self) -> str:
+        raise NotImplementedError
+
+    def get_nsga2(self, pop_size=100) -> Optional[NSGA2]:
+        """Return optimally-configured NSGA2 to solve this encoded problem"""
+
+    def __repr__(self):
+        return f'{self.__class__.__name__}({self._imputer!r})'
+
+    def __str__(self):
+        return f'Manual Best {self._pattern_name()} Encoding'
 
 
 class AnalyticalProblemBase(AssignmentProblem):
@@ -57,6 +87,17 @@ class AnalyticalProblemBase(AssignmentProblem):
             coeff[i, :, 1] = np.cos(np.linspace(-np.pi, 1.5*np.pi, n_tgt) - .5*np.pi*i)+1
         return coeff
 
+    def get_repair(self):
+        encoder = self.assignment_manager.encoder
+        if isinstance(encoder, ManualBestEncoder):
+            nsga2 = encoder.get_nsga2()
+            if nsga2 is not None and nsga2.repair is not None:
+                return nsga2.repair
+        return super().get_repair()
+
+    def get_manual_best_encoder(self, imputer: LazyImputer) -> Optional[ManualBestEncoder]:
+        pass
+
     def _get_node(self, src: bool, idx: int) -> Node:
         raise NotImplementedError
 
@@ -91,6 +132,24 @@ class AnalyticalCombinationProblem(AnalyticalProblemBase):
 
     def __str__(self):
         return f'{self.get_problem_name()} {self._n_src} -> {self._n_tgt}'
+
+    def get_manual_best_encoder(self, imputer: LazyImputer) -> Optional[ManualBestEncoder]:
+        return CombinationBestEncoder(imputer)
+
+
+class CombinationBestEncoder(ManualBestEncoder):
+    """Manually encodes the combination pattern: 1 design variable with n_tgt options [Selva2016]"""
+
+    def _encode(self, existence: NodeExistence) -> List[DiscreteDV]:
+        return [DiscreteDV(n_opts=self.n_tgt)]
+
+    def _decode(self, vector: DesignVector, existence: NodeExistence) -> Optional[np.ndarray]:
+        matrix = np.zeros((1, self.n_tgt), dtype=int)
+        matrix[0, vector[0]] = 1
+        return matrix
+
+    def _pattern_name(self) -> str:
+        return 'Combination'
 
 
 class AnalyticalAssignmentProblem(AnalyticalProblemBase):
@@ -135,6 +194,91 @@ class AnalyticalAssignmentProblem(AnalyticalProblemBase):
         return f'An Assign Prob {self._n_src} -> {self._n_tgt}{"; inj" if self.injective else ""}' \
                f'{"; sur" if self.surjective else ""}{"; rep" if self.repeatable else ""}'
 
+    def get_manual_best_encoder(self, imputer: LazyImputer) -> Optional[ManualBestEncoder]:
+        if self.injective and self.surjective and not self.repeatable:
+            return PartitioningBestEncoder(imputer)
+        return AssigningBestEncoder(imputer, injective=self.injective, surjective=self.surjective, repeatable=self.repeatable)
+
+
+class AssigningBestEncoder(ManualBestEncoder):
+    """Manually encodes the assigning pattern:
+    n_src x n_tgt binary design variables, if repeatable n_opts=max(n_src,n_tgt) [Selva2016]"""
+
+    def __init__(self, imputer, injective=False, surjective=False, repeatable=False):
+        self.injective = injective  # Each tgt max 1 conn
+        self.surjective = surjective  # Each tgt min 1 conn
+        self.repeatable = repeatable
+        super().__init__(imputer)
+
+    @property
+    def _n_max(self):
+        n_max = 1
+        if self.repeatable:
+            n_max_src = sum([max(1, node.min_conns) if node.max_inf else max(node.conns) for node in self.src])
+            n_max_tgt = sum([max(1, node.min_conns) if node.max_inf else max(node.conns) for node in self.tgt])
+            n_max = max(n_max_src, n_max_tgt)
+        return n_max
+
+    def _encode(self, existence: NodeExistence) -> List[DiscreteDV]:
+        n_max = self._n_max
+        return [DiscreteDV(n_opts=n_max+1) for _ in range(self.n_src*self.n_tgt)]
+
+    def _decode(self, vector: DesignVector, existence: NodeExistence) -> Optional[np.ndarray]:
+        return np.array(vector, dtype=int).reshape((self.n_src, self.n_tgt))
+
+    def _pattern_name(self) -> str:
+        return 'Assigning'
+
+    def get_nsga2(self, pop_size=100) -> Optional[NSGA2]:
+        from pymoo.operators.sampling.rnd import IntegerRandomSampling
+        return NSGA2(
+            pop_size=pop_size,
+            sampling=IntegerRandomSampling(),
+            repair=AssigningRepair(
+                self.n_src, self.n_tgt, self._n_max, injective=self.injective, surjective=self.surjective,
+                repeatable=self.repeatable),
+        )
+
+
+class AssigningRepair(Repair):
+
+    def __init__(self, n_src, n_tgt, n_max, injective=False, surjective=False, repeatable=False):
+        self.n_src = n_src
+        self.n_tgt = n_tgt
+        self.n_max = n_max
+        self.injective = injective
+        self.surjective = surjective
+        self.repeatable = repeatable
+        super().__init__()
+
+    def _do(self, problem, X, **kwargs):
+        X = np.around(X).astype(int)
+        injective, surjective, repeatable = self.injective, self.surjective, self.repeatable
+
+        n_src, n_tgt, n_max = self.n_src, self.n_tgt, self.n_max
+        for row in X:
+            for i_tgt in range(n_tgt):
+                conns = row[i_tgt::n_tgt]
+                n_conns = np.sum(conns)
+                if injective and n_conns > 1:
+                    has_conn = conns == 1
+                    conns[:] = 0
+                    conns[np.random.choice(np.where(has_conn)[0])] = 1
+                elif surjective and n_conns < 1:
+                    conns[np.random.choice(np.arange(n_src))] = 1
+
+                elif repeatable and n_conns > n_max:
+                    while np.sum(conns) > n_max:
+                        conns[np.random.choice(np.where(conns > 0)[0])] -= 1
+
+            if repeatable:
+                for i_src in range(n_src):
+                    conns = row[i_src*n_tgt:(i_src+1)*n_tgt]
+                    while np.sum(conns) > n_max:
+                        conns[np.random.choice(np.where(conns > 0)[0])] -= 1
+
+        return X
+
 
 class AnalyticalPartitioningProblem(AnalyticalProblemBase):
     """Partitioning pattern: sources have any connections, targets 1, no repetitions; if changed into a covering
@@ -165,6 +309,35 @@ class AnalyticalPartitioningProblem(AnalyticalProblemBase):
     def __str__(self):
         return f'An Part Prob {self._n_src} -> {self._n_tgt}{"; cov" if self.covering else ""}'
 
+    def get_manual_best_encoder(self, imputer: LazyImputer) -> Optional[ManualBestEncoder]:
+        if self.covering:
+            return CoveringPartitioningBestEncoder(imputer)
+        return PartitioningBestEncoder(imputer)
+
+
+class PartitioningBestEncoder(ManualBestEncoder):
+    """Manually encodes the partitioning pattern: n_tgt design variables with n_src options [Selva2016]"""
+
+    def _encode(self, existence: NodeExistence) -> List[DiscreteDV]:
+        return [DiscreteDV(n_opts=self.n_src) for _ in range(self.n_tgt)]
+
+    def _decode(self, vector: DesignVector, existence: NodeExistence) -> Optional[np.ndarray]:
+        vector = np.array(vector)
+        matrix = np.zeros((self.n_src, self.n_tgt), dtype=int)
+        for i in range(self.n_src):
+            matrix[i, vector == i] = 1
+        return matrix
+
+    def _pattern_name(self) -> str:
+        return 'Partitioning'
+
+
+class CoveringPartitioningBestEncoder(AssigningBestEncoder):
+    """Manually encodes the covering partitioning pattern: n_src*n_tgt design variables (same as assigning encoder)"""
+
+    def __init__(self, imputer):
+        super().__init__(imputer, surjective=True)
+
 
 class AnalyticalDownselectingProblem(AnalyticalProblemBase):
     """Downselecting pattern: 1 source selecting one or more of the targets:
@@ -187,6 +360,22 @@ class AnalyticalDownselectingProblem(AnalyticalProblemBase):
 
     def __str__(self):
         return f'An Down Prob {self._n_src} -> {self._n_tgt}'
+
+    def get_manual_best_encoder(self, imputer: LazyImputer) -> Optional[ManualBestEncoder]:
+        return DownselectingBestEncoder(imputer)
+
+
+class DownselectingBestEncoder(ManualBestEncoder):
+    """Manually encodes the downselecting pattern: n_tgt binary design variables [Selva2016]"""
+
+    def _encode(self, existence: NodeExistence) -> List[DiscreteDV]:
+        return [DiscreteDV(n_opts=2) for _ in range(self.n_tgt)]
+
+    def _decode(self, vector: DesignVector, existence: NodeExistence) -> Optional[np.ndarray]:
+        return np.array(vector, dtype=int).reshape((1, self.n_tgt))
+
+    def _pattern_name(self) -> str:
+        return 'Downselecting'
 
 
 class AnalyticalConnectingProblem(AnalyticalProblemBase):
@@ -224,6 +413,35 @@ class AnalyticalConnectingProblem(AnalyticalProblemBase):
     def __str__(self):
         return f'An Conn Prob {self._n_src} -> {self._n_tgt}{"; dir" if self.directed else ""}'
 
+    def get_manual_best_encoder(self, imputer: LazyImputer) -> Optional[ManualBestEncoder]:
+        return ConnectingBestEncoder(imputer, directed=self.directed)
+
+
+class ConnectingBestEncoder(ManualBestEncoder):
+    """Manually encodes the connecting pattern:
+    n*(n-1) binary design variables if directed, else (n*(n-1))/2 binary design variables [Selva2016]"""
+
+    def __init__(self, imputer, directed=True):
+        self.directed = directed
+        super().__init__(imputer)
+
+    def _encode(self, existence: NodeExistence) -> List[DiscreteDV]:
+        n_dv = self.n_src*(self.n_src-1)
+        if not self.directed:
+            n_dv = int(n_dv/2)
+        return [DiscreteDV(n_opts=2) for _ in range(n_dv)]
+
+    def _decode(self, vector: DesignVector, existence: NodeExistence) -> Optional[np.ndarray]:
+        matrix = np.zeros((self.n_src, self.n_src), dtype=int)
+        n_upper = int(len(vector)/2) if self.directed else len(vector)
+        matrix[np.triu_indices(self.n_src, k=1)] = vector[:n_upper]
+        if self.directed:
+            matrix[np.tril_indices(self.n_src, k=-1)] = vector[n_upper:]
+        return matrix
+
+    def _pattern_name(self) -> str:
+        return 'Connecting'
+
 
 class AnalyticalPermutingProblem(AnalyticalProblemBase):
     """Permutation pattern: sources and targets (same amount) have 1 connection each, no repetitions"""
@@ -245,6 +463,56 @@ class AnalyticalPermutingProblem(AnalyticalProblemBase):
 
     def __str__(self):
         return f'An Perm Prob {self._n_src} -> {self._n_tgt}'
+
+    def get_manual_best_encoder(self, imputer: LazyImputer) -> Optional[ManualBestEncoder]:
+        return PermutingBestEncoder(imputer)
+
+
+class PermutingBestEncoder(ManualBestEncoder):
+    """Manually encodes the permuting pattern: n design variables with n options [Selva2016],
+    and an NSGA2 configured with permutation-specific operators (https://pymoo.org/customization/permutation.html#Flowshop-Schedule)"""
+
+    def _encode(self, existence: NodeExistence) -> List[DiscreteDV]:
+        return [DiscreteDV(n_opts=self.n_src) for _ in range(self.n_src)]
+
+    def _decode(self, vector: DesignVector, existence: NodeExistence) -> Optional[np.ndarray]:
+        matrix = np.zeros((self.n_src, self.n_src), dtype=int)
+        matrix[np.arange(self.n_src), np.array(vector)] = 1
+        return matrix
+
+    def _pattern_name(self) -> str:
+        return 'Permuting'
+
+    def get_nsga2(self, pop_size=100, **kwargs) -> Optional[NSGA2]:
+        from pymoo.operators.sampling.rnd import PermutationRandomSampling
+        from pymoo.operators.crossover.ox import OrderCrossover
+        from pymoo.operators.mutation.inversion import InversionMutation
+        return NSGA2(
+            pop_size=pop_size, eliminate_duplicates=True,
+            sampling=PermutationRandomSampling(),
+            mutation=InversionMutation(), crossover=OrderCrossover(),
+            repair=PermutingRepair(),
+            **kwargs,
+        )
+
+
+class PermutingRepair(Repair):
+    """Repairs design variables in the permuting problem"""
+
+    def _do(self, problem, X, **kwargs):
+        X = np.around(X).astype(int)
+        n_perm = X.shape[1]
+        for permutation in X:
+            _, idx, counts = np.unique(permutation, return_inverse=True, return_counts=True)
+            dup_idx = (counts > 1)[idx]
+            unique_values = set(permutation[~dup_idx])
+            if len(unique_values) == n_perm:
+                continue
+
+            new_random_perm = np.random.permutation([i for i in range(n_perm) if i not in unique_values])
+            permutation[dup_idx] = new_random_perm
+
+        return X
 
 
 class AnalyticalIterCombinationsProblem(AnalyticalProblemBase):
@@ -271,6 +539,63 @@ class AnalyticalIterCombinationsProblem(AnalyticalProblemBase):
     def __str__(self):
         return f'An Iter Comb Prob {self._n_take} from {self._n_tgt}'
 
+    def get_manual_best_encoder(self, imputer: LazyImputer) -> Optional[ManualBestEncoder]:
+        return CombinationsBestEncoder(imputer, n_take=self._n_take)
+
+
+class CombinationsBestEncoder(ManualBestEncoder):
+    """Manually encodes the connecting pattern: n_take design variables with n_tgt options, with a repair"""
+
+    def __init__(self, imputer, n_take=2, with_replacement=False):
+        self.n_take = n_take
+        self.with_replacement = with_replacement
+        super().__init__(imputer)
+
+    def _encode(self, existence: NodeExistence) -> List[DiscreteDV]:
+        if self.with_replacement:
+            return [DiscreteDV(n_opts=self.n_tgt) for _ in range(self.n_take)]
+
+        # Without replacement, each variable can only take n-n_take positions
+        return [DiscreteDV(n_opts=self.n_tgt-(self.n_take-1)) for _ in range(self.n_take)]
+
+    def _decode(self, vector: DesignVector, existence: NodeExistence) -> Optional[np.ndarray]:
+        matrix = np.zeros((1, self.n_tgt), dtype=int)
+        for i_dv, i in enumerate(vector):
+            offset = 0 if self.with_replacement else i_dv
+            matrix[0, i+offset] += 1
+        return matrix
+
+    def _pattern_name(self) -> str:
+        return 'Combinations With Replacement' if self.with_replacement else 'Combinations'
+
+    def get_nsga2(self, pop_size=100) -> Optional[NSGA2]:
+        from pymoo.operators.sampling.rnd import IntegerRandomSampling
+        return NSGA2(
+            pop_size=pop_size,
+            sampling=IntegerRandomSampling(),
+            repair=CombinationsRepair(self.n_take, self.n_tgt),
+        )
+
+
+class CombinationsRepair(Repair):
+    """Repairs design variables in the combinations problem. Works both for with and without replacement, as the version
+    without replacement is offset by the index of the variable.
+    To repair, it ensures that indices of subsequent design variables are the same or higher than the preceeding"""
+
+    def __init__(self, n_take, n):
+        self.n_take = n_take
+        self.n = n
+        super().__init__()
+
+    def _do(self, problem, X, **kwargs):
+        X = np.around(X).astype(int)
+        for combination in X:
+            for i in range(1, self.n_take):
+                if combination[i] < combination[i-1]:
+                    # Move to any of the random positions that are equal or higher
+                    combination[i] = np.random.choice(np.arange(combination[i-1], self.n))
+        return X
+
 
 class AnalyticalIterCombinationsReplacementProblem(AnalyticalIterCombinationsProblem):
     """Itertools combinations_with_replacement function (select n_take elements from n_tgt targets):
@@ -284,6 +609,9 @@ class AnalyticalIterCombinationsReplacementProblem(AnalyticalIterCombinationsPro
 
     def __str__(self):
         return f'An Iter Comb Repl Prob {self._n_take} from {self._n_tgt}'
+
+    def get_manual_best_encoder(self, imputer: LazyImputer) -> Optional[ManualBestEncoder]:
+        return CombinationsBestEncoder(imputer, n_take=self._n_take, with_replacement=True)
 
 
 if __name__ == '__main__':

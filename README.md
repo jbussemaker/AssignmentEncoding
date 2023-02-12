@@ -318,6 +318,7 @@ Suggested selection:
   - However, increasing the allowed time does not result in better encoding scores and optimization results
   - This could be because the encoders that take most time are the ones that use design variable grouping, which is
     normally used in encoders with very high imputation ratios, and are therefore usually not interesting anyway
+!!!UPDATE BELOW!!! TODO:
 - Most selected encoders reside either on the imputation ratio = 1 or information index = 1 lines
   - Many even lie at the intersection (which is the best encoding score possible)
   - Maximum imputation ratio was about 30, even for relatively large problems

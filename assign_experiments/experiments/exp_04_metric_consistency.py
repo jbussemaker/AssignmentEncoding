@@ -446,12 +446,22 @@ def run_experiment(size: Size, sbo=False, n_repeat=8, i_prob=None, do_run=True, 
         if i_prob is not None and i_prob != j:
             continue
         n_valid = problem.get_n_valid_design_points()
-        for i, encoder_factory in enumerate(encoders):
-            encoder = encoder_factory(imputers[i]())
+
+        prob_enc = encoders
+        prob_imp = imputers
+        if isinstance(problem, AnalyticalProblemBase):
+            prob_enc = [problem.get_manual_best_encoder]+prob_enc
+            prob_imp = [DEFAULT_LAZY_IMPUTER]+prob_imp
+
+        for i, encoder_factory in enumerate(prob_enc):
+            encoder = encoder_factory(prob_imp[i]())
+            if encoder is None:
+                continue
             log.info(f'Encoding {problem!s} ({j+1}/{len(base_problems)}) with {encoder!s} ({i+1}/{len(encoders)})')
 
             has_encoding_error = False
             stats_key = (str(problem), str(encoder))
+            is_manual_best = 'Manual Best' in str(encoder)
             if df_init_exists is not None and stats_key in df_init_exists.index:
                 log.info(f'Results exist for {problem!s} (encoder: {encoder!s})')
                 stats_row = df_init_exists.loc[stats_key]
@@ -532,7 +542,7 @@ def run_experiment(size: Size, sbo=False, n_repeat=8, i_prob=None, do_run=True, 
 
                 stats['enc_time_sec'].append(np.mean(enc_times) if len(enc_times) > 0 else np.nan)
                 stats['enc_time_sec_std'].append(np.std(enc_times))
-                if has_encoding_error or imp_ratio > imp_ratio_sample_limit:
+                if has_encoding_error or (imp_ratio > imp_ratio_sample_limit and not is_manual_best):
                     stats['sampling_time_sec'].append(np.nan)
                     stats['sampling_time_sec_std'].append(np.nan)
                     stats['dist_corr'].append(np.nan)
@@ -566,15 +576,22 @@ def run_experiment(size: Size, sbo=False, n_repeat=8, i_prob=None, do_run=True, 
                     stats['dist_corr_time_sec'].append(np.mean(dist_corr_times))
                     stats['dist_corr_time_sec_std'].append(np.std(dist_corr_times))
 
-            if has_encoding_error or imp_ratio > imp_ratio_limit:
+            if has_encoding_error or (imp_ratio > imp_ratio_limit and not is_manual_best):
                 continue
 
             problems.append(enc_prob)
             plot_names.append(f'{size.name} {enc_prob!s}: {encoder!s}')
             if sbo:
-                algorithms.append(get_sbo_algo(problem, init_size=pop_size))
+                algorithms.append(get_sbo_algo(enc_prob, init_size=pop_size))
             else:
-                algorithms.append(get_ga_algo(problem, pop_size=pop_size))
+                used_manual = False
+                if isinstance(encoder, ManualBestEncoder):
+                    manual_nsga2 = encoder.get_nsga2(pop_size=pop_size)
+                    if manual_nsga2 is not None:
+                        algorithms.append(manual_nsga2)
+                        used_manual = True
+                if not used_manual:
+                    algorithms.append(get_ga_algo(enc_prob, pop_size=pop_size))
             i_map[i_exp] = len(stats['prob'])-1
             i_exp += 1
 
@@ -795,7 +812,7 @@ if __name__ == '__main__':
 
     run_experiment(Size.SM, n_repeat=8)
     # run_experiment(Size.MD, n_repeat=8)
-    # for ipr in list(range(len(get_problems(Size.LG))))[3:]:
+    # for ipr in list(range(len(get_problems(Size.LG)))):
     #     run_experiment(Size.LG, n_repeat=8, i_prob=ipr)
     # for ipr in list(range(len(get_problems(Size.SM)))):
     #     run_experiment(Size.SM, sbo=True, n_repeat=4, i_prob=ipr)

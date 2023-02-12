@@ -244,8 +244,11 @@ class LazyEncoder(Encoder):
         if valid:
             return list(vector)+extra_vector, matrix
 
-        vector, matrix = self._imputer.impute(vector, matrix, existence)
+        vector, matrix = self._impute(vector, matrix, existence)
         return list(vector)+extra_vector, matrix
+
+    def _impute(self, vector, matrix, existence: NodeExistence) -> Tuple[DesignVector, np.ndarray]:
+        return self._imputer.impute(vector, matrix, existence)
 
     def _get_validate_matrix(self, vector: DesignVector, existence: NodeExistence = None) \
             -> Tuple[List[int], List[int], NodeExistence, np.ndarray, bool]:
