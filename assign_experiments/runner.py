@@ -24,14 +24,14 @@ log = logging.getLogger('assign_exp.runner')
 warnings.filterwarnings("ignore")
 
 
-def show_problem_size(problem: AssignmentProblem):
+def show_problem_size(problem: AssignmentProblemBase):
     print(str(problem))
     print(f'Design space size: {problem.get_n_design_points()} ({problem.n_var} DVs)')
     print(f'Valid designs: {problem.get_n_valid_design_points()}')
     print(f'Imputation ratio: {problem.get_imputation_ratio():.2f}')
 
 
-def calc_initial_hv(problem: AssignmentProblem):
+def calc_initial_hv(problem: AssignmentProblemBase):
     pop = Initialization(RepairedRandomSampling(repair=problem.get_repair())).do(problem, 1000)
     Evaluator().eval(problem, pop)
     f = pop.get('F')

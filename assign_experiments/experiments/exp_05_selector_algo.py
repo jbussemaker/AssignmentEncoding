@@ -8,6 +8,7 @@ import numpy as np
 import pandas as pd
 from typing import *
 from assign_pymoo.algo import *
+from assign_pymoo.problem import *
 from assign_pymoo.sampling import *
 from assign_enc.lazy_encoding import *
 from assign_experiments.runner import *
@@ -15,7 +16,6 @@ from assign_enc.encoding import Encoder
 from assign_enc.encoder_registry import *
 from werkzeug.utils import secure_filename
 from assign_enc.selector import EncoderSelector
-from assign_pymoo.problem import AssignmentProblem
 from assign_experiments.problems.gnc import GNCProblem
 from assign_experiments.experimenter import Experimenter
 from assign_experiments.problems.analytical_multi import *
@@ -33,7 +33,7 @@ def _get_prob_factory(cls, **kwargs):
     return _prob_factory
 
 
-def get_gnc_problem_factories() -> List[Callable[[Optional[Encoder]], AssignmentProblem]]:
+def get_gnc_problem_factories() -> List[Callable[[Optional[Encoder]], AssignmentProblemBase]]:
     factories = []
     factories += [_get_prob_factory(GNCProblem, choose_nr=False, n_max=n, choose_type=False) for n in [3, 4]]  # 265, 41503, [24 997 921]
     factories += [_get_prob_factory(GNCProblem, choose_nr=True, n_max=n, choose_type=False) for n in [3, 4]]  # 327, 46312
@@ -54,7 +54,7 @@ def show_gnc_problem_sizes(reset_pf=False, plot=False):
         print('')
 
 
-def get_multi_comb_problem_factories() -> List[Callable[[Optional[Encoder]], AssignmentProblem]]:
+def get_multi_comb_problem_factories() -> List[Callable[[Optional[Encoder]], AssignmentProblemBase]]:
     factories = []
 
     factories += [_get_prob_factory(AnalyticalCombinationDownselectingProblem, n_tgt=n) for n in [5, 9, 12]]  # 160, 4608, 49152
@@ -93,7 +93,7 @@ def show_multi_comb_problem_sizes(reset_pf=False, plot=False):
         print('')
 
 
-def get_problem_factories() -> List[Callable[[Optional[Encoder]], AssignmentProblem]]:
+def get_problem_factories() -> List[Callable[[Optional[Encoder]], AssignmentProblemBase]]:
     factories = []
     for size in Size:
         factories += get_problems(size, return_factories=True)
@@ -214,7 +214,7 @@ def exp_selector_imp_ratio_type(i_prob: int, n_repeat=4):
                 sel_times = []
                 sel_times_no_cache = []
                 matrix_gen = problem_factory(DEFAULT_LAZY_ENCODER()).assignment_manager.matrix_gen
-                problem: Optional[AssignmentProblem] = None
+                problem: Optional[AssignmentProblemBase] = None
                 log.info(f'Encoding problem {j+1}/{len(problem_factories)}: {ir_name} {i_ir+1}/{len(imp_ratio_types)}; '
                          f'{dc_name} {i_dc+1}/{len(dist_corr_types)}')
                 failed = False
@@ -353,15 +353,18 @@ def run_experiment(i_prob: int, effort: SelCompEffort, sbo=False, n_repeat=8, do
 
         sel_times = []
         sel_times_no_cache = []
-        matrix_gen = problem_factory(DEFAULT_LAZY_ENCODER()).assignment_manager.matrix_gen
-        problem: Optional[AssignmentProblem] = None
+        base_problem = problem_factory(DEFAULT_LAZY_ENCODER())
+        problem: Optional[AssignmentProblemBase] = None
         log.info(f'Encoding problem {j+1}/{len(problem_factories)} ({effort.name} effort)')
         failed = False
         results_exist = False
         for no_cache in [True, False]:
             for i in range(n_repeat):
                 if no_cache:
-                    matrix_gen.reset_agg_matrix_cache()
+                    if isinstance(base_problem, MultiAssignmentProblem):
+                        base_problem.reset_agg_matrix_cache()
+                    else:
+                        base_problem.assignment_manager.matrix_gen.reset_agg_matrix_cache()
                 try:
                     s = timeit.default_timer()
                     problem = problem_factory(None)

@@ -17,7 +17,7 @@ def test_encoding():
             continue
         n_checked += 1
         assert len(enc.design_vars) == 3*4
-        n_des_points = np.cumprod([dv.n_opts for dv in enc.design_vars])[-1]
+        n_des_points = np.prod([dv.n_opts for dv in enc.design_vars])
         assert enc.get_imputation_ratio() == n_des_points/n
         assert enc.get_imputation_ratio() > 6000
 

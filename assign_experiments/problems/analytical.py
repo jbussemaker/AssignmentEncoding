@@ -516,9 +516,8 @@ class PermutingRepair(Repair):
 
 
 class AnalyticalIterCombinationsProblem(AnalyticalProblemBase):
-    """Itertools combinations function (select n_take elements from n_tgt targets):
-    1 source has n_take connections to n_tgt targets, no repetition
-    Note: combination problem with more n_take"""
+    """Unordered non-replacing combining pattern (itertools combinations function: select n_take elements from n_tgt targets):
+    1 source has n_take connections to n_tgt targets, no repetition"""
 
     def __init__(self, encoder, n_take: int = 2, n_tgt: int = 3):
         self._n_take = min(n_take, n_tgt)
@@ -540,11 +539,11 @@ class AnalyticalIterCombinationsProblem(AnalyticalProblemBase):
         return f'An Iter Comb Prob {self._n_take} from {self._n_tgt}'
 
     def get_manual_best_encoder(self, imputer: LazyImputer) -> Optional[ManualBestEncoder]:
-        return CombinationsBestEncoder(imputer, n_take=self._n_take)
+        return UnorderedCombiningBestEncoder(imputer, n_take=self._n_take)
 
 
-class CombinationsBestEncoder(ManualBestEncoder):
-    """Manually encodes the connecting pattern: n_take design variables with n_tgt options, with a repair"""
+class UnorderedCombiningBestEncoder(ManualBestEncoder):
+    """Manually encodes the unordered combining pattern: n_take design variables with n_tgt options, with a repair"""
 
     def __init__(self, imputer, n_take=2, with_replacement=False):
         self.n_take = n_take
@@ -573,14 +572,14 @@ class CombinationsBestEncoder(ManualBestEncoder):
         return NSGA2(
             pop_size=pop_size,
             sampling=IntegerRandomSampling(),
-            repair=CombinationsRepair(self.n_take, self.n_tgt),
+            repair=UnorderedCombiningRepair(self.n_take, self.n_tgt),
         )
 
 
-class CombinationsRepair(Repair):
-    """Repairs design variables in the combinations problem. Works both for with and without replacement, as the version
+class UnorderedCombiningRepair(Repair):
+    """Repairs design variables in the unordered combining problem. Works both for with and without replacement, as the version
     without replacement is offset by the index of the variable.
-    To repair, it ensures that indices of subsequent design variables are the same or higher than the preceeding"""
+    To repair, it ensures that indices of subsequent design variables are the same or higher than the preceding"""
 
     def __init__(self, n_take, n):
         self.n_take = n_take
@@ -598,7 +597,8 @@ class CombinationsRepair(Repair):
 
 
 class AnalyticalIterCombinationsReplacementProblem(AnalyticalIterCombinationsProblem):
-    """Itertools combinations_with_replacement function (select n_take elements from n_tgt targets):
+    """Unordered combining (with replacements) pattern (itertools combinations_with_replacement function:
+    select n_take elements from n_tgt targets):
     1 source has n_take connections to n_tgt targets, repetition allowed"""
 
     def _get_node(self, src: bool, idx: int) -> Node:
@@ -611,7 +611,7 @@ class AnalyticalIterCombinationsReplacementProblem(AnalyticalIterCombinationsPro
         return f'An Iter Comb Repl Prob {self._n_take} from {self._n_tgt}'
 
     def get_manual_best_encoder(self, imputer: LazyImputer) -> Optional[ManualBestEncoder]:
-        return CombinationsBestEncoder(imputer, n_take=self._n_take, with_replacement=True)
+        return UnorderedCombiningBestEncoder(imputer, n_take=self._n_take, with_replacement=True)
 
 
 if __name__ == '__main__':

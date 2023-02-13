@@ -1,5 +1,6 @@
 import os
 import re
+import copy
 import pickle
 import hashlib
 import numpy as np
@@ -29,7 +30,8 @@ from pymoo.algorithms.moo.nsga2 import NSGA2, calc_crowding_distance
 from pymoo.util.nds.non_dominated_sorting import NonDominatedSorting
 
 
-__all__ = ['AssignmentProblem', 'AssignmentRepair', 'CachedParetoFrontMixin']
+__all__ = ['AssignmentProblemBase', 'AssignmentProblem', 'MultiAssignmentProblem', 'AssignmentRepair',
+           'CachedParetoFrontMixin']
 
 
 class CachedParetoFrontMixin(Problem):
@@ -137,93 +139,10 @@ class CachedParetoFrontMixin(Problem):
         return os.path.join(os.path.dirname(__file__), '.pf_cache', class_str+'.pkl')
 
 
-class AssignmentProblem(CachedParetoFrontMixin, Problem):
-    """class representing an assignment optimization problem."""
-
-    def __init__(self, encoder: Encoder = None, **_):
-        src, tgt = self.get_src_tgt_nodes()
-        excluded = self.get_excluded_edges()
-        existence_patterns = self.get_existence_patterns()
-        self._selector_stage = None
-        if encoder is None:
-            selector = EncoderSelector(src, tgt, excluded=excluded, existence_patterns=existence_patterns)
-            assignment_manager = selector.get_best_assignment_manager()
-            self._selector_stage = selector._last_selection_stage
-        elif isinstance(encoder, (LazyEncoder, EagerEncoder)):
-            args, kwargs = (src, tgt, encoder), {'excluded': excluded, 'existence_patterns': existence_patterns}
-            cls = LazyAssignmentManager if isinstance(encoder, LazyEncoder) else AssignmentManager
-            assignment_manager = cls(*args, **kwargs)
-        else:
-            raise RuntimeError(f'Unknown encoder type: {encoder}')
-        self.assignment_manager = assignment_manager
-        design_vars = assignment_manager.design_vars
-
-        aux_des_vars = self.get_aux_des_vars() or []
-        self.n_aux = len(aux_des_vars)
-        design_vars = aux_des_vars+design_vars
-
-        n_var = len(design_vars)
-        var_types = [Integer(bounds=(0, dv.n_opts-1)) for dv in design_vars]
-        xl = np.zeros((n_var,), dtype=int)
-        xu = np.array([dv.n_opts-1 for dv in design_vars])
-
-        n_obj, n_con = self.get_n_obj(), self.get_n_con()+1
-        super().__init__(n_var=n_var, n_obj=n_obj, n_ieq_constr=n_con, xl=xl, xu=xu, vars=var_types)
-
-    def reset_encoder_selector_cache(self):
-        src, tgt = self.get_src_tgt_nodes()
-        excluded = self.get_excluded_edges()
-        existence_patterns = self.get_existence_patterns()
-        EncoderSelector(src, tgt, excluded=excluded, existence_patterns=existence_patterns).reset_cache()
-
-    def get_for_encoder(self, encoder: Encoder = None):
-        return self.__class__(encoder, **self.get_init_kwargs())
-
-    def get_matrix_count(self):
-        src, tgt = self.get_src_tgt_nodes()
-        excluded = self.get_excluded_edges()
-        existence_patterns = self.get_existence_patterns()
-        matrix_gen = AggregateAssignmentMatrixGenerator(
-            src, tgt, excluded=excluded, existence_patterns=existence_patterns)
-        return matrix_gen.count_all_matrices()
+class AssignmentProblemBase(CachedParetoFrontMixin, Problem):
 
     def get_repair(self):
         return AssignmentRepair()
-
-    def correct_x(self, x: np.ndarray) -> np.ndarray:
-        n_aux = self.n_aux
-        x_corr = x.copy().astype(np.int)
-        for i_dv in range(x_corr.shape[0]):
-            x_corr[i_dv, :n_aux], existence, _ = self.correct_x_aux(x_corr[i_dv, :n_aux])
-            x_corr[i_dv, n_aux:] = self.assignment_manager.correct_vector(x_corr[i_dv, n_aux:], existence=existence)
-        return x_corr
-
-    def _evaluate(self, x, out, *args, **kwargs):
-        x = np.round(x.astype(np.float64)).astype(np.int)
-        n = x.shape[0]
-        x_out = np.empty((n, self.n_var))
-        f_out = np.empty((n, self.n_obj))
-        g_out = np.zeros((n, self.n_constr))
-
-        n_aux = self.n_aux
-        for i in range(n):
-            x_aux, existence, is_violated = self.correct_x_aux(x[i, :n_aux])
-            x_out[i, :n_aux] = x_aux
-            if is_violated:
-                f_out[i, :] = 0
-                g_out[i, 0] = 1
-                continue
-
-            x_out[i, n_aux:], conn_idx = self.assignment_manager.get_conn_idx(x[i, n_aux:], existence=existence)
-            if conn_idx is None:
-                f_out[i, :] = 0
-                g_out[i, 0] = 1
-            else:
-                f_out[i, :], g_out[i, 1:] = self._do_evaluate(conn_idx, x_aux=x_aux)
-
-        out['X'] = x_out
-        out['F'] = f_out
-        out['G'] = g_out
 
     def get_n_design_points(self, n_cont=5) -> int:
         n = 1
@@ -264,16 +183,7 @@ class AssignmentProblem(CachedParetoFrontMixin, Problem):
             pop = self.eval_points(n=n)
         Scatter().add(pop.get('F')).show()
 
-    def get_information_error(self, n_samples: int = None, n_leave_out: int = None, **kwargs) -> np.ndarray:
-        from assign_pymoo.information_content import InformationContentAnalyzer
-        if n_samples is None:
-            n_samples = self.n_var*5
-            n_leave_out = 10
-        return InformationContentAnalyzer(self, **kwargs).get_information_error(n_samples, n_leave_out=n_leave_out)
-
     def get_imputation_ratio(self, n_sample: Optional[int] = 10000):
-        # return self.assignment_manager.get_imputation_ratio()
-
         # Check if analytically available
         n_cont = 5
         n_real = self.get_n_valid_design_points(n_cont=n_cont)
@@ -293,6 +203,129 @@ class AssignmentProblem(CachedParetoFrontMixin, Problem):
         xl, xu = self.bounds()
         n_opts = [int(xu[i]-xl[i]+1) for i, var in enumerate(self.vars) if isinstance(var, Integer)]
         return Encoder.calc_information_index(n_opts)
+
+    @property
+    def assignment_manager(self) -> AssignmentManagerBase:
+        raise NotImplementedError
+
+    def correct_x(self, x: np.ndarray) -> np.ndarray:
+        raise NotImplementedError
+
+    def _evaluate(self, x, out, *args, **kwargs):
+        raise NotImplementedError
+
+    def name(self) -> str:
+        raise NotImplementedError
+
+    def __repr__(self):
+        raise NotImplementedError
+
+    def get_problem_name(self):
+        """Similar to __str__, but without any indication of problem size"""
+        raise NotImplementedError
+
+    def __str__(self):
+        raise NotImplementedError
+
+
+class AssignmentProblem(AssignmentProblemBase):
+    """class representing an assignment optimization problem, parameterized by one assignment manager."""
+
+    def __init__(self, encoder: Encoder = None, **_):
+        src, tgt = self.get_src_tgt_nodes()
+        excluded = self.get_excluded_edges()
+        existence_patterns = self.get_existence_patterns()
+        self._selector_stage = None
+        if encoder is None:
+            selector = EncoderSelector(src, tgt, excluded=excluded, existence_patterns=existence_patterns)
+            assignment_manager = selector.get_best_assignment_manager()
+            self._selector_stage = selector._last_selection_stage
+        elif isinstance(encoder, (LazyEncoder, EagerEncoder)):
+            args, kwargs = (src, tgt, encoder), {'excluded': excluded, 'existence_patterns': existence_patterns}
+            cls = LazyAssignmentManager if isinstance(encoder, LazyEncoder) else AssignmentManager
+            assignment_manager = cls(*args, **kwargs)
+        else:
+            raise RuntimeError(f'Unknown encoder type: {encoder}')
+        self._assignment_manager = assignment_manager
+        design_vars = assignment_manager.design_vars
+
+        aux_des_vars = self.get_aux_des_vars() or []
+        self.n_aux = len(aux_des_vars)
+        design_vars = aux_des_vars+design_vars
+
+        n_var = len(design_vars)
+        var_types = [Integer(bounds=(0, dv.n_opts-1)) for dv in design_vars]
+        xl = np.zeros((n_var,), dtype=int)
+        xu = np.array([dv.n_opts-1 for dv in design_vars])
+
+        n_obj, n_con = self.get_n_obj(), self.get_n_con()+1
+        super().__init__(n_var=n_var, n_obj=n_obj, n_ieq_constr=n_con, xl=xl, xu=xu, vars=var_types)
+
+    @property
+    def assignment_manager(self) -> AssignmentManagerBase:
+        return self._assignment_manager
+
+    def reset_encoder_selector_cache(self):
+        src, tgt = self.get_src_tgt_nodes()
+        excluded = self.get_excluded_edges()
+        existence_patterns = self.get_existence_patterns()
+        EncoderSelector(src, tgt, excluded=excluded, existence_patterns=existence_patterns).reset_cache()
+
+    def get_for_encoder(self, encoder: Encoder = None):
+        return self.__class__(encoder, **self.get_init_kwargs())
+
+    def get_matrix_count(self):
+        src, tgt = self.get_src_tgt_nodes()
+        excluded = self.get_excluded_edges()
+        existence_patterns = self.get_existence_patterns()
+        matrix_gen = AggregateAssignmentMatrixGenerator(
+            src, tgt, excluded=excluded, existence_patterns=existence_patterns)
+        return matrix_gen.count_all_matrices()
+
+    def correct_x(self, x: np.ndarray) -> np.ndarray:
+        n_aux = self.n_aux
+        x_corr = x.copy().astype(np.int)
+        for i_dv in range(x_corr.shape[0]):
+            x_corr[i_dv, :n_aux], existence, _ = self.correct_x_aux(x_corr[i_dv, :n_aux])
+            x_corr[i_dv, n_aux:] = self.assignment_manager.correct_vector(x_corr[i_dv, n_aux:], existence=existence)
+        return x_corr
+
+    def _evaluate(self, x, out, *args, **kwargs):
+        x = np.round(x.astype(np.float64)).astype(np.int)
+        n = x.shape[0]
+        x_out = np.empty((n, self.n_var))
+        f_out = np.empty((n, self.n_obj))
+        g_out = np.zeros((n, self.n_constr))
+
+        n_aux = self.n_aux
+        for i in range(n):
+            x_aux, existence, is_violated = self.correct_x_aux(x[i, :n_aux])
+            x_out[i, :n_aux] = x_aux
+            if is_violated:
+                f_out[i, :] = 0
+                g_out[i, 0] = 1
+                continue
+
+            x_out[i, n_aux:], conn_idx = self.assignment_manager.get_conn_idx(x[i, n_aux:], existence=existence)
+            if conn_idx is None:
+                f_out[i, :] = 0
+                g_out[i, 0] = 1
+            else:
+                f_out[i, :], g_out[i, 1:] = self._do_evaluate(conn_idx, x_aux=x_aux)
+
+        out['X'] = x_out
+        out['F'] = f_out
+        out['G'] = g_out
+
+    def get_n_valid_design_points(self, n_cont=5) -> int:
+        """Implement if the number of valid design points can be calculated analytically"""
+
+    def get_information_error(self, n_samples: int = None, n_leave_out: int = None, **kwargs) -> np.ndarray:
+        from assign_pymoo.information_content import InformationContentAnalyzer
+        if n_samples is None:
+            n_samples = self.n_var*5
+            n_leave_out = 10
+        return InformationContentAnalyzer(self, **kwargs).get_information_error(n_samples, n_leave_out=n_leave_out)
 
     def name(self):
         return f'{self!s} / {self.assignment_manager.encoder!s}'
@@ -341,6 +374,139 @@ class AssignmentProblem(CachedParetoFrontMixin, Problem):
         raise NotImplementedError
 
 
+class MultiAssignmentProblem(AssignmentProblemBase):
+    """Class representing an assignment optimization problem, parameterized by multiple interacting assignment managers"""
+
+    def __init__(self, encoder: Encoder = None, **_):
+        self._assignment_managers = managers = self._get_assignment_managers(encoder=encoder)
+
+        self._n_dv = n_dv = []
+        var_types = []
+        for assignment_manager in managers:
+            design_vars = assignment_manager.design_vars
+            n_dv.append(len(design_vars))
+            var_types += [Integer(bounds=(0, dv.n_opts-1)) for dv in design_vars]
+
+        n_var = len(var_types)
+        xl = np.zeros((n_var,), dtype=int)
+        xu = np.array([var_type.bounds[1] for var_type in var_types])
+
+        n_obj, n_con = self.get_n_obj(), self.get_n_con()+1
+        super().__init__(n_var=n_var, n_obj=n_obj, n_ieq_constr=n_con, xl=xl, xu=xu, vars=var_types)
+
+    def get_n_obj(self) -> int:
+        return 2
+
+    def get_n_con(self) -> int:
+        return 0
+
+    def _get_assignment_managers(self, encoder: Encoder = None) -> List[AssignmentManagerBase]:
+        assignment_managers = []
+        selector_stage = None
+        for matrix_gen in self.get_matrix_defs():
+            src, tgt = matrix_gen.src, matrix_gen.tgt
+            excluded = matrix_gen.ex
+            if excluded is not None:
+                excluded = [(src[edge[0]], tgt[edge[1]]) for edge in excluded]
+            existence_patterns = matrix_gen.existence_patterns
+
+            if encoder is None:
+                selector = EncoderSelector(src, tgt, excluded=excluded, existence_patterns=existence_patterns)
+                assignment_manager = selector.get_best_assignment_manager()
+                selector_stage_ = selector._last_selection_stage
+                if selector_stage is None or selector_stage_ > selector_stage:
+                    selector_stage = selector_stage_
+
+            elif isinstance(encoder, (LazyEncoder, EagerEncoder)):
+                encoder_copy = copy.deepcopy(encoder)
+                args, kwargs = (src, tgt, encoder_copy), {'excluded': excluded, 'existence_patterns': existence_patterns}
+                cls = LazyAssignmentManager if isinstance(encoder, LazyEncoder) else AssignmentManager
+                assignment_manager = cls(*args, **kwargs)
+            else:
+                raise RuntimeError(f'Unknown encoder type: {encoder}')
+            assignment_managers.append(assignment_manager)
+
+        self._selector_stage = selector_stage
+        if len(assignment_managers) == 0:
+            raise RuntimeError('Problem must provide at least assignment one manager!')
+        return assignment_managers
+
+    def reset_agg_matrix_cache(self):
+        for matrix_gen in self.get_matrix_defs():
+            matrix_gen.reset_agg_matrix_cache()
+
+    @property
+    def assignment_manager(self) -> AssignmentManagerBase:
+        return self._assignment_managers[-1]
+
+    def name(self) -> str:
+        name_parts = [str(self)]
+        for am in self._assignment_managers:
+            name_parts.append(str(am.encoder))
+        return ' / '.join(name_parts)
+
+    def correct_x(self, x: np.ndarray) -> np.ndarray:
+        x_corr_parts = self._separate_x_parts(x)
+        for i in range(x.shape[0]):
+            resolved_dv_parts, _, _ = self._resolve_existence([part[i, :] for part in x_corr_parts])
+            for i_part, part in enumerate(x_corr_parts):
+                part[i, :] = resolved_dv_parts[i_part]
+        return np.column_stack(x_corr_parts)
+
+    def _evaluate(self, x, out, *args, **kwargs):
+        x_corr_parts = self._separate_x_parts(x)
+        f_out = np.zeros((x.shape[0], self.n_obj))
+        g_out = np.zeros((x.shape[0], self.n_constr))
+        for i in range(x.shape[0]):
+            resolved_dv_parts, conn_list, eval_kwargs = self._resolve_existence([part[i, :] for part in x_corr_parts])
+            for i_part, part in enumerate(x_corr_parts):
+                part[i, :] = resolved_dv_parts[i_part]
+
+            if any(conns is None for conns in conn_list):
+                g_out[i, 0] = 1
+                continue
+
+            f_out[i, :], g_out[i, 1:] = self._do_evaluate(conn_list, **eval_kwargs)
+
+        out['X'] = np.column_stack(x_corr_parts)
+        out['F'] = f_out
+        out['G'] = g_out
+
+    def _separate_x_parts(self, x) -> List[np.ndarray]:
+        x = np.round(x.astype(np.float64)).astype(np.int)
+        x_parts = []
+        i = 0
+        for n_dv in self._n_dv:
+            x_parts.append(x[:, i:i+n_dv])
+            i += n_dv
+        return x_parts
+
+    def get_matrix_defs(self) -> List[AggregateAssignmentMatrixGenerator]:
+        """The list of matrix generators that defines this problem, already correctly configured existence patterns,
+        that during evaluation can be resolved from preceding connections (this also means the first one should not have
+        any existence patterns)"""
+        raise NotImplementedError
+
+    def _resolve_existence(self, x_parts: List[DesignVector]) -> Tuple[List[DesignVector], List[Optional[List[Tuple[int, int]]]], dict]:
+        """Resolve design vectors for each assignment manager into a list of connection lists, or None if any of the
+        matrices is invalid"""
+        raise NotImplementedError
+
+    def _do_evaluate(self, conn_list: List[List[Tuple[int, int]]], **eval_kwargs) -> Tuple[List[float], List[float]]:
+        """Returns [objectives, constraints]"""
+        raise NotImplementedError
+
+    def __repr__(self):
+        raise NotImplementedError
+
+    def get_problem_name(self):
+        """Similar to __str__, but without any indication of problem size"""
+        raise NotImplementedError
+
+    def __str__(self):
+        raise NotImplementedError
+
+
 class AssignmentRepair(Repair):
 
     def do(self, problem, pop, **kwargs):
@@ -348,7 +514,7 @@ class AssignmentRepair(Repair):
         x = pop if is_array else pop.get('X')
 
         x = np.round(x.astype(np.float64)).astype(np.int)
-        if isinstance(problem, AssignmentProblem):
+        if isinstance(problem, AssignmentProblemBase):
             x = problem.correct_x(x)
 
         if is_array:

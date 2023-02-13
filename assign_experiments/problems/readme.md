@@ -31,6 +31,8 @@ Following problems are defined:
 | Pattern                            | Parameters      | Source nodes       | Target nodes        | Excluded edges    | Objective         |
 |------------------------------------|-----------------|--------------------|---------------------|-------------------|-------------------|
 | Combining                          | `n_tgt`         | `1 @ 1`            | `n_tgt @ 0,1`       |                   |                   |
+| Unordered combining                | `n_take, n_tgt` | `1 @ n_take (rep)` | `n_tgt @ 0+ (rep)`  |                   |                   |
+| Unordered non-replacing combining  | `n_take, n_tgt` | `1 @ n_take`       | `n_tgt @ 0,1`       |                   |                   |
 | Assigning                          | `n_src, n_tgt`  | `n_src @ 0+`       | `n_tgt @ 0+`        |                   |                   |
 | Assigning (injective)              | `n_src, n_tgt`  | `n_src @ 0+`       | `n_tgt @ 0,1`       |                   |                   |
 | Assigning (surjective)             | `n_src, n_tgt`  | `n_src @ 0+`       | `n_tgt @ 1+`        |                   |                   |
@@ -43,8 +45,6 @@ Following problems are defined:
 | Connecting                         | `n`             | `n @ 0+`           | `n @ 0+`            | `(i,j) if i >= j` |                   |
 | Connecting (directed)              | `n`             | `n @ 0+`           | `n @ 0+`            | `(i,j) if i == j` |                   |
 | Permuting                          | `n`             | `n @ 1`            | `n @ 1`             |                   |                   |
-| Combinations                       | `n_take, n_tgt` | `1 @ n_take`       | `n_tgt @ 0,1`       |                   |                   |
-| Combinations w/ replacement        | `n_take, n_tgt` | `1 @ n_take (rep)` | `n_tgt @ 0+ (rep)`  |                   |                   |
 
 Compared to the patterns defined by Selva et al., the following extensions are made:
 - For the assigning pattern, the "function" aspect (i.e. each source node has 1 connection) of injective, surjective
@@ -53,24 +53,26 @@ Compared to the patterns defined by Selva et al., the following extensions are m
 - Repeatable versions of the assigning versions are added in order to increase the number of test problems
   - Note that any repeatable node that has an upper bound of 0 or 1 in effect is non-repeatable
 - Two additional patterns are added:
-  - Combinations: take combinations of length `n` from a set, e.g. 2 from ABC: AB, AC, BC
+  - Unordered combining: take combinations of length `n_take` from a set, ignoring permutations e.g. 2 from ABC: AA, AB, AC, BB, BC, CC
     - This pattern is the same as a combination pattern if `n_take = 1`
-    - It can also be seen as a downselecting problem with a fixed size of the selected set
-  - Combinations with replacement: same as the above however values can be taken again: e.g. 2 from ABC: AA, AB, AC, BB, BC, CC
-  - These two patterns can be seen as versions of the combination, permuting and assigning patterns,
+    - It can also be seen as several combining pattern instances merged into one where the order in decision selection
+      is not relevant (hence: unordered)
+  - Unordered non-replacing combining: same as the above however values can't be taken again: e.g. 2 from ABC: AB, AC, BC
+    - This pattern can be seen as a downselecting problem with a fixed size of the selected set
+  - These two patterns can be seen as versions of the combining, permuting and assigning patterns,
     where the order of connections is not relevant (i.e. AB has the same fitness as BA)
 
 As can be seen in the table above, there are normally only a few values used for the number of node connections:
 
-| src↓, tgt→ | 1         | 0,1       | n            | 0+                                           | 1+                                                | 0+ (rep)               | 1+ (rep)                           |
-|------------|-----------|-----------|--------------|----------------------------------------------|---------------------------------------------------|------------------------|------------------------------------|
-| 1          | Permuting | Combining | (1)          | Assigning (bijective) == partitioning        | (2)                                               | (3)                    | (3)                                |
-| 0,1        |           | (4)       | Combinations | Assigning (injective), downselecting         | (2)                                               | (3)                    | (3)                                |
-| n          |           |           |              | Combinations with replacement                |                                                   | (3)                    | (3)                                |
-| 0+         |           |           |              | Assigning, connecting, connecting (directed) | Assigning (surjective) == partitioning (covering) | (3)                    | (3)                                |
-| 1+         |           |           |              |                                              |                                                   | (3)                    | (3)                                |
-| 0+ (rep)   |           |           |              |                                              |                                                   | Assigning (repeatable) | Assigning (repeatable, surjective) |
-| 1+ (rep)   |           |           |              |                                              |                                                   |                        |                                    |
+| src↓, tgt→ | 1         | 0,1       | n             | 0+                                           | 1+                                                | 0+ (rep)               | 1+ (rep)                           |
+|------------|-----------|-----------|---------------|----------------------------------------------|---------------------------------------------------|------------------------|------------------------------------|
+| 1          | Permuting | Combining | (1)           | Assigning (bijective) == partitioning        | (2)                                               | (3)                    | (3)                                |
+| 0,1        |           | (4)       | UNR Combining | Assigning (injective), downselecting         | (2)                                               | (3)                    | (3)                                |
+| n          |           |           |               | Unordered combining                          |                                                   | (3)                    | (3)                                |
+| 0+         |           |           |               | Assigning, connecting, connecting (directed) | Assigning (surjective) == partitioning (covering) | (3)                    | (3)                                |
+| 1+         |           |           |               |                                              |                                                   | (3)                    | (3)                                |
+| 0+ (rep)   |           |           |               |                                              |                                                   | Assigning (repeatable) | Assigning (repeatable, surjective) |
+| 1+ (rep)   |           |           |               |                                              |                                                   |                        |                                    |
 
 (1) only possible if `n_src = n*n_tgt`, in which case it is effectively `n` independent permuting patterns.
 (2) effectively permuting if `n_tgt = n_src`, otherwise only relevant if `n_src > n_tgt`.

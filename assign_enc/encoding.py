@@ -98,7 +98,7 @@ class Encoder:
     def get_n_design_points(self) -> int:
         if len(self.design_vars) == 0:
             return 1
-        return int(np.cumprod([dv.n_opts for dv in self.design_vars], dtype=np.float)[-1])
+        return int(np.prod([dv.n_opts for dv in self.design_vars], dtype=np.float))
 
     def get_information_index(self) -> float:
         return self.calc_information_index([dv.n_opts for dv in self.design_vars])
@@ -108,7 +108,7 @@ class Encoder:
         n_dv = len(n_opts)
         if n_dv == 0:
             return 1.
-        n_combinations = np.cumprod(n_opts, dtype=float)[-1]
+        n_combinations = np.prod(n_opts, dtype=float)
         if n_combinations <= 2:
             return 1.
         n_dv_max = np.log2(n_combinations)

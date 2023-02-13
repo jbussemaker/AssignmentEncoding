@@ -406,7 +406,7 @@ def run_experiment(size: Size, sbo=False, n_repeat=8, i_prob=None, do_run=True, 
     pop_size = 30 if sbo else 50
     n_gen = 4 if size == Size.SM else 6
     n_infill = 20
-    imp_ratio_limit = 200 if sbo else 500
+    imp_ratio_limit = 100 if sbo else 500
     imp_ratio_sample_limit = 100
     n_sample_test = 100
     n_repeat_timing = (n_repeat*2) if sbo else n_repeat
