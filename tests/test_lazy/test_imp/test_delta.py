@@ -7,11 +7,10 @@ from assign_enc.lazy.encodings.direct_matrix import *
 
 def test_imputer():
     encoder = LazyDirectMatrixEncoder(LazyDeltaImputer())
-    encoder.set_nodes(src=[Node([0, 1, 2]), Node(min_conn=0)], tgt=[Node([0, 1]), Node(min_conn=1)])
-    assert encoder._matrix_gen.max_conn == 3
+    encoder.set_settings(MatrixGenSettings(src=[Node([0, 1, 2]), Node(min_conn=0)], tgt=[Node([0, 1]), Node(min_conn=1)]))
 
     dv = encoder.design_vars
-    assert [d.n_opts for d in dv] == [2, 3, 2, 4]
+    assert [d.n_opts for d in dv] == [2, 3, 2, 3]
 
     dv, mat = encoder.get_matrix([1, 2, 1, 0])
     assert np.all(dv == [1, 1, 0, 0])
@@ -20,8 +19,8 @@ def test_imputer():
 
 def test_max_tries():
     encoder = LazyDirectMatrixEncoder(LazyDeltaImputer(n_max_tries=10000))
-    encoder.set_nodes(src=[Node([1], repeated_allowed=False)],
-                      tgt=[Node([0, 1], repeated_allowed=False) for _ in range(20)])
+    encoder.set_settings(MatrixGenSettings(src=[Node([1], repeated_allowed=False)],
+                                           tgt=[Node([0, 1], repeated_allowed=False) for _ in range(20)]))
     assert encoder.get_imputation_ratio() > 50000
 
     n_invalid = 0
@@ -38,7 +37,7 @@ def test_max_tries():
 def test_one_to_one(gen_one_per_existence: AggregateAssignmentMatrixGenerator):
     g = gen_one_per_existence
     encoder = LazyConnIdxMatrixEncoder(LazyDeltaImputer(), FlatConnCombsEncoder())
-    encoder.set_nodes(g.src, g.tgt, existence_patterns=g.existence_patterns)
+    encoder.set_settings(g.settings)
     assert len(encoder.design_vars) == 0
 
     assert encoder.get_n_design_points() == 1

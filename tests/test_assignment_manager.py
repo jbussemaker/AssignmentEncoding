@@ -24,7 +24,7 @@ def test_manager():
     tgt = [Node([0, 1]), Node(min_conn=1)]
     enc = FlattenEncoder(FirstImputer())
 
-    manager = AssignmentManager(src, tgt, enc)
+    manager = AssignmentManager(MatrixGenSettings(src, tgt), enc)
     assert manager.matrix is not None
     assert len(manager.matrix) == 1
     assert list(manager.matrix.values())[0].shape == (6, 2, 2)

@@ -34,7 +34,7 @@ class DummyLazyEncoder(LazyEncoder):
 def test_lazy_encoder():
     src, tgt = [Node([0, 1]), Node([0, 1])], [Node([0, 1]), Node([0, 1])]
     enc = DummyLazyEncoder(DummyImputer())
-    enc.set_nodes(src, tgt)
+    enc.set_settings(MatrixGenSettings(src, tgt))
     assert enc.src == src
     assert enc.tgt == tgt
     assert enc.n_src == 2
@@ -89,7 +89,7 @@ def test_lazy_encoder():
 
 def test_lazy_imputer_none_exist():
     enc = DummyLazyEncoder(DummyImputer())
-    enc.set_nodes(src=[Node([0, 1]), Node([0, 1])], tgt=[Node([0, 1]), Node([0, 1])])
+    enc.set_settings(MatrixGenSettings(src=[Node([0, 1]), Node([0, 1])], tgt=[Node([0, 1]), Node([0, 1])]))
 
     matrix, _ = enc._decode_vector([0, 1, 1, 0])
     assert np.all(matrix == np.array([[0, 1], [1, 0]]))
@@ -106,7 +106,7 @@ def test_lazy_imputer_none_exist():
 
 def test_lazy_imputer_no_exist_correct():
     enc = DummyLazyEncoder(DummyImputer())
-    enc.set_nodes(src=[Node([0, 1]), Node([0, 1])], tgt=[Node([0, 1]), Node([0, 1])])
+    enc.set_settings(MatrixGenSettings(src=[Node([0, 1]), Node([0, 1])], tgt=[Node([0, 1]), Node([0, 1])]))
 
     dv, matrix = enc.get_matrix([0, 1, 1, 1], NodeExistence(src_exists=[True, False]))
     assert np.all(dv == [0, 1, 1, 1])
@@ -119,7 +119,7 @@ def test_lazy_imputer_no_exist_correct():
 
 def test_lazy_imputer_cache():
     enc = DummyLazyEncoder(DummyImputer())
-    enc.set_nodes(src=[Node([0, 1]), Node([0, 1])], tgt=[Node([0, 1]), Node([0, 1])])
+    enc.set_settings(MatrixGenSettings(src=[Node([0, 1]), Node([0, 1])], tgt=[Node([0, 1]), Node([0, 1])]))
 
     def _stop_impute(*args, **kwargs):
         raise RuntimeError
@@ -139,7 +139,7 @@ def test_lazy_imputer_cache():
 def test_lazy_assignment_manager():
     src = [Node([0, 1]), Node([0, 1])]
     tgt = [Node([0, 1]), Node([0, 1])]
-    manager = LazyAssignmentManager(src, tgt, DummyLazyEncoder(DummyImputer()))
+    manager = LazyAssignmentManager(MatrixGenSettings(src, tgt), DummyLazyEncoder(DummyImputer()))
 
     dv = manager.design_vars
     assert len(dv) == 4
@@ -161,4 +161,4 @@ def test_lazy_assignment_manager():
 def test_one_to_one(gen_one_per_existence: AggregateAssignmentMatrixGenerator):
     g = gen_one_per_existence
     encoder = DummyLazyEncoder(DummyImputer())
-    encoder.set_nodes(g.src, g.tgt, existence_patterns=g.existence_patterns)
+    encoder.set_settings(g.settings)

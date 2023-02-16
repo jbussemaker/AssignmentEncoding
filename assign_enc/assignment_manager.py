@@ -61,11 +61,8 @@ class AssignmentManager(AssignmentManagerBase):
     Uses the matrix generator and encoder to implement the conversion between design vector and connection pattern.
     """
 
-    def __init__(self, src: List[Node], tgt: List[Node], encoder: EagerEncoder,
-                 excluded: List[Tuple[Node, Node]] = None, existence_patterns: NodeExistencePatterns = None,
-                 cache=True):
-        self._matrix_gen = gen = AggregateAssignmentMatrixGenerator(
-            src, tgt, excluded=excluded, existence_patterns=existence_patterns)
+    def __init__(self, settings: MatrixGenSettings, encoder: EagerEncoder, cache=True):
+        self._matrix_gen = gen = AggregateAssignmentMatrixGenerator(settings)
         self._encoder = encoder
 
         encoder.matrix = gen.get_agg_matrix(cache=cache)
@@ -129,10 +126,9 @@ class AssignmentManager(AssignmentManagerBase):
 
 class LazyAssignmentManager(AssignmentManagerBase):
 
-    def __init__(self, src: List[Node], tgt: List[Node], encoder: LazyEncoder,
-                 excluded: List[Tuple[Node, Node]] = None, existence_patterns: NodeExistencePatterns = None):
+    def __init__(self, settings: MatrixGenSettings, encoder: LazyEncoder):
         self._encoder = encoder
-        encoder.set_nodes(src, tgt, excluded=excluded, existence_patterns=existence_patterns)
+        encoder.set_settings(settings)
 
     @property
     def encoder(self):

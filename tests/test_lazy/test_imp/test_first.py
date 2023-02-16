@@ -7,13 +7,13 @@ from assign_enc.lazy.encodings.direct_matrix import *
 
 def test_imputer():
     encoder = LazyDirectMatrixEncoder(LazyFirstImputer())
-    encoder.set_nodes(src=[Node([0, 1]), Node([0, 1])], tgt=[Node([0, 1])])
+    encoder.set_settings(MatrixGenSettings(src=[Node([0, 1]), Node([0, 1])], tgt=[Node([0, 1])]))
 
     dv, mat = encoder.get_matrix([1, 1])
     assert np.all(dv == [0, 0])
     assert np.all(mat == np.array([[0], [0]]))
 
-    encoder.set_nodes(src=[Node([0, 1]), Node([0, 1])], tgt=[Node([0, 1]), Node(min_conn=1)])
+    encoder.set_settings(MatrixGenSettings(src=[Node([0, 1]), Node([0, 1])], tgt=[Node([0, 1]), Node(min_conn=1)]))
 
     dv, mat = encoder.get_matrix([1, 1, 1, 1])
     assert np.all(dv == [0, 1, 0, 0])
@@ -23,7 +23,7 @@ def test_imputer():
 def test_one_to_one(gen_one_per_existence: AggregateAssignmentMatrixGenerator):
     g = gen_one_per_existence
     encoder = LazyConnIdxMatrixEncoder(LazyFirstImputer(), FlatConnCombsEncoder())
-    encoder.set_nodes(g.src, g.tgt, existence_patterns=g.existence_patterns)
+    encoder.set_settings(g.settings)
     assert len(encoder.design_vars) == 0
 
     assert encoder.get_n_design_points() == 1

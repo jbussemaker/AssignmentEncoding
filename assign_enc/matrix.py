@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from assign_enc.cache import get_cache_path
 
 __all__ = ['Node', 'NodeExistence', 'NodeExistencePatterns', 'AggregateAssignmentMatrixGenerator', 'count_n_pool_take',
-           'MatrixMap', 'MatrixMapOptional', 'count_src_to_target']
+           'MatrixMap', 'MatrixMapOptional', 'count_src_to_target', 'MatrixGenSettings']
 
 
 class Node:
@@ -227,6 +227,74 @@ class NodeExistencePatterns:
         return False
 
 
+@dataclass
+class MatrixGenSettings:
+    src: List[Node]
+    tgt: List[Node]
+    excluded: List[Union[Tuple[Node, Node], Tuple[int, int]]] = None
+    existence: NodeExistencePatterns = None
+    max_conn_parallel: int = None
+
+    def get_max_conn_parallel(self):
+        """If not given, calculate it by taking the nr such that each target or source can receive at least the minimum
+        nr of connections, but at least 2 per connection"""
+        if self.max_conn_parallel is not None:
+            return max(1, self.max_conn_parallel)
+
+        max_non_inf = 2
+        for nodes in [self.src, self.tgt]:
+            for node in nodes:
+                if not node.max_inf:
+                    max_conn = max(node.conns)
+                    if max_non_inf is None or max_conn > max_non_inf:
+                        max_non_inf = max_conn
+
+        return max_non_inf
+
+    def get_excluded_indices(self) -> List[Tuple[int, int]]:
+        excluded_edges = []
+        src_map = {node: i for i, node in enumerate(self.src)}
+        tgt_map = {node: i for i, node in enumerate(self.tgt)}
+        for src, tgt in (self.excluded or []):
+            excluded_edges.append((src_map.get(src, src), tgt_map.get(tgt, tgt)))
+        return excluded_edges
+
+    def get_max_conn_matrix(self):
+        # Restrict by maximum parallel connections
+        max_conns = np.ones((len(self.src), len(self.tgt)), dtype=int)*self.get_max_conn_parallel()
+
+        # Restrict by max fixed connection numbers
+        for i_src, node in enumerate(self.src):
+            if not node.max_inf:
+                max_conns[i_src, :] = np.min([max_conns[i_src, :], [max(node.conns)]*len(self.tgt)], axis=0)
+        for i_tgt, node in enumerate(self.tgt):
+            if not node.max_inf:
+                max_conns[:, i_tgt] = np.min([max_conns[:, i_tgt], [max(node.conns)]*len(self.src)], axis=0)
+
+        # Restrict by non-repeatability into/out of nodes
+        for i_src, node in enumerate(self.src):
+            if not node.rep:
+                max_conns[i_src, max_conns[i_src, :] > 1] = 1
+        for i_tgt, node in enumerate(self.tgt):
+            if not node.rep:
+                max_conns[max_conns[:, i_tgt] > 1, i_tgt] = 1
+
+        # Restrict excluded edges
+        for i_src, i_tgt in self.get_excluded_indices():
+            max_conns[i_src, i_tgt] = 0
+
+        return max_conns
+
+    def get_cache_key(self):
+        src_cache_key = ';'.join([repr(s) for s in self.src])
+        tgt_cache_key = ';'.join([repr(t) for t in self.tgt])
+        excluded_cache_key = ';'.join([f'{tup[0]:d},{tup[1]:d}' for tup in sorted([ex for ex in self.get_excluded_indices()])]) \
+            if self.excluded is not None else ''
+        exist_cache_key = ';'.join([str(hash(p)) for p in self.existence.patterns]) if self.existence is not None else ''
+        cache_str = '||'.join([src_cache_key, tgt_cache_key, excluded_cache_key, exist_cache_key, str(self.max_conn_parallel)])
+        return hashlib.md5(cache_str.encode('utf-8')).hexdigest()
+
+
 MatrixMap = Dict[NodeExistence, np.ndarray]
 MatrixMapOptional = Union[np.ndarray, Dict[NodeExistence, np.ndarray]]
 
@@ -237,106 +305,69 @@ class AggregateAssignmentMatrixGenerator:
     - Specified number or range of connections per object
     - Repeated connections between objects allowed or not
     - List of excluded connections
-
-    If both the source and target lists contain at least one object which has no upper bound on the number of
-    connections (meaning that in principle there are infinite connection possibilities), the upper bound is set to the
-    number of connections enabled by the setting the source object connections to their minimum bounds (or 1 if the
-    lower bound is 0).
     """
 
-    def __init__(self, src: List[Node], tgt: List[Node], excluded: List[tuple] = None,
-                 existence_patterns: NodeExistencePatterns = None, max_conn: int = None):
-
-        self.src = src
-        self.tgt = tgt
-        self._ex = None
-        self.ex = excluded
+    def __init__(self, settings: MatrixGenSettings):
+        self._settings = settings
         self._exist = None
-        self.existence_patterns = existence_patterns
-        self._max_conn = max_conn
+        self._max_conn_mat = None
         self._max_src_appear = {}
         self._max_tgt_appear = {}
-        self._no_repeat_mat = None
-        self._conn_blocked_mat = None
         self._node_settings = None
         self._n_conn_override_map = {}
 
-    @property
-    def ex(self) -> Optional[Set[Tuple[int, int]]]:
-        return self._ex
-
-    @ex.setter
-    def ex(self, excluded: Optional[List[Tuple[Node, Node]]]):
-        if excluded is None:
-            self._ex = None
-        else:
-            self._ex = self.ex_to_idx(self.src, self.tgt, excluded)
-        self._conn_blocked_mat = None
-
-    @staticmethod
-    def ex_to_idx(src: List[Node], tgt: List[Node], excluded: Optional[List[Tuple[Node, Node]]]) \
-            -> Optional[Set[Tuple[int, int]]]:
-        if excluded is None:
-            return excluded
-        src_idx = {s: i for i, s in enumerate(src)}
-        tgt_idx = {t: i for i, t in enumerate(tgt)}
-        excluded_idx = set([(src_idx[ex[0]], tgt_idx[ex[1]]) for ex in excluded])
-        return excluded_idx if len(excluded_idx) > 0 else None
+    @classmethod
+    def create(cls, src: List[Node], tgt: List[Node], **kwargs):
+        return cls(MatrixGenSettings(src, tgt, **kwargs))
 
     @property
-    def existence_patterns(self) -> NodeExistencePatterns:
+    def settings(self) -> MatrixGenSettings:
+        return self._settings
+
+    @property
+    def src(self):
+        return self._settings.src
+
+    @property
+    def tgt(self):
+        return self._settings.tgt
+
+    @property
+    def ex(self) -> Optional[List[Tuple[int, int]]]:
+        if self._settings.existence is not None:
+            return self._settings.get_excluded_indices()
+
+    @property
+    def existence_patterns(self) -> Optional[NodeExistencePatterns]:
+        if self._exist is None:
+            self._exist = self._settings.existence or NodeExistencePatterns.always_exists()
         return self._exist
 
-    @existence_patterns.setter
-    def existence_patterns(self, existence_patterns: NodeExistencePatterns = None):
-        if existence_patterns is None:
-            existence_patterns = NodeExistencePatterns.always_exists()
-        self._exist = existence_patterns
-
     @property
-    def max_conn(self):
-        if self._max_conn is None:
-            self._max_conn = self._get_max_conn()
-        return self._max_conn
+    def max_conn_mat(self) -> np.ndarray:
+        if self._max_conn_mat is None:
+            self._max_conn_mat = self._settings.get_max_conn_matrix()
+        return self._max_conn_mat
 
     def get_max_src_appear(self, existence: NodeExistence = None):
         if existence is None:
             existence = NodeExistence()
         if existence not in self._max_src_appear:
-            self._max_src_appear[existence] = \
-                self._get_max_appear(self.tgt, n_max_override=existence.max_src_conn_override)
+            max_appear = np.sum(self.max_conn_mat, axis=1)
+            if existence.max_src_conn_override is not None:
+                max_appear[max_appear > existence.max_src_conn_override] = existence.max_src_conn_override
+            self._max_src_appear[existence] = max_appear
         return self._max_src_appear[existence]
 
     def get_max_tgt_appear(self, existence: NodeExistence = None):
         if existence is None:
             existence = NodeExistence()
         if existence not in self._max_tgt_appear:
-            self._max_tgt_appear[existence] = \
-                self._get_max_appear(self.src, n_max_override=existence.max_tgt_conn_override)
+            max_appear = np.sum(self.max_conn_mat, axis=0)
+            if existence.max_tgt_conn_override is not None:
+                max_appear[max_appear > existence.max_tgt_conn_override] = existence.max_tgt_conn_override
+            self._max_tgt_appear[existence] = max_appear
         return self._max_tgt_appear[existence]
-
-    @property
-    def no_repeat_mask(self):
-        """Matrix mask that specifies whether for the connections repetition is not allowed (True value)"""
-        if self._no_repeat_mat is None:
-            self._no_repeat_mat = no_repeat = np.zeros((len(self.src), len(self.tgt)), dtype=bool)
-            for i_src, src in enumerate(self.src):
-                if not src.rep:
-                    no_repeat[i_src, :] = True
-            for i_src, tgt in enumerate(self.tgt):
-                if not tgt.rep:
-                    no_repeat[:, i_src] = True
-        return self._no_repeat_mat
-
-    @property
-    def conn_blocked_mask(self):
-        """Mask that specifies whether connections are blocked (True) or not (False)"""
-        if self._conn_blocked_mat is None:
-            ex = self.ex
-            self._conn_blocked_mat = blocked = np.zeros((len(self.src), len(self.tgt)), dtype=bool)
-            for i_src, j_tgt in ex or []:
-                blocked[i_src, j_tgt] = True
-        return self._conn_blocked_mat
 
     def __iter__(self) -> Generator[Tuple[np.array, NodeExistence], None, None]:
         for n_src_conn, n_tgt_conn, existence in self.iter_n_sources_targets():
@@ -388,18 +419,7 @@ class AggregateAssignmentMatrixGenerator:
         return self._cache_path(f'{self._get_cache_key()}_iter_n.pkl')
 
     def _get_cache_key(self):
-        return self.get_cache_key(self.src, self.tgt, self._ex, self.existence_patterns)
-
-    @staticmethod
-    def get_cache_key(src: List[Node], tgt: List[Node], excluded, existence_patterns):
-        src_cache_key = ';'.join([repr(s) for s in src])
-        tgt_cache_key = ';'.join([repr(t) for t in tgt])
-        excluded_cache_key = ';'.join([f'{tup[0]:d},{tup[1]:d}' for tup in sorted([ex for ex in excluded])]) \
-            if excluded is not None else ''
-        exist_cache_key = ';'.join([str(hash(p)) for p in existence_patterns.patterns])\
-            if existence_patterns is not None else ''
-        cache_str = '||'.join([src_cache_key, tgt_cache_key, excluded_cache_key, exist_cache_key])
-        return hashlib.md5(cache_str.encode('utf-8')).hexdigest()
+        return self.settings.get_cache_key()
 
     @staticmethod
     def _cache_path(sub_path=None):
@@ -522,7 +542,7 @@ class AggregateAssignmentMatrixGenerator:
             self.tgt, is_src=False, n=n_source, n_conn_override=n_conn_override, max_conn=max_conn)
 
     def _iter_conn_slots(self, nodes: List[Node], is_src=True, n=None, n_conn_override: Dict[int, List[int]] = None,
-                         max_conn: int = None):
+                         max_conn: np.ndarray = None):
         """Iterate over all combinations of number of connections per nodes."""
 
         if max_conn is None:
@@ -537,7 +557,7 @@ class AggregateAssignmentMatrixGenerator:
             if i in n_conn_override:
                 n_conns.append(n_conn_override[i])
             else:
-                n_conns.append(self.get_node_conns(node, max_conn))
+                n_conns.append(self.get_node_conns(node, max_conn[i]))
 
         # If we have an amount constraint, use the matrix generation algorithm
         if n is not None:
@@ -624,7 +644,7 @@ class AggregateAssignmentMatrixGenerator:
         max_src = self.get_max_src_appear(existence=existence)
         max_tgt = self.get_max_tgt_appear(existence=existence)
 
-        return _validate_matrix(matrix, self.no_repeat_mask, self.conn_blocked_mask, src_node_settings,
+        return _validate_matrix(matrix, self.max_conn_mat, src_node_settings,
                                 tgt_node_settings, src_n_override, tgt_n_override, max_src, max_tgt)
 
     @staticmethod
@@ -705,7 +725,7 @@ class AggregateAssignmentMatrixGenerator:
         n_tgt_conn = np.array(n_tgt_conn, dtype=np.int64)
         matrices = yield_matrices(
             len(n_src_conn), len(n_tgt_conn), np.array(n_src_conn, dtype=np.int64),
-            np.array(n_tgt_conn, dtype=np.int64), self.no_repeat_mask, self.conn_blocked_mask)
+            np.array(n_tgt_conn, dtype=np.int64), self.max_conn_mat)
 
         if output_matrix:
             if len(matrices) == 0:
@@ -731,11 +751,7 @@ class AggregateAssignmentMatrixGenerator:
             return n_mat
 
         # Get max conn
-        max_conn = np.ones((len(n_src_conn), len(n_tgt_conn)), dtype=int)*max(n_src_total, n_tgt_total)
-        if is_switched:
-            max_conn = max_conn.T
-        max_conn[self.no_repeat_mask] = 1
-        max_conn[self.conn_blocked_mask] = 0
+        max_conn = self.max_conn_mat
         if is_switched:
             max_conn = max_conn.T
 
@@ -748,11 +764,8 @@ class AggregateAssignmentMatrixGenerator:
                 return 1
 
     def _get_matrices_numpy(self, n_src_conn, n_tgt_conn, create_matrices=True):
-        no_repeat_mask = self.no_repeat_mask
-        conn_blocked_mask = self.conn_blocked_mask
         return _get_matrices(
-            tuple(n_src_conn), tuple(n_tgt_conn), tuple(no_repeat_mask.ravel()), tuple(conn_blocked_mask.ravel()),
-            create_matrices=create_matrices)
+            tuple(n_src_conn), tuple(n_tgt_conn), tuple(self.max_conn_mat.ravel()), create_matrices=create_matrices)
 
     def _get_max_conn(self) -> int:
         """
@@ -776,29 +789,13 @@ class AggregateAssignmentMatrixGenerator:
             return node.min_conns
         return node.conns[0]
 
-    def _get_max_appear(self, conn_tgt_nodes: List[Node], n_max_override: int = None) -> int:
-        """
-        Calculate the maximum number of times the connection nodes might appear considering repeated connection
-        constraints.
-        """
-        n_max = self.max_conn if n_max_override is None else n_max_override
-        n_appear = 0
-        for tgt_node in conn_tgt_nodes:
-            if tgt_node.rep:
-                if tgt_node.max_inf:
-                    return n_max
-                n_appear += tgt_node.conns[-1]
-            else:
-                n_appear += 1
-        return min(n_appear, n_max)
-
 
 @numba.jit()
-def _validate_matrix(matrix: np.ndarray, no_repeat_mask: np.ndarray, conn_blocked_mask: np.ndarray,
-                     src_node_settings: np.ndarray, tgt_node_settings: np.ndarray, src_n_override: np.ndarray,
-                     tgt_n_override: np.ndarray, max_src: int, max_tgt: int) -> bool:
+def _validate_matrix(matrix: np.ndarray, max_conn_mat: np.ndarray, src_node_settings: np.ndarray,
+                     tgt_node_settings: np.ndarray, src_n_override: np.ndarray, tgt_n_override: np.ndarray,
+                     max_src: np.ndarray, max_tgt: np.ndarray) -> bool:
     # Check repeated or blocked connections
-    if np.any((matrix > 1) & no_repeat_mask) or np.any((matrix > 0) & conn_blocked_mask):
+    if np.any(matrix > max_conn_mat):
         return False
 
     # Check source connections
@@ -810,7 +807,7 @@ def _validate_matrix(matrix: np.ndarray, no_repeat_mask: np.ndarray, conn_blocke
                 return False
             elif override_ok == 1:
                 continue
-        if not _check_conns(n_src, src_node_settings[i, :], max_src):
+        if not _check_conns(n_src, src_node_settings[i, :], max_src[i]):
             return False
 
     # Check target connections
@@ -822,7 +819,7 @@ def _validate_matrix(matrix: np.ndarray, no_repeat_mask: np.ndarray, conn_blocke
                 return False
             elif override_ok == 1:
                 continue
-        if not _check_conns(n_tgt, tgt_node_settings[i, :], max_tgt):
+        if not _check_conns(n_tgt, tgt_node_settings[i, :], max_tgt[i]):
             return False
 
     return True
@@ -841,28 +838,26 @@ def _check_conns(n_conns, node_settings: np.ndarray, max_conn: int) -> bool:  # 
 
 
 @numba.njit()
-def yield_matrices(n_src: int, n_tgt: int, n_src_conn, n_tgt_conn, no_repeat, blocked):
+def yield_matrices(n_src: int, n_tgt: int, n_src_conn, n_tgt_conn, max_conn):
     init_matrix = np.zeros((n_src, n_tgt), dtype=np.int64)
     init_tgt_sum = np.zeros((n_tgt,), dtype=np.int64)
     last_src_idx = n_src-1
     last_tgt_idx = n_tgt-1
 
-    return _branch_matrices(0, init_matrix, init_tgt_sum, n_src_conn, n_tgt_conn, no_repeat, blocked, n_tgt,
+    return _branch_matrices(0, init_matrix, init_tgt_sum, n_src_conn, n_tgt_conn, max_conn, n_tgt,
                             last_src_idx, last_tgt_idx)
 
 
 @numba.njit()
-def _branch_matrices(i_src, current_matrix, current_sum, n_src_conn, n_tgt_conn, no_repeat, blocked, n_tgt,
+def _branch_matrices(i_src, current_matrix, current_sum, n_src_conn, n_tgt_conn, max_conn, n_tgt,
                      last_src_idx, last_tgt_idx):
     # Get total connections from this source
     n_total_conns = n_src_conn[i_src]
 
     # Determine the amount of target connections available (per target node) for the current source node
     n_tgt_conn_avbl = n_tgt_conn-current_sum
-
-    not_can_repeat = (no_repeat[i_src, :]) & (n_tgt_conn_avbl > 1)
-    n_tgt_conn_avbl[not_can_repeat] = 1
-    n_tgt_conn_avbl[blocked[i_src, :]] = 0
+    max_conn_mask = n_tgt_conn_avbl > max_conn[i_src, :]
+    n_tgt_conn_avbl[max_conn_mask] = max_conn[i_src, max_conn_mask]
 
     # Get number of minimum connections per target in order to be able to distribute all outgoing connections
     # starting from the first target
@@ -887,8 +882,8 @@ def _branch_matrices(i_src, current_matrix, current_sum, n_src_conn, n_tgt_conn,
         next_sum = current_sum+tgt_conns
 
         # Branch out for next src node
-        for branched_matrix in _branch_matrices(i_src+1, next_matrix, next_sum, n_src_conn, n_tgt_conn, no_repeat,
-                                                blocked, n_tgt, last_src_idx, last_tgt_idx):
+        for branched_matrix in _branch_matrices(i_src+1, next_matrix, next_sum, n_src_conn, n_tgt_conn, max_conn,
+                                                n_tgt, last_src_idx, last_tgt_idx):
             branched_matrices.append(branched_matrix)
 
     return branched_matrices
@@ -919,16 +914,14 @@ def _get_branch_tgt_conns(tgt_conns, i_tgt, n_conn_set, n_total_conns, n_tgt_con
 
 
 @functools.lru_cache(maxsize=None)
-def _get_matrices(n_src_conn, n_tgt_conn, no_repeat_mask_tup, conn_blocked_mask_tup, create_matrices=True):
+def _get_matrices(n_src_conn, n_tgt_conn, max_conn_mat_tup, create_matrices=True):
     """Recursive column-wise (target-wise)"""
     n_src, n_tgt = len(n_src_conn), len(n_tgt_conn)
-    no_repeat_mask = np.array(no_repeat_mask_tup).reshape(n_src, n_tgt)
-    conn_blocked_mask = np.array(conn_blocked_mask_tup).reshape(n_src, n_tgt)
+    max_conn_mat = np.array(max_conn_mat_tup).reshape(n_src, n_tgt)
 
     # Determine number of src connections to first target
     n_target_from_src = np.array(n_src_conn)
-    n_target_from_src[no_repeat_mask[:, 0] & (n_target_from_src > 0)] = 1
-    n_target_from_src[conn_blocked_mask[:, 0]] = 0
+    n_target_from_src = np.min([n_target_from_src, max_conn_mat[:, 0]], axis=0)
 
     # Get combinations of sources to target assignments
     create_here = create_matrices or len(n_tgt_conn) > 1
@@ -949,12 +942,11 @@ def _get_matrices(n_src_conn, n_tgt_conn, no_repeat_mask_tup, conn_blocked_mask_
     n_src_conn_arr = np.array(n_src_conn)
     for i_comb, n_from_src in enumerate(n_taken_combs):
         n_src_conn_remain = n_src_conn_arr-n_from_src
-        next_nr_mask = tuple(no_repeat_mask[:, 1:].ravel())
-        next_cb_mask = tuple(conn_blocked_mask[:, 1:].ravel())
+        next_mc_mat = tuple(max_conn_mat[:, 1:].ravel())
 
         # Get combinations for further columns
         next_matrices = _get_matrices(
-            tuple(n_src_conn_remain), n_tgt_conn[1:], next_nr_mask, next_cb_mask, create_matrices=create_matrices)
+            tuple(n_src_conn_remain), n_tgt_conn[1:], next_mc_mat, create_matrices=create_matrices)
 
         if not create_matrices:
             count += next_matrices

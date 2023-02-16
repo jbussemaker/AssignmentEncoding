@@ -24,8 +24,8 @@ def test_imputer():
 
 def test_assignment_manager():
     encoder = DirectMatrixEncoder(ConstraintViolationImputer())
-    manager = AssignmentManager(src=[Node([1], repeated_allowed=False) for _ in range(2)],
-                                tgt=[Node([1], repeated_allowed=False) for _ in range(2)], encoder=encoder)
+    manager = AssignmentManager(MatrixGenSettings(src=[Node([1], repeated_allowed=False) for _ in range(2)],
+                                tgt=[Node([1], repeated_allowed=False) for _ in range(2)]), encoder=encoder)
     assert manager.encoder.n_mat_max == 2
     assert len(manager.design_vars) == 4
 

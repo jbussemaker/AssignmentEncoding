@@ -96,10 +96,8 @@ class LazyEncoder(Encoder):
         self._design_vars: Optional[List[DiscreteDV]] = None
         self._imputer = imputer
 
-    def set_nodes(self, src: List[Node], tgt: List[Node], excluded: List[Tuple[Node, Node]] = None,
-                  existence_patterns: NodeExistencePatterns = None):
-        self._matrix_gen = gen = AggregateAssignmentMatrixGenerator(
-            src, tgt, excluded=excluded, existence_patterns=existence_patterns)
+    def set_settings(self, settings: MatrixGenSettings):
+        self._matrix_gen = gen = AggregateAssignmentMatrixGenerator(settings)
 
         self._encode_prepare()
         self._existence_design_vars = existence_dvs = \

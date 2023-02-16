@@ -17,10 +17,10 @@ class DummyOnDemandLazyEncoder(OnDemandLazyEncoder):
 
 def test_on_demand_lazy_encoder():
     encoder = DummyOnDemandLazyEncoder(LazyConstraintViolationImputer())
-    encoder.set_nodes(src=[Node([0, 1, 2]), Node(min_conn=0)], tgt=[Node([0, 1]), Node(min_conn=1)])
+    encoder.set_settings(MatrixGenSettings(src=[Node([0, 1, 2]), Node(min_conn=0)], tgt=[Node([0, 1]), Node(min_conn=1)]))
 
     n_src_n_tgt = list(encoder.iter_n_src_n_tgt())
-    assert len(n_src_n_tgt) == 16
+    assert len(n_src_n_tgt) == 19
 
     assert n_src_n_tgt[0] == ((0, 1), (0, 1), NodeExistence())
     n_tup = n_src_n_tgt[0][:2]

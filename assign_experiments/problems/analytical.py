@@ -680,7 +680,8 @@ if __name__ == '__main__':
     # p = AnalyticalAssignmentProblem(DEFAULT_EAGER_ENCODER(), injective=True)
     # p = AnalyticalAssignmentProblem(DEFAULT_EAGER_ENCODER(), surjective=True)
     # p = AnalyticalAssignmentProblem(DEFAULT_EAGER_ENCODER(), injective=True, surjective=True)
-    p = AnalyticalPartitioningProblem(DEFAULT_EAGER_ENCODER())
+    p = AnalyticalAssignmentProblem(DEFAULT_EAGER_ENCODER(), n_src=2, n_tgt=4, repeatable=True)
+    # p = AnalyticalPartitioningProblem(DEFAULT_EAGER_ENCODER())
     # p = AnalyticalPartitioningProblem(DEFAULT_EAGER_ENCODER(), covering=True, n_src=3, n_tgt=4)
     # p = AnalyticalPartitioningProblem(LazyAmountFirstEncoder(DEFAULT_LAZY_IMPUTER(), FlatLazyAmountEncoder(), FlatLazyConnectionEncoder()), n_src=2, n_tgt=4, covering=True)
     # p = AnalyticalDownselectingProblem(DEFAULT_EAGER_ENCODER())
@@ -688,6 +689,10 @@ if __name__ == '__main__':
     # p = AnalyticalPermutingProblem(DEFAULT_EAGER_ENCODER())
     # p = AnalyticalIterCombinationsProblem(DEFAULT_EAGER_ENCODER())
     # p = AnalyticalIterCombinationsReplacementProblem(DEFAULT_EAGER_ENCODER(), n_take=3, n_tgt=3)
+
+    # p = p.get_for_encoder(EAGER_ENCODERS[0](DEFAULT_EAGER_IMPUTER()))
+    # print(p.get_imputation_ratio()), exit()
+
     p.reset_pf_cache()
     p.plot_pf(show_approx_f_range=True, n_sample=1000), exit()
     enc = []

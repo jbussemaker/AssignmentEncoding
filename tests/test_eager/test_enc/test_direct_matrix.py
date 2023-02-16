@@ -1,4 +1,3 @@
-import pytest
 import numpy as np
 from assign_enc.matrix import *
 from assign_enc.eager.imputation.first import *
@@ -51,21 +50,49 @@ def test_encoding():
     assert n_checked > 0
 
 
+def test_encoder_by_nodes():
+    matrix_gen = AggregateAssignmentMatrixGenerator(MatrixGenSettings(
+        src=[Node(min_conn=0) for _ in range(2)],
+        tgt=[Node(min_conn=0) for _ in range(2)],
+    ))
+    assert np.all(matrix_gen.settings.get_max_conn_matrix() == np.array([
+        [2, 2],
+        [2, 2],
+    ]))
+
+    encoder = DirectMatrixEncoder(FirstImputer())
+    encoder.matrix = matrix = matrix_gen.get_agg_matrix()
+    assert list(matrix.values())[0].shape[0] == 3**4
+
+    assert len(encoder.design_vars) == 4
+    assert encoder.get_n_design_points() == 3**4
+    assert encoder.get_imputation_ratio() == 1
+
+
 def test_encoder_excluded():
     src = [Node([0, 1, 2]), Node(min_conn=0)]
     tgt = [Node([0, 1]), Node(min_conn=1)]
-    matrix_gen = AggregateAssignmentMatrixGenerator(src=src, tgt=tgt, excluded=[(src[1], tgt[0])])
+    settings = MatrixGenSettings(src=src, tgt=tgt, excluded=[(src[1], tgt[0])])
+    assert np.all(settings.get_max_conn_matrix() == np.array([
+        [1, 2],
+        [0, 2],
+    ]))
+
+    matrix_gen = AggregateAssignmentMatrixGenerator(settings)
+    assert np.all(matrix_gen.get_max_src_appear() == [3, 2])
+    assert np.all(matrix_gen.get_max_tgt_appear() == [1, 4])
+
     encoder = DirectMatrixEncoder(FirstImputer())
     encoder.matrix = matrix = matrix_gen.get_agg_matrix()
-    assert list(matrix.values())[0].shape[0] == 14
+    assert list(matrix.values())[0].shape[0] == 13
 
     assert len(encoder.design_vars) == 3
-    assert encoder.get_n_design_points() == 2*3*4
-    assert encoder.get_imputation_ratio() == 24/14
+    assert encoder.get_n_design_points() == 2*3*3
+    assert encoder.get_imputation_ratio() == 18/13
 
     dv = encoder.design_vars
     assert len(dv) == 3
-    assert [d.n_opts for d in dv] == [2, 3, 4]
+    assert [d.n_opts for d in dv] == [2, 3, 3]
 
     _, mat = encoder.get_matrix([0, 1, 0])
     assert np.all(mat == np.array([[0, 1], [0, 0]]))

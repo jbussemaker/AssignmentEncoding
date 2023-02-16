@@ -43,15 +43,15 @@ def test_element_grouper():
 
 def test_encoder():
     # Combinations with replacement
-    gen = AggregateAssignmentMatrixGenerator(src=[Node([3])], tgt=[Node(min_conn=0) for _ in range(3)])
+    gen = AggregateAssignmentMatrixGenerator.create(src=[Node([3])], tgt=[Node(min_conn=0) for _ in range(3)])
 
     matrix = gen.get_agg_matrix()[NodeExistence()]
     encoder = ElementGroupedEncoder(ClosestImputer(), matrix)
-    assert encoder.n_mat_max == 10
+    assert encoder.n_mat_max == 7
 
     assert len(encoder.design_vars) == 2
-    assert encoder.design_vars[0].n_opts == 4
-    assert encoder.design_vars[1].n_opts == 4
+    assert encoder.design_vars[0].n_opts == 3
+    assert encoder.design_vars[1].n_opts == 3
 
     dv_seen = set()
     for i0 in range(encoder.design_vars[0].n_opts):
@@ -63,7 +63,7 @@ def test_encoder():
                 assert not encoder.is_valid_vector([i0, i1])
             dv_seen.add(tuple(dv))
 
-    assert len(dv_seen) == 10
+    assert len(dv_seen) == 7
 
 
 def test_one_to_one(gen_one_per_existence: AggregateAssignmentMatrixGenerator):
@@ -138,7 +138,7 @@ def test_conn_idx_encoder():
         # Permutations
         src = [Node([1], repeated_allowed=False) for _ in range(3)]
         tgt = [Node([1], repeated_allowed=False) for _ in range(3)]
-        gen = AggregateAssignmentMatrixGenerator(src=src, tgt=tgt)
+        gen = AggregateAssignmentMatrixGenerator.create(src=src, tgt=tgt)
 
         matrix = gen.get_agg_matrix()[NodeExistence()]
         encoder = ConnIdxGroupedEncoder(ClosestImputer(), matrix, by_src=by_src)

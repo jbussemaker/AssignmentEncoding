@@ -232,18 +232,15 @@ class AssignmentProblem(AssignmentProblemBase):
     """class representing an assignment optimization problem, parameterized by one assignment manager."""
 
     def __init__(self, encoder: Encoder = None, **_):
-        src, tgt = self.get_src_tgt_nodes()
-        excluded = self.get_excluded_edges()
-        existence_patterns = self.get_existence_patterns()
+        settings = self.get_matrix_gen_settings()
         self._selector_stage = None
         if encoder is None:
-            selector = EncoderSelector(src, tgt, excluded=excluded, existence_patterns=existence_patterns)
+            selector = EncoderSelector(settings)
             assignment_manager = selector.get_best_assignment_manager()
             self._selector_stage = selector._last_selection_stage
         elif isinstance(encoder, (LazyEncoder, EagerEncoder)):
-            args, kwargs = (src, tgt, encoder), {'excluded': excluded, 'existence_patterns': existence_patterns}
             cls = LazyAssignmentManager if isinstance(encoder, LazyEncoder) else AssignmentManager
-            assignment_manager = cls(*args, **kwargs)
+            assignment_manager = cls(settings, encoder)
         else:
             raise RuntimeError(f'Unknown encoder type: {encoder}')
         self._assignment_manager = assignment_manager
@@ -266,10 +263,7 @@ class AssignmentProblem(AssignmentProblemBase):
         return self._assignment_manager
 
     def reset_encoder_selector_cache(self):
-        src, tgt = self.get_src_tgt_nodes()
-        excluded = self.get_excluded_edges()
-        existence_patterns = self.get_existence_patterns()
-        EncoderSelector(src, tgt, excluded=excluded, existence_patterns=existence_patterns).reset_cache()
+        EncoderSelector(self.get_matrix_gen_settings()).reset_cache()
 
     def get_for_encoder(self, encoder: Encoder = None):
         return self.__class__(encoder, **self.get_init_kwargs())
@@ -278,7 +272,7 @@ class AssignmentProblem(AssignmentProblemBase):
         src, tgt = self.get_src_tgt_nodes()
         excluded = self.get_excluded_edges()
         existence_patterns = self.get_existence_patterns()
-        matrix_gen = AggregateAssignmentMatrixGenerator(
+        matrix_gen = AggregateAssignmentMatrixGenerator.create(
             src, tgt, excluded=excluded, existence_patterns=existence_patterns)
         return matrix_gen.count_all_matrices()
 
@@ -354,6 +348,12 @@ class AssignmentProblem(AssignmentProblemBase):
     def get_existence_patterns(self) -> Optional[NodeExistencePatterns]:
         pass
 
+    def get_matrix_gen_settings(self) -> MatrixGenSettings:
+        src, tgt = self.get_src_tgt_nodes()
+        excluded = self.get_excluded_edges()
+        existence_patterns = self.get_existence_patterns()
+        return MatrixGenSettings(src, tgt, excluded=excluded, existence=existence_patterns)
+
     def correct_x_aux(self, x_aux: DesignVector) -> Tuple[DesignVector, Optional[NodeExistence], bool]:
         """Correct auxiliary design vector, return imputed design vector, optional NodeExistence, and flag whether the
         design is invalid"""
@@ -403,15 +403,9 @@ class MultiAssignmentProblem(AssignmentProblemBase):
     def _get_assignment_managers(self, encoder: Encoder = None) -> List[AssignmentManagerBase]:
         assignment_managers = []
         selector_stage = None
-        for matrix_gen in self.get_matrix_defs():
-            src, tgt = matrix_gen.src, matrix_gen.tgt
-            excluded = matrix_gen.ex
-            if excluded is not None:
-                excluded = [(src[edge[0]], tgt[edge[1]]) for edge in excluded]
-            existence_patterns = matrix_gen.existence_patterns
-
+        for settings in self.get_matrix_gen_settings():
             if encoder is None:
-                selector = EncoderSelector(src, tgt, excluded=excluded, existence_patterns=existence_patterns)
+                selector = EncoderSelector(settings)
                 assignment_manager = selector.get_best_assignment_manager()
                 selector_stage_ = selector._last_selection_stage
                 if selector_stage is None or selector_stage_ > selector_stage:
@@ -419,9 +413,8 @@ class MultiAssignmentProblem(AssignmentProblemBase):
 
             elif isinstance(encoder, (LazyEncoder, EagerEncoder)):
                 encoder_copy = copy.deepcopy(encoder)
-                args, kwargs = (src, tgt, encoder_copy), {'excluded': excluded, 'existence_patterns': existence_patterns}
                 cls = LazyAssignmentManager if isinstance(encoder, LazyEncoder) else AssignmentManager
-                assignment_manager = cls(*args, **kwargs)
+                assignment_manager = cls(settings, encoder_copy)
             else:
                 raise RuntimeError(f'Unknown encoder type: {encoder}')
             assignment_managers.append(assignment_manager)
@@ -432,8 +425,8 @@ class MultiAssignmentProblem(AssignmentProblemBase):
         return assignment_managers
 
     def reset_agg_matrix_cache(self):
-        for matrix_gen in self.get_matrix_defs():
-            matrix_gen.reset_agg_matrix_cache()
+        for settings in self.get_matrix_gen_settings():
+            AggregateAssignmentMatrixGenerator(settings).reset_agg_matrix_cache()
 
     @property
     def assignment_manager(self) -> AssignmentManagerBase:
@@ -481,8 +474,8 @@ class MultiAssignmentProblem(AssignmentProblemBase):
             i += n_dv
         return x_parts
 
-    def get_matrix_defs(self) -> List[AggregateAssignmentMatrixGenerator]:
-        """The list of matrix generators that defines this problem, already correctly configured existence patterns,
+    def get_matrix_gen_settings(self) -> List[MatrixGenSettings]:
+        """The list of matrix generator settings that defines this problem, already correctly configured existence patterns,
         that during evaluation can be resolved from preceding connections (this also means the first one should not have
         any existence patterns)"""
         raise NotImplementedError
@@ -529,4 +522,3 @@ class ZDT1Calc(CachedParetoFrontMixin, ZDT1):
 
 if __name__ == '__main__':
     ZDT1Calc().plot_pf()
-

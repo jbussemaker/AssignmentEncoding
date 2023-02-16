@@ -26,31 +26,21 @@ class LazyDirectMatrixEncoder(LazyEncoder):
 
     def _encode(self, existence: NodeExistence) -> List[DiscreteDV]:
         matrix_gen = self._matrix_gen
-        overall_max = matrix_gen.max_conn
-        blocked_mask = matrix_gen.conn_blocked_mask
-        no_repeat_mask = matrix_gen.no_repeat_mask
+        max_conn_mat = matrix_gen.max_conn_mat
 
         dvs = []
         self._dv_idx_map[existence] = dv_idx_map = []
-        src, tgt = self.src, self.tgt
         for i in range(self.n_src):
             if not existence.has_src(i):
                 continue
-            src_max = np.inf if src[i].max_inf else src[i].conns[-1]
             for j in range(self.n_tgt):
                 if not existence.has_tgt(j):
                     continue
-                # Check if connection is blocked
-                if blocked_mask[i, j]:
-                    continue
 
                 # Get maximum number of connections
-                tgt_max = np.inf if tgt[j].max_inf else tgt[j].conns[-1]
-                max_conn = min(src_max, tgt_max, overall_max)
-
-                # Constrain to 1 if repetition is not allowed
-                if max_conn > 1 and no_repeat_mask[i, j]:
-                    max_conn = 1
+                max_conn = max_conn_mat[i, j]
+                if max_conn == 0:
+                    continue
 
                 # Define design variable
                 if max_conn >= 1:

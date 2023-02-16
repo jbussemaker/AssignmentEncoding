@@ -1,4 +1,3 @@
-import numba
 import itertools
 import numpy as np
 from typing import *
@@ -79,7 +78,7 @@ class GNCProblem(MultiAssignmentProblem):
                 n_comb_conns[(n_src, n_tgt)] = 1
                 n_comb_conns[(n_tgt, n_src)] = 1
             else:
-                n_comb_conns[(n_src, n_tgt)] = n_comb = AggregateAssignmentMatrixGenerator(
+                n_comb_conns[(n_src, n_tgt)] = n_comb = AggregateAssignmentMatrixGenerator.create(
                     src=[Node(min_conn=1, repeated_allowed=False) for _ in range(n_src)],
                     tgt=[Node(min_conn=1, repeated_allowed=False) for _ in range(n_tgt)],
                 ).count_all_matrices()
@@ -98,15 +97,15 @@ class GNCProblem(MultiAssignmentProblem):
             n_total += _get_n_design_points(n_sen, n_comp, n_actuators_=n_act)
         return n_total
 
-    def get_matrix_defs(self) -> List[AggregateAssignmentMatrixGenerator]:
-        matrix_defs = []
+    def get_matrix_gen_settings(self) -> List[MatrixGenSettings]:
+        matrix_gen_settings = []
 
         main_conn_patterns = None
         n = 3 if self.actuators else 2
         if self.choose_nr:
             # Choose number by choosing the amount of connections from 1 source to 1 target
             for _ in range(n):  # Sensors, computers, [actuators]
-                matrix_defs.append(AggregateAssignmentMatrixGenerator(
+                matrix_gen_settings.append(MatrixGenSettings(
                     src=[Node(list(range(1, self.n_max+1)))], tgt=[Node(min_conn=1)],
                 ))
 
@@ -119,22 +118,22 @@ class GNCProblem(MultiAssignmentProblem):
             # Choose type using a combinations with replacement pattern
             n_nodes_opts = range(1, self.n_max+1) if self.choose_nr else [self.n_max]
             for _ in range(n):  # Sensors, computers, [actuators]
-                matrix_defs.append(AggregateAssignmentMatrixGenerator(
+                matrix_gen_settings.append(MatrixGenSettings(
                     # Take n_obj from 3 options (A, B, C)
                     src=[Node([self.n_max])], tgt=[Node(min_conn=0) for _ in range(3)],
-                    existence_patterns=NodeExistencePatterns([
+                    existence=NodeExistencePatterns([
                         NodeExistence(src_n_conn_override={0: [n]}) for n in n_nodes_opts]),
                 ))
 
         # Main connection assignments
         for _ in range(n-1):
-            matrix_defs.append(AggregateAssignmentMatrixGenerator(
+            matrix_gen_settings.append(MatrixGenSettings(
                 src=[Node(min_conn=1, repeated_allowed=False) for _ in range(self.n_max)],
                 tgt=[Node(min_conn=1, repeated_allowed=False) for _ in range(self.n_max)],
-                existence_patterns=main_conn_patterns,
+                existence=main_conn_patterns,
             ))
 
-        return matrix_defs
+        return matrix_gen_settings
 
     def _resolve_existence(self, x_parts: List[DesignVector]) -> Tuple[List[DesignVector], List[Optional[List[Tuple[int, int]]]], dict]:
         """Resolve design vectors for each assignment manager into a list of connection lists, or None if any of the
@@ -251,9 +250,12 @@ class GNCProblem(MultiAssignmentProblem):
                 src_connected_mask = np.ones((len(rates),), dtype=bool)
             total_rate = 0.
             for ok_sources in itertools.product(*[([False, True] if src_connected_mask[i_conn] else [False]) for i_conn in range(len(rates))]):
+                if i_rates > 0 and not any(ok_sources):
+                    continue
+
                 # Calculate probability of this scenario occurring
                 ok_sources = list(ok_sources)
-                occurrence_prob = rates[:]
+                occurrence_prob = rates.copy()
                 occurrence_prob[ok_sources] = 1-occurrence_prob[ok_sources]
                 prob = 1.
                 for partial_prob in occurrence_prob[src_connected_mask]:
@@ -314,7 +316,7 @@ if __name__ == '__main__':
     # p = GNCProblem(DEFAULT_EAGER_ENCODER(), choose_nr=True, n_max=nm, choose_type=False)
     # p = GNCProblem(DEFAULT_EAGER_ENCODER(), choose_nr=True, n_max=nm, choose_type=True)
 
-    # p = GNCProblem(DEFAULT_EAGER_ENCODER(), choose_nr=False, n_max=3, choose_type=False, actuators=True)
+    # p = GNCProblem(DEFAULT_EAGER_ENCODER(), choose_nr=False, n_max=nm, choose_type=False, actuators=True)
     # p = GNCProblem(DEFAULT_EAGER_ENCODER(), choose_nr=False, n_max=nm, choose_type=True, actuators=True)
     # p = GNCProblem(DEFAULT_EAGER_ENCODER(), choose_nr=True, n_max=nm, choose_type=False, actuators=True)
     p = GNCProblem(DEFAULT_EAGER_ENCODER(), choose_nr=True, n_max=nm, choose_type=True, actuators=True)

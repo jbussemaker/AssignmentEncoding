@@ -8,12 +8,12 @@ from assign_enc.lazy.imputation.constraint_violation import *
 def test_encoding():
     encoder = LazyConnIdxMatrixEncoder(LazyConstraintViolationImputer(), FlatConnCombsEncoder())
     src, tgt = [Node([0, 1, 2]) for _ in range(3)], [Node(min_conn=1, repeated_allowed=False) for _ in range(2)]
-    encoder.set_nodes(src=src, tgt=tgt, excluded=[(src[0], tgt[1])],
-                      existence_patterns=NodeExistencePatterns([NodeExistence(src_n_conn_override={0: [2]})]))
+    encoder.set_settings(MatrixGenSettings(src=src, tgt=tgt, excluded=[(src[0], tgt[1])],
+                                           existence=NodeExistencePatterns([NodeExistence(src_n_conn_override={0: [2]})])))
     assert len(encoder.design_vars) == 0
 
-    encoder.set_nodes(src=src, tgt=tgt, excluded=[(src[0], tgt[1])],
-                      existence_patterns=NodeExistencePatterns([NodeExistence(src_n_conn_override={0: [1]})]))
+    encoder.set_settings(MatrixGenSettings(src=src, tgt=tgt, excluded=[(src[0], tgt[1])],
+                                           existence=NodeExistencePatterns([NodeExistence(src_n_conn_override={0: [1]})])))
     assert len(encoder.design_vars) == 2
 
     dv, mat = encoder.get_matrix([2, 2], existence=encoder.existence_patterns.patterns[0])
@@ -30,14 +30,14 @@ def test_encoding():
 def test_encoding_transpose():
     encoder = LazyConnIdxMatrixEncoder(LazyConstraintViolationImputer(), FlatConnCombsEncoder(), by_src=False)
     src, tgt = [Node([0, 1, 2]) for _ in range(3)], [Node(min_conn=1, repeated_allowed=False) for _ in range(2)]
-    encoder.set_nodes(src=src, tgt=tgt, excluded=[(src[0], tgt[1])],
-                      existence_patterns=NodeExistencePatterns([NodeExistence(src_n_conn_override={0: [2]})]))
+    encoder.set_settings(MatrixGenSettings(src=src, tgt=tgt, excluded=[(src[0], tgt[1])],
+                                           existence=NodeExistencePatterns([NodeExistence(src_n_conn_override={0: [2]})])))
     assert len(encoder.design_vars) == 2
     _, mat = encoder.get_matrix([0, 0], existence=encoder.existence_patterns.patterns[0])
     assert mat[0, 0] == -1
 
-    encoder.set_nodes(src=src, tgt=tgt, excluded=[(src[0], tgt[1])],
-                      existence_patterns=NodeExistencePatterns([NodeExistence(src_n_conn_override={0: [1]})]))
+    encoder.set_settings(MatrixGenSettings(src=src, tgt=tgt, excluded=[(src[0], tgt[1])],
+                                           existence=NodeExistencePatterns([NodeExistence(src_n_conn_override={0: [1]})])))
     assert len(encoder.design_vars) > 0
 
     dv, mat = encoder.get_matrix([0, 2], existence=encoder.existence_patterns.patterns[0])
@@ -52,12 +52,12 @@ def test_encoding_transpose():
 def test_encoding_amount_first():
     encoder = LazyConnIdxMatrixEncoder(LazyConstraintViolationImputer(), FlatConnCombsEncoder(), amount_first=True)
     src, tgt = [Node([0, 1, 2]) for _ in range(3)], [Node(min_conn=1, repeated_allowed=False) for _ in range(2)]
-    encoder.set_nodes(src=src, tgt=tgt, excluded=[(src[0], tgt[1])],
-                      existence_patterns=NodeExistencePatterns([NodeExistence(src_n_conn_override={0: [2]})]))
+    encoder.set_settings(MatrixGenSettings(src=src, tgt=tgt, excluded=[(src[0], tgt[1])],
+                                           existence=NodeExistencePatterns([NodeExistence(src_n_conn_override={0: [2]})])))
     assert len(encoder.design_vars) == 0
 
-    encoder.set_nodes(src=src, tgt=tgt, excluded=[(src[0], tgt[1])],
-                      existence_patterns=NodeExistencePatterns([NodeExistence(src_n_conn_override={0: [1]})]))
+    encoder.set_settings(MatrixGenSettings(src=src, tgt=tgt, excluded=[(src[0], tgt[1])],
+                                           existence=NodeExistencePatterns([NodeExistence(src_n_conn_override={0: [1]})])))
     assert len(encoder.design_vars) == 4
 
     dv, mat = encoder.get_matrix([0, 0, 0, 0], existence=encoder.existence_patterns.patterns[0])
@@ -72,12 +72,12 @@ def test_encoding_amount_first():
 def test_encoding_grouped():
     encoder = LazyConnIdxMatrixEncoder(LazyConstraintViolationImputer(), GroupedConnCombsEncoder())
     src, tgt = [Node([0, 1, 2]) for _ in range(3)], [Node(min_conn=1, repeated_allowed=False) for _ in range(2)]
-    encoder.set_nodes(src=src, tgt=tgt, excluded=[(src[0], tgt[1])],
-                      existence_patterns=NodeExistencePatterns([NodeExistence(src_n_conn_override={0: [2]})]))
+    encoder.set_settings(MatrixGenSettings(src=src, tgt=tgt, excluded=[(src[0], tgt[1])],
+                                           existence=NodeExistencePatterns([NodeExistence(src_n_conn_override={0: [2]})])))
     assert len(encoder.design_vars) == 0
 
-    encoder.set_nodes(src=src, tgt=tgt, excluded=[(src[0], tgt[1])],
-                      existence_patterns=NodeExistencePatterns([NodeExistence(src_n_conn_override={0: [1]})]))
+    encoder.set_settings(MatrixGenSettings(src=src, tgt=tgt, excluded=[(src[0], tgt[1])],
+                                           existence=NodeExistencePatterns([NodeExistence(src_n_conn_override={0: [1]})])))
     assert len(encoder.design_vars) == 4
 
     dv, mat = encoder.get_matrix([0, 1, 0, 1], existence=encoder.existence_patterns.patterns[0])
@@ -92,12 +92,12 @@ def test_encoding_grouped():
 def test_encoding_conn_idx():
     encoder = LazyConnIdxMatrixEncoder(LazyConstraintViolationImputer(), ConnIdxCombsEncoder())
     src, tgt = [Node([0, 1, 2]) for _ in range(3)], [Node(min_conn=1, repeated_allowed=False) for _ in range(2)]
-    encoder.set_nodes(src=src, tgt=tgt, excluded=[(src[0], tgt[1])],
-                      existence_patterns=NodeExistencePatterns([NodeExistence(src_n_conn_override={0: [2]})]))
+    encoder.set_settings(MatrixGenSettings(src=src, tgt=tgt, excluded=[(src[0], tgt[1])],
+                                           existence=NodeExistencePatterns([NodeExistence(src_n_conn_override={0: [2]})])))
     assert len(encoder.design_vars) == 0
 
-    encoder.set_nodes(src=src, tgt=tgt, excluded=[(src[0], tgt[1])],
-                      existence_patterns=NodeExistencePatterns([NodeExistence(src_n_conn_override={0: [1]})]))
+    encoder.set_settings(MatrixGenSettings(src=src, tgt=tgt, excluded=[(src[0], tgt[1])],
+                                           existence=NodeExistencePatterns([NodeExistence(src_n_conn_override={0: [1]})])))
     assert len(encoder.design_vars) == 4
 
     dv, mat = encoder.get_matrix([1, 0, 1, 1], existence=encoder.existence_patterns.patterns[0])
@@ -112,7 +112,7 @@ def test_encoding_conn_idx():
 def test_one_to_one(gen_one_per_existence: AggregateAssignmentMatrixGenerator):
     g = gen_one_per_existence
     encoder = LazyConnIdxMatrixEncoder(LazyClosestImputer(), FlatConnCombsEncoder())
-    encoder.set_nodes(g.src, g.tgt, existence_patterns=g.existence_patterns)
+    encoder.set_settings(g.settings)
     assert len(encoder.design_vars) == 0
 
     assert encoder.get_n_design_points() == 1

@@ -223,6 +223,13 @@ class SourceTargetLazyAmountEncoder(GroupedLazyAmountEncoder):
 
 class FlatLazyConnectionEncoder(LazyConnectionEncoder):
 
+    def __init__(self):
+        self._n_exist_max = {}
+        super().__init__()
+
+    def encode_prepare(self):
+        self._n_exist_max = {}
+
     def encode(self, n_src_n_tgt: NList, existence: NodeExistence, encoder: OnDemandLazyEncoder) -> List[DiscreteDV]:
 
         if len(n_src_n_tgt) == 0:
@@ -239,8 +246,8 @@ class FlatLazyConnectionEncoder(LazyConnectionEncoder):
         # Get the combination of src and tgt amounts that are closest to half of the max amounts
         # For half of the max amount (where max amount is given by the nr of nodes of the other type --> max src
         # connections is the amount of tgt nodes), there are the most amount of connection permutations possible
-        n_src_, n_tgt_ = n_src_n_tgt[0]
-        n_src_tgt_half = np.array([len(n_tgt_)/2]*len(n_src_) + [len(n_src_)/2]*len(n_tgt_))
+        n_src_tgt_half = np.array(list(encoder.matrix_gen.get_max_src_appear(existence=existence)) +
+                                  list(encoder.matrix_gen.get_max_tgt_appear(existence=existence)))/2
         i_closest, dist_closest = None, None
         for i, (n_src_conn, n_tgt_conn) in enumerate(n_src_n_tgt):
             n_src_tgt_dist = np.sum(np.abs(np.array(list(n_src_conn)+list(n_tgt_conn))-n_src_tgt_half))
@@ -251,6 +258,7 @@ class FlatLazyConnectionEncoder(LazyConnectionEncoder):
         if n_matrix > n_matrix_max:
             n_matrix_max = n_matrix
 
+        self._n_exist_max[existence] = n_matrix_max
         return [DiscreteDV(n_opts=n_matrix_max)] if n_matrix_max > 1 else []
 
     def decode(self, n_src_conn, n_tgt_conn, vector: DesignVector, encoder: OnDemandLazyEncoder,
@@ -261,6 +269,10 @@ class FlatLazyConnectionEncoder(LazyConnectionEncoder):
             if matrices.shape[0] == 0:
                 return np.zeros((len(n_src_conn), len(n_tgt_conn)), dtype=int)
             return matrices[0, :, :]
+
+        if matrices.shape[0] > self._n_exist_max.get(existence, 0):
+            raise RuntimeError(f'Sub-matrix found ({n_src_conn}, {n_tgt_conn}) with '
+                               f'{matrices.shape[0]} > {self._n_exist_max.get(existence, 0)} possibilities')
 
         i_conn = vector[0]
         if i_conn < matrices.shape[0]:

@@ -278,7 +278,7 @@ def test_encoder_zero_dvs():
         NodeExistence(),
         NodeExistence(src_exists=[True, False], tgt_exists=[True, False]),
     ])
-    gen = AggregateAssignmentMatrixGenerator(src, tgt, existence_patterns=exist)
+    gen = AggregateAssignmentMatrixGenerator.create(src, tgt, existence=exist)
     matrix_map = gen.get_agg_matrix()
     assert len(matrix_map) == 2
     assert matrix_map[exist.patterns[1]].shape[0] == 1
@@ -319,9 +319,9 @@ def test_one_to_one(gen_one_per_existence: AggregateAssignmentMatrixGenerator):
 
 
 def test_no_conn(gen_one_per_existence: AggregateAssignmentMatrixGenerator):
-    gen = AggregateAssignmentMatrixGenerator(
+    gen = AggregateAssignmentMatrixGenerator.create(
         src=gen_one_per_existence.src, tgt=gen_one_per_existence.tgt,
-        existence_patterns=NodeExistencePatterns(patterns=[gen_one_per_existence.existence_patterns.patterns[-5]]))
+        existence=NodeExistencePatterns(patterns=[gen_one_per_existence.existence_patterns.patterns[-5]]))
 
     assert gen.count_all_matrices(max_by_existence=False) == 0
     encoder = DirectZeroEncoder(EagerImputer())

@@ -29,12 +29,8 @@ class EncoderSelector:
     limit_dist_corr_time = True
     min_distance_correlation = .7
 
-    def __init__(self, src: List[Node], tgt: List[Node], excluded: List[Tuple[Node, Node]] = None,
-                 existence_patterns: NodeExistencePatterns = None):
-        self.src: List[Node] = src
-        self.tgt: List[Node] = tgt
-        self._ex: List[Tuple[Node, Node]] = excluded
-        self.existence_patterns: Optional[NodeExistencePatterns] = existence_patterns
+    def __init__(self, settings: MatrixGenSettings):
+        self.settings: MatrixGenSettings = settings
 
         self.lazy_imputer = DEFAULT_LAZY_IMPUTER
         self.eager_imputer = DEFAULT_EAGER_IMPUTER
@@ -45,7 +41,7 @@ class EncoderSelector:
         if os.path.exists(cache_path):
             os.remove(cache_path)
 
-    def get_best_assignment_manager(self, cache=True, limit_time=True) -> AssignmentManager:
+    def get_best_assignment_manager(self, cache=True, limit_time=True) -> AssignmentManagerBase:
         cache_path = self._cache_path(f'{self._get_cache_key()}.pkl')
         if not self._global_disable_cache and cache and os.path.exists(cache_path):
             with open(cache_path, 'rb') as fp:
@@ -77,10 +73,8 @@ class EncoderSelector:
         dist_corr_eager_limit = self.imputation_ratio_limits[-1]
 
         def _instantiate_manager(encoder):
-            args = (self.src, self.tgt, encoder)
-            kwargs = {'excluded': self._ex, 'existence_patterns': self.existence_patterns}
             cls = LazyAssignmentManager if isinstance(encoder, LazyEncoder) else AssignmentManager
-            return cls(*args, **kwargs)
+            return cls(self.settings, encoder)
 
         def _create_managers(encoders, imputer_factory, dist_corr_limit):
             assignment_mgr = []
@@ -309,12 +303,10 @@ class EncoderSelector:
             return None, None
 
     def _get_matrix_gen(self) -> AggregateAssignmentMatrixGenerator:
-        return AggregateAssignmentMatrixGenerator(
-            self.src, self.tgt, excluded=self._ex, existence_patterns=self.existence_patterns)
+        return AggregateAssignmentMatrixGenerator(self.settings)
 
     def _get_cache_key(self):
-        ex_idx = AggregateAssignmentMatrixGenerator.ex_to_idx(self.src, self.tgt, self._ex)
-        return AggregateAssignmentMatrixGenerator.get_cache_key(self.src, self.tgt, ex_idx, self.existence_patterns)
+        return self.settings.get_cache_key()
 
     def _cache_path(self, sub_path=None):
         sel_cache_folder = 'encoder_cache'

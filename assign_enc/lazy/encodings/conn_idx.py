@@ -127,20 +127,20 @@ class LazyConnIdxMatrixEncoder(LazyEncoder):
 
     def _encode(self, existence: NodeExistence) -> List[DiscreteDV]:
         matrix_gen = self._matrix_gen
-        overall_max = matrix_gen.max_conn
-        blocked_mask = matrix_gen.conn_blocked_mask
-        no_repeat_mask = matrix_gen.no_repeat_mask
+        max_conn_mat = matrix_gen.max_conn_mat
 
         # We can either encode connection from each source node or to each target node
         if self._by_src:
             from_nodes, to_nodes = self.src, self.tgt
             has_from, has_to = existence.src_exists_mask(len(self.src)), existence.tgt_exists_mask(len(self.tgt))
             from_n_conn_override, to_n_conn_override = existence.src_n_conn_override, existence.tgt_n_conn_override
+            max_from_conn = matrix_gen.get_max_src_appear(existence)
         else:
             from_nodes, to_nodes = self.tgt, self.src
             has_from, has_to = existence.tgt_exists_mask(len(self.tgt)), existence.src_exists_mask(len(self.src))
             from_n_conn_override, to_n_conn_override = existence.tgt_n_conn_override, existence.src_n_conn_override
-            blocked_mask, no_repeat_mask = blocked_mask.T, no_repeat_mask.T
+            max_from_conn = matrix_gen.get_max_tgt_appear(existence)
+            max_conn_mat = max_conn_mat.T
 
         # Encode each reference node separately
         self._dv_idx_map[existence] = dv_idx_map = {}
@@ -150,16 +150,13 @@ class LazyConnIdxMatrixEncoder(LazyEncoder):
             if not has_from[i]:
                 continue
             # Get a list of possible nr of outgoing/incoming connections
-            n_from_conn = from_n_conn_override.get(i, matrix_gen.get_node_conns(node, overall_max))
+            n_from_conn = from_n_conn_override.get(i, matrix_gen.get_node_conns(node, max_from_conn[i]))
 
             # Get maximum nr of connections to each target (source) node for this source (target) node
-            n_tgt_conns = np.zeros((len(to_nodes),), dtype=np.int64)
+            n_tgt_conns = max_conn_mat[i, :].copy()
             for j, to_node in enumerate(to_nodes):
-                if not has_to[j] or blocked_mask[i, j]:
-                    continue
-                n_tgt_conns[j] = max(to_n_conn_override.get(j, matrix_gen.get_node_conns(to_node, overall_max)))
-                if n_tgt_conns[j] > 1 and no_repeat_mask[i, j]:
-                    n_tgt_conns[j] = 1
+                if not has_to[j]:
+                    n_tgt_conns[j] = 0
 
             # Get possible connection matrices
             all_failed = True
