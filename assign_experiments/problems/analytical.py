@@ -9,8 +9,8 @@ from pymoo.algorithms.moo.nsga2 import NSGA2
 
 __all__ = ['AnalyticalProblemBase', 'AnalyticalCombinationProblem', 'AnalyticalAssignmentProblem',
            'AnalyticalPartitioningProblem', 'AnalyticalDownselectingProblem', 'AnalyticalConnectingProblem',
-           'AnalyticalPermutingProblem', 'AnalyticalIterCombinationsProblem',
-           'AnalyticalIterCombinationsReplacementProblem', 'ManualBestEncoder']
+           'AnalyticalPermutingProblem', 'AnalyticalUnorderedNonReplaceCombiningProblem',
+           'AnalyticalUnorderedCombiningProblem', 'ManualBestEncoder']
 
 
 class ManualBestEncoder(LazyEncoder):
@@ -212,12 +212,7 @@ class AssigningBestEncoder(ManualBestEncoder):
 
     @property
     def _n_max(self):
-        n_max = 1
-        if self.repeatable:
-            n_max_src = sum([max(1, node.min_conns) if node.max_inf else max(node.conns) for node in self.src])
-            n_max_tgt = sum([max(1, node.min_conns) if node.max_inf else max(node.conns) for node in self.tgt])
-            n_max = max(n_max_src, n_max_tgt)
-        return n_max
+        return 2 if self.repeatable else 1
 
     def _encode(self, existence: NodeExistence) -> List[DiscreteDV]:
         n_max = self._n_max
@@ -267,15 +262,8 @@ class AssigningRepair(Repair):
                 elif surjective and n_conns < 1:
                     conns[np.random.choice(np.arange(n_src))] = 1
 
-                elif repeatable and n_conns > n_max:
-                    while np.sum(conns) > n_max:
-                        conns[np.random.choice(np.where(conns > 0)[0])] -= 1
-
-            if repeatable:
-                for i_src in range(n_src):
-                    conns = row[i_src*n_tgt:(i_src+1)*n_tgt]
-                    while np.sum(conns) > n_max:
-                        conns[np.random.choice(np.where(conns > 0)[0])] -= 1
+                elif repeatable:
+                    conns[n_conns > n_max] = n_max
 
         return X
 
@@ -515,7 +503,7 @@ class PermutingRepair(Repair):
         return X
 
 
-class AnalyticalIterCombinationsProblem(AnalyticalProblemBase):
+class AnalyticalUnorderedNonReplaceCombiningProblem(AnalyticalProblemBase):
     """Unordered non-replacing combining pattern (itertools combinations function: select n_take elements from n_tgt targets):
     1 source has n_take connections to n_tgt targets, no repetition"""
 
@@ -533,10 +521,10 @@ class AnalyticalIterCombinationsProblem(AnalyticalProblemBase):
         return f'{self.__class__.__name__}(n_take={self._n_take}, n_tgt={self._n_tgt})'
 
     def get_problem_name(self):
-        return 'An Iter Comb Prob'
+        return 'An Unord Norepl Comb Prob'
 
     def __str__(self):
-        return f'An Iter Comb Prob {self._n_take} from {self._n_tgt}'
+        return f'An Unord Norepl Comb Prob {self._n_take} from {self._n_tgt}'
 
     def get_manual_best_encoder(self, imputer: LazyImputer) -> Optional[ManualBestEncoder]:
         return UnorderedCombiningBestEncoder(imputer, n_take=self._n_take)
@@ -596,7 +584,7 @@ class UnorderedCombiningRepair(Repair):
         return X
 
 
-class AnalyticalIterCombinationsReplacementProblem(AnalyticalIterCombinationsProblem):
+class AnalyticalUnorderedCombiningProblem(AnalyticalUnorderedNonReplaceCombiningProblem):
     """Unordered combining (with replacements) pattern (itertools combinations_with_replacement function:
     select n_take elements from n_tgt targets):
     1 source has n_take connections to n_tgt targets, repetition allowed"""
@@ -605,10 +593,10 @@ class AnalyticalIterCombinationsReplacementProblem(AnalyticalIterCombinationsPro
         return Node([self._n_take]) if src else Node(min_conn=0)
 
     def get_problem_name(self):
-        return 'An Iter Comb Repl Prob'
+        return 'An Unord Comb Prob'
 
     def __str__(self):
-        return f'An Iter Comb Repl Prob {self._n_take} from {self._n_tgt}'
+        return f'An Unord Comb Prob {self._n_take} from {self._n_tgt}'
 
     def get_manual_best_encoder(self, imputer: LazyImputer) -> Optional[ManualBestEncoder]:
         return UnorderedCombiningBestEncoder(imputer, n_take=self._n_take, with_replacement=True)
@@ -678,6 +666,7 @@ if __name__ == '__main__':
     # p = AnalyticalAssignmentProblem(DEFAULT_EAGER_ENCODER())  # Very high imputation ratios
     # p = AnalyticalAssignmentProblem(DEFAULT_EAGER_ENCODER(), injective=True, n_src=2, n_tgt=4)
     # p = AnalyticalAssignmentProblem(DEFAULT_EAGER_ENCODER(), injective=True)
+    # p = AnalyticalAssignmentProblem(DEFAULT_EAGER_ENCODER(), injective=True, n_src=6, n_tgt=6)
     # p = AnalyticalAssignmentProblem(DEFAULT_EAGER_ENCODER(), surjective=True)
     # p = AnalyticalAssignmentProblem(DEFAULT_EAGER_ENCODER(), injective=True, surjective=True)
     p = AnalyticalAssignmentProblem(DEFAULT_EAGER_ENCODER(), n_src=2, n_tgt=4, repeatable=True)

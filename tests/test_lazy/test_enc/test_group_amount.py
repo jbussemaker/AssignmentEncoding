@@ -169,8 +169,13 @@ def test_filter_dvs():
 
 def test_covering_partitioning():
     encoder = LazyAmountFirstEncoder(LazyDeltaImputer(), FlatLazyAmountEncoder(), FlatLazyConnectionEncoder())
-    encoder.set_settings(MatrixGenSettings(src=[Node(min_conn=0, repeated_allowed=False) for _ in range(2)],
-                                           tgt=[Node(min_conn=1, repeated_allowed=False) for _ in range(4)]))
+    settings = MatrixGenSettings(src=[Node(min_conn=0, repeated_allowed=False) for _ in range(2)],
+                                 tgt=[Node(min_conn=1, repeated_allowed=False) for _ in range(4)])
+    assert np.all(settings.get_max_conn_matrix() == np.array([
+        [1, 1, 1, 1],
+        [1, 1, 1, 1],
+    ]))
+    encoder.set_settings(settings)
 
     assert len(list(encoder.iter_n_src_n_tgt())) == 48
     assert encoder.matrix_gen.count_all_matrices() == 81

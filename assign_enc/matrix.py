@@ -78,6 +78,15 @@ class NodeExistence:
         self._tgt_exists_mask = None
         self._none_exists = None
 
+    def __getstate__(self):
+        state = self.__dict__.copy()
+        state['_hash'] = None
+        return state
+
+    def __setstate__(self, state):
+        state['_hash'] = None
+        self.__dict__ = state
+
     @staticmethod
     def _get_n_conn_override(exists: Union[List[bool], np.ndarray] = None,
                              n_conn_override: Dict[int, List[int]] = None) -> Dict[int, List[int]]:

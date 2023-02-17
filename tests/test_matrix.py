@@ -227,6 +227,9 @@ def test_node_existence():
         NodeExistence(),
         NodeExistence([True, True], [False, True]),
     ])
+    assert hash(exist.patterns[0])
+    assert exist.patterns[0]._hash is not None
+    assert hash(exist.patterns[1])
     gen = AggregateAssignmentMatrixGenerator.create(src=[obj1, obj2], tgt=[obj3, obj4], existence=exist)
 
     _assert_matrix(gen, gen, np.array([
@@ -256,6 +259,10 @@ def test_node_existence():
     assert gen._load_agg_matrix_from_cache() is not None
     assert gen.count_all_matrices() == 6
     assert gen.count_all_matrices(max_by_existence=False) == 8
+
+    assert list(gen.iter_n_sources_targets())
+    assert list(gen.iter_n_sources_targets(existence=exist.patterns[0]))
+    assert list(gen.iter_n_sources_targets(existence=exist.patterns[1]))
 
     assert NodeExistence() == NodeExistence()
     assert NodeExistence(src_exists=[True, False]) != NodeExistence(tgt_exists=[True, False])

@@ -333,7 +333,7 @@ class EagerEncoder(Encoder):
         # If this existence mode has no matrices, return the zero vector
         if not self._has_existence(existence):
             vector = [0]*len(vector)
-            null_matrix = np.zeros((1, matrix.shape[1], matrix.shape[2]), dtype=int)
+            null_matrix = np.zeros((matrix.shape[1], matrix.shape[2]), dtype=int)
             return vector+extra_vector, null_matrix
 
         # If no matrix can be found, impute
