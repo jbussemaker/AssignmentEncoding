@@ -22,10 +22,15 @@ class ElementGroupedEncoder(GroupedEncoder):
 class ConnIdxGroupedEncoder(GroupedEncoder):
     """Group by the connection indices (positions); should work well for permutations"""
 
-    def __init__(self, *args, by_src=True, **kwargs):
+    def __init__(self, *args, by_src=True, binary=False, **kwargs):
         self.by_src = by_src
-        super().__init__(*args, **kwargs)
         self.normalize_within_group = True
+        self.binary = binary
+        super().__init__(*args, **kwargs)
+
+    def _get_ordinal_conv_base(self) -> Optional[int]:
+        if self.binary:
+            return 2
 
     def _get_grouping_values(self, matrix: np.ndarray) -> np.ndarray:
         if matrix.shape[0] == 0:
@@ -62,7 +67,8 @@ class ConnIdxGroupedEncoder(GroupedEncoder):
                 offset += n
 
     def __repr__(self):
-        return f'{self.__class__.__name__}({self._imputer!r}, by_src={self.by_src})'
+        return f'{self.__class__.__name__}({self._imputer!r}, by_src={self.by_src}, binary={self.binary})'
 
     def __str__(self):
-        return f'Group By {"Src" if self.by_src else "Tgt"} Conn Idx + {self._imputer!s}'
+        bin_str = ' Bin' if self.binary else ''
+        return f'Group By {"Src" if self.by_src else "Tgt"} Conn Idx{bin_str} + {self._imputer!s}'

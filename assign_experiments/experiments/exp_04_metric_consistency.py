@@ -28,6 +28,8 @@ EXP4_EAGER_ENCODERS = [
     lambda imp: ElementGroupedEncoder(imp, normalize_within_group=False),
     lambda imp: ConnIdxGroupedEncoder(imp),
     lambda imp: ConnIdxGroupedEncoder(imp, by_src=False),
+    lambda imp: ConnIdxGroupedEncoder(imp, binary=True),
+    lambda imp: ConnIdxGroupedEncoder(imp, by_src=False, binary=True),
 
     lambda imp: AmountFirstGroupedEncoder(imp, TotalAmountGrouper(), OneVarLocationGrouper()),
     lambda imp: AmountFirstGroupedEncoder(imp, SourceAmountGrouper(), OneVarLocationGrouper()),
@@ -48,6 +50,32 @@ EXP4_EAGER_ENCODERS = [
     lambda imp: AmountFirstGroupedEncoder(imp, SourceAmountFlattenedGrouper(), CoordIndexLocationGrouper()),
     lambda imp: AmountFirstGroupedEncoder(imp, TargetAmountGrouper(), CoordIndexLocationGrouper()),
     lambda imp: AmountFirstGroupedEncoder(imp, TargetAmountFlattenedGrouper(), CoordIndexLocationGrouper()),
+]
+
+EXP4_LAZY_ENCODERS = [
+    lambda imp: LazyDirectMatrixEncoder(imp),
+
+    lambda imp: LazyAmountFirstEncoder(imp, FlatLazyAmountEncoder(), FlatLazyConnectionEncoder()),
+    lambda imp: LazyAmountFirstEncoder(imp, TotalLazyAmountEncoder(), FlatLazyConnectionEncoder()),
+    lambda imp: LazyAmountFirstEncoder(imp, SourceLazyAmountEncoder(), FlatLazyConnectionEncoder()),
+    lambda imp: LazyAmountFirstEncoder(imp, SourceTargetLazyAmountEncoder(), FlatLazyConnectionEncoder()),
+
+    lambda imp: LazyConnIdxMatrixEncoder(imp, FlatConnCombsEncoder()),
+    lambda imp: LazyConnIdxMatrixEncoder(imp, FlatConnCombsEncoder(), by_src=False),
+    lambda imp: LazyConnIdxMatrixEncoder(imp, FlatConnCombsEncoder(), amount_first=True),
+    lambda imp: LazyConnIdxMatrixEncoder(imp, FlatConnCombsEncoder(), by_src=False, amount_first=True),
+    lambda imp: LazyConnIdxMatrixEncoder(imp, GroupedConnCombsEncoder()),
+    lambda imp: LazyConnIdxMatrixEncoder(imp, GroupedConnCombsEncoder(), by_src=False),
+    lambda imp: LazyConnIdxMatrixEncoder(imp, GroupedConnCombsEncoder(), amount_first=True),
+    lambda imp: LazyConnIdxMatrixEncoder(imp, GroupedConnCombsEncoder(), by_src=False, amount_first=True),
+    lambda imp: LazyConnIdxMatrixEncoder(imp, ConnIdxCombsEncoder()),
+    lambda imp: LazyConnIdxMatrixEncoder(imp, ConnIdxCombsEncoder(), by_src=False),
+    lambda imp: LazyConnIdxMatrixEncoder(imp, ConnIdxCombsEncoder(), amount_first=True),
+    lambda imp: LazyConnIdxMatrixEncoder(imp, ConnIdxCombsEncoder(), by_src=False, amount_first=True),
+    lambda imp: LazyConnIdxMatrixEncoder(imp, ConnIdxCombsEncoder(binary=True)),
+    lambda imp: LazyConnIdxMatrixEncoder(imp, ConnIdxCombsEncoder(binary=True), by_src=False),
+    lambda imp: LazyConnIdxMatrixEncoder(imp, ConnIdxCombsEncoder(binary=True), amount_first=True),
+    lambda imp: LazyConnIdxMatrixEncoder(imp, ConnIdxCombsEncoder(binary=True), by_src=False, amount_first=True),
 ]
 
 
@@ -71,9 +99,9 @@ def get_problems(size: Size, return_factories=False) -> Union[List[AssignmentPro
         (AnalyticalAssignmentProblem, {Size.SM: {'n_src': 2, 'n_tgt': 4, 'injective': True},
                                        Size.MD: {'n_src': 5, 'n_tgt': 5, 'injective': True},
                                        Size.LG: {'n_src': 6, 'n_tgt': 6, 'injective': True}}, init_enc()),
-        (AnalyticalAssignmentProblem, {Size.SM: {'n_src': 2, 'n_tgt': 3, 'repeatable': True},
+        (AnalyticalAssignmentProblem, {Size.SM: {'n_src': 2, 'n_tgt': 2, 'repeatable': True},
                                        Size.MD: {'n_src': 2, 'n_tgt': 4, 'repeatable': True},
-                                       Size.LG: {'n_src': 3, 'n_tgt': 4, 'repeatable': True}}, init_enc()),
+                                       Size.LG: {'n_src': 2, 'n_tgt': 5, 'repeatable': True}}, init_enc()),
         (AnalyticalPartitioningProblem, {Size.SM: {'n_src': 3, 'n_tgt': 4}, Size.MD: {'n_src': 4, 'n_tgt': 6},  # Same as bijective assignment problem
                                          Size.LG: {'n_src': 5, 'n_tgt': 7}}, init_enc()),
         (AnalyticalPartitioningProblem, {Size.SM: {'n_src': 2, 'n_tgt': 4, 'covering': True},  # Same as surjective assignment problem
@@ -84,10 +112,10 @@ def get_problems(size: Size, return_factories=False) -> Union[List[AssignmentPro
         (AnalyticalConnectingProblem, {Size.SM: {'n': 4, 'directed': False}, Size.MD: None,
                                        Size.LG: None}, DEFAULT_LAZY_ENCODER()),  # n >= 5 is too slow
         (AnalyticalPermutingProblem, {Size.SM: {'n': 5}, Size.MD: {'n': 7}, Size.LG: {'n': 8}}, init_enc()),
-        (AnalyticalIterCombinationsProblem, {Size.SM: {'n_take': 5, 'n_tgt': 9}, Size.MD: {'n_take': 7, 'n_tgt': 15},
-                                             Size.LG: {'n_take': 9, 'n_tgt': 19}}, init_enc()),
-        (AnalyticalIterCombinationsReplacementProblem, {Size.SM: {'n_take': 3, 'n_tgt': 7}, Size.MD: {'n_take': 5, 'n_tgt': 10},
-                                                        Size.LG: None}, init_enc()),  # Large size needs too much memory...
+        (AnalyticalUnorderedNonReplaceCombiningProblem, {Size.SM: {'n_take': 5, 'n_tgt': 9}, Size.MD: {'n_take': 7, 'n_tgt': 15},
+                                                         Size.LG: {'n_take': 9, 'n_tgt': 19}}, init_enc()),
+        (AnalyticalUnorderedCombiningProblem, {Size.SM: {'n_take': 3, 'n_tgt': 7}, Size.MD: {'n_take': 5, 'n_tgt': 10},
+                                               Size.LG: None}, init_enc()),  # Large size needs too much memory...
     ]
     if return_factories:
         return [_get_problem_factory(cls, **kwargs[size]) for cls, kwargs, enc in prob_kwargs if kwargs[size] is not None]
@@ -197,8 +225,8 @@ def exp_dist_corr_perm():
     imputers += [DEFAULT_EAGER_IMPUTER]*len(EXP4_EAGER_ENCODERS)
     encoders += EAGER_ENUM_ENCODERS
     imputers += [DEFAULT_EAGER_IMPUTER]*len(EAGER_ENUM_ENCODERS)
-    encoders += LAZY_ENCODERS
-    imputers += [DEFAULT_LAZY_IMPUTER]*len(LAZY_ENCODERS)
+    encoders += EXP4_LAZY_ENCODERS
+    imputers += [DEFAULT_LAZY_IMPUTER]*len(EXP4_LAZY_ENCODERS)
 
     def _calc_discrete_distance(arr):
         return distance.cdist(arr, arr, 'cityblock')  # Manhattan distance
@@ -273,8 +301,8 @@ def exp_sbo_convergence(size: Size, n_repeat=8, i_prob=None, do_run=True):
     imputers += [DEFAULT_EAGER_IMPUTER]*len(eager_encoders)
     encoders += EAGER_ENUM_ENCODERS
     imputers += [DEFAULT_EAGER_IMPUTER]*len(EAGER_ENUM_ENCODERS)
-    encoders += LAZY_ENCODERS
-    imputers += [DEFAULT_LAZY_IMPUTER]*len(LAZY_ENCODERS)
+    encoders += EXP4_LAZY_ENCODERS
+    imputers += [DEFAULT_LAZY_IMPUTER]*len(EXP4_LAZY_ENCODERS)
 
     problems, algorithms, plot_names, n_eval_max, algo_names = [], [], [], [], []
     stats = {'prob': [], 'enc': [], 'n': [], 'n_des_space': [], 'imp_ratio': [], 'inf_idx': [],
@@ -414,15 +442,15 @@ def run_experiment(size: Size, sbo=False, n_repeat=8, i_prob=None, do_run=True, 
     encoders, imputers = [], []
 
     # For large problems exclude Flat/Coord Idx location groupers
-    assert len(EXP4_EAGER_ENCODERS) == 23
+    # assert len(EXP4_EAGER_ENCODERS) == 23
     eager_encoders = EXP4_EAGER_ENCODERS  # [:9] if size == Size.LG else EXP4_EAGER_ENCODERS
 
     encoders += eager_encoders
     imputers += [DEFAULT_EAGER_IMPUTER]*len(eager_encoders)
     encoders += EAGER_ENUM_ENCODERS
     imputers += [DEFAULT_EAGER_IMPUTER]*len(EAGER_ENUM_ENCODERS)
-    encoders += LAZY_ENCODERS
-    imputers += [DEFAULT_LAZY_IMPUTER]*len(LAZY_ENCODERS)
+    encoders += EXP4_LAZY_ENCODERS
+    imputers += [DEFAULT_LAZY_IMPUTER]*len(EXP4_LAZY_ENCODERS)
 
     exp_name = get_exp_name(size, sbo=sbo)
     set_results_folder(exp_name)
@@ -457,7 +485,8 @@ def run_experiment(size: Size, sbo=False, n_repeat=8, i_prob=None, do_run=True, 
             encoder = encoder_factory(prob_imp[i]())
             if encoder is None:
                 continue
-            log.info(f'Encoding {problem!s} ({j+1}/{len(base_problems)}) with {encoder!s} ({i+1}/{len(encoders)})')
+            log.info(f'Encoding {problem!s} ({size.name}{" SBO" if sbo else ""}) '
+                     f'({j+1}/{len(base_problems)}) with {encoder!s} ({i+1}/{len(encoders)})')
 
             has_encoding_error = False
             stats_key = (str(problem), str(encoder))
@@ -635,13 +664,145 @@ def get_exp_name(size: Size, sbo=False):
     return f'04_metric_consistency_{size.value}{size.name.lower()}_{algo_name.lower()}'
 
 
-def _do_plot(size: Size, sbo=False):
-    exp_name = get_exp_name(size, sbo)
-    set_results_folder(exp_name)
-    res_folder = Experimenter.results_folder
+def get_combined_stats(sbo=False):
+    df = None
+    for size in Size:
+        exp_name_ = get_exp_name(size, sbo)
+        res_folder = set_results_folder(exp_name_)
+        merged_path = f'{res_folder}/stats.csv'
+        if os.path.exists(merged_path):
+            df_ = pd.read_csv(merged_path)
+            df = df_ if df is None else pd.concat([df, df_], ignore_index=True)
+    return df
 
-    df = merge_csv_files(res_folder, 'stats', len(get_problems(size)))
+
+def _do_plot(size: Size = None, sbo=False):
+    if size is None:
+        exp_name = f'04_metric_aggregate_{"sbo" if sbo else "nsga2"}'
+        set_results_folder(exp_name)
+        res_folder = Experimenter.results_folder
+
+        df = get_combined_stats(sbo=sbo)
+        df = df[df.imp_ratio <= 10]
+        df.to_csv(f'{res_folder}/stats.csv')
+
+    else:
+        exp_name = get_exp_name(size, sbo)
+        set_results_folder(exp_name)
+        res_folder = Experimenter.results_folder
+        df = merge_csv_files(res_folder, 'stats', len(get_problems(size)))
+
     plot_stats(df, res_folder, show=False)
+
+
+def check_manual_encoding():
+    from scipy.stats import pearsonr
+
+    preselected_encoders = [str(enc_factory(DEFAULT_EAGER_IMPUTER())) for enc_factory in EAGER_ENCODERS]
+    preselected_encoders += [str(enc_factory(DEFAULT_EAGER_IMPUTER())) for enc_factory in EAGER_ENUM_ENCODERS]
+    preselected_encoders += [str(enc_factory(DEFAULT_LAZY_IMPUTER())) for enc_factory in LAZY_ENCODERS]
+    preselected_encoders = set(preselected_encoders)
+
+    for sbo in [False, True]:
+        df = get_combined_stats(sbo=sbo)
+        # df = df[df.imp_ratio <= 10]
+        has_result = ~np.isnan(df['hv_end'])
+        low_imp_ratio = df.imp_ratio <= 10
+        has_dist_corr = ~np.isnan(df.dist_corr)
+        enc_is_mbe = np.array([enc.startswith('Manual Best') for enc in df.enc.values], dtype=bool)
+        enc_is_preselected = df.enc.isin(preselected_encoders)
+
+        stats = {'prob': [], 'dc_corr': [], 'dc_low_imp_ratio_corr': []}
+        stats_cols = ['enc', 'imp_ratio', 'inf_idx', 'dist_corr', 'hv_end', 'hv_end_std']
+        for enc_type in ['mbe', 'best', 'sim_best', 'sel_best']:  # mbe = manual best encoder
+            for col in stats_cols:
+                stats[f'{enc_type}_{col}'] = []
+
+        for i, prob in enumerate(list(df.prob.unique())):
+            prob_mask = (df.prob == prob) & has_result
+
+            dist_corr_values = df.dist_corr[prob_mask & has_dist_corr].values
+            dc_corr = pearsonr(dist_corr_values, df.hv_end[prob_mask & has_dist_corr].values).statistic
+            stats['dc_corr'].append(dc_corr)
+
+            dist_corr_values_low_ir = df.dist_corr[prob_mask & has_dist_corr & low_imp_ratio].values
+            dc_corr_low_ir = pearsonr(dist_corr_values_low_ir, df.hv_end[prob_mask & has_dist_corr & low_imp_ratio].values).statistic
+            stats['dc_low_imp_ratio_corr'].append(dc_corr_low_ir)
+
+            i_mbe = np.where(prob_mask & enc_is_mbe)[0]
+            similar_mask = ((df.imp_ratio.values == df.imp_ratio.values[i_mbe[0]]) & (df.inf_idx.values == df.inf_idx.values[i_mbe[0]])
+                            & (np.abs(df.dist_corr.values-df.dist_corr.values[i_mbe[0]]) < 1e-2)) if len(i_mbe) > 0 else []
+
+            i_best = np.where(prob_mask & low_imp_ratio & (~enc_is_mbe))[0]
+            i_best = [i_best[np.argmin(df.hv_end.values[i_best])]] if len(i_best) > 0 else []
+            i_sim_best = np.where(prob_mask & low_imp_ratio & (~enc_is_mbe) & similar_mask)[0]
+            i_sim_best = [i_sim_best[np.argmin(df.hv_end.values[i_sim_best])]] if len(i_sim_best) > 0 else []
+            i_sel_best = np.where(prob_mask & low_imp_ratio & (~enc_is_mbe) & enc_is_preselected)[0]
+            i_sel_best = [i_sel_best[np.argmin(df.hv_end.values[i_sel_best])]] if len(i_sel_best) > 0 else []
+
+            stats['prob'].append(prob)
+            for i_row, enc_type in [(i_mbe, 'mbe'), (i_best, 'best'), (i_sim_best, 'sim_best'), (i_sel_best, 'sel_best')]:
+                if len(i_row) == 0:
+                    for col in stats_cols:
+                        stats[f'{enc_type}_{col}'].append(np.nan)
+                else:
+                    for col in stats_cols:
+                        stats[f'{enc_type}_{col}'].append(df[col].values[i_row[0]])
+
+        res_folder = set_results_folder('04_manual_enc_analysis')
+        df = pd.DataFrame(data=stats)
+        df.to_csv(f'{res_folder}/stats_{"sbo" if sbo else "nsga2"}.csv')
+
+
+def preselect_encoders(imp_ratio_limit=10):
+    df = get_combined_stats()
+    # df_sbo = get_combined_stats(sbo=True)
+    # df_sbo['prob'] = [prob+' SBO' for prob in df_sbo.prob.values]
+    # df = pd.concat([df, df_sbo], ignore_index=True)
+
+    lazy_encoders = df.enc[df.enc.str.startswith('Lazy')].unique()
+    is_eager = (~df.enc.str.startswith('One Var')) & (~df.enc.str.startswith('Recursive')) & \
+               (~df.enc.str.startswith('Manual Best')) & (~df.enc.str.startswith('Lazy'))
+    eager_encoders = df.enc[is_eager].unique()
+
+    df = df[df.imp_ratio < imp_ratio_limit]
+    df = df[~np.isnan(df.dist_corr)]
+
+    is_lazy = df.enc.isin(lazy_encoders)
+    is_eager = df.enc.isin(eager_encoders)
+
+    d_ir, d_dc = 5e-4, .025
+    df_stats_enc_types = []
+    for base_mask, enc_names in [(is_eager, eager_encoders), (is_lazy, lazy_encoders)]:
+        available_enc = np.ones((len(enc_names),), dtype=bool)
+        while True:
+            nr_is_best = {enc: 0 for enc in enc_names}
+            enc_mask = df.enc.isin({enc for i_enc, enc in enumerate(enc_names) if available_enc[i_enc]})
+            for prob in list(df.prob.unique()):
+                mask = (df.prob == prob) & base_mask & enc_mask
+                encoders, imp_ratio, dist_corr = df.enc[mask].values, df.imp_ratio[mask].values, df.dist_corr[mask].values
+                for i_enc, enc in enumerate(encoders):
+                    found_better, found_similar = False, False
+                    for j_enc in range(len(encoders)):
+                        if j_enc == i_enc:
+                            continue
+                        if imp_ratio[j_enc] <= imp_ratio[i_enc]+d_ir and dist_corr[j_enc] >= dist_corr[i_enc]-d_dc:
+                            found_better = True
+                            break
+                    if not found_better:
+                        nr_is_best[enc] += 1
+
+            nrs = np.array([nr_is_best[enc] for enc in enc_names])
+            i_not_better, = np.where((nrs == 0) & available_enc)
+            if len(i_not_better) == 0:
+                break
+            available_enc[i_not_better[-1]] = False
+
+        df_stats_enc_types.append(pd.DataFrame(index=enc_names, data={'selected': available_enc, 'best': nrs}))
+
+    df_stats = pd.concat(df_stats_enc_types)
+    res_folder = set_results_folder('04_encoder_preselection')
+    df_stats.to_csv(f'{res_folder}/stats.csv')
 
 
 def merge_csv_files(res_folder, filename, n):
@@ -671,7 +832,8 @@ def plot_stats(df: pd.DataFrame, folder, show=False):
     df['has_result'] = has_result = ~np.isnan(df['hv_end'])
     df['has_timing'] = has_timing = ~np.isnan(df['sampling_time_sec'])
     df['enc_type'] = np.array([enc.startswith('Lazy') for enc in df.enc.values], dtype=float)
-    df.enc_type[np.array([enc.startswith('Recursive') or enc.startswith('One Var') for enc in df.enc.values])] = .5
+    df.enc_type[np.array([enc.startswith('Recursive') or enc.startswith('One Var') for enc in df.enc.values])] = .4
+    df.enc_type[np.array([enc.startswith('Manual Best') for enc in df.enc.values])] = .75
 
     col_names = {
         'n': 'Nr of valid points',
@@ -689,7 +851,7 @@ def plot_stats(df: pd.DataFrame, folder, show=False):
         'hv_ratio': 'HV ratio = HV end/doe',
         'hv_ratio_std': 'HV ratio = HV end/doe (std)',
         'hv_diff': 'HV diff = HV end-doe',
-        'enc_type': 'Encoder Type (0 = eager, .5 = enum, 1 = lazy)',
+        'enc_type': 'EncType (0 eager, .4 enum, .75 manual, 1 lazy)',
     }
 
     def _plot(x_col, y_col, err_col=None, z_col=None, x_log=False, y_log=False, z_log=False, xy_line=False, mask=None,
@@ -810,11 +972,18 @@ if __name__ == '__main__':
     # _do_plot(Size.SM), _do_plot(Size.MD), _do_plot(Size.LG), exit()
     # _do_plot(Size.SM, sbo=True), _do_plot(Size.MD, sbo=True), _do_plot(Size.LG, sbo=True), exit()
 
-    run_experiment(Size.SM, n_repeat=8)
-    # run_experiment(Size.MD, n_repeat=8)
+    # for ipr in list(range(len(get_problems(Size.SM)))):
+    #     run_experiment(Size.SM, n_repeat=8, i_prob=ipr)
+    # for ipr in list(range(len(get_problems(Size.MD)))):
+    #     run_experiment(Size.MD, n_repeat=8, i_prob=ipr)
     # for ipr in list(range(len(get_problems(Size.LG)))):
     #     run_experiment(Size.LG, n_repeat=8, i_prob=ipr)
     # for ipr in list(range(len(get_problems(Size.SM)))):
     #     run_experiment(Size.SM, sbo=True, n_repeat=4, i_prob=ipr)
     # for ipr in list(range(len(get_problems(Size.MD)))):
     #     run_experiment(Size.MD, sbo=True, n_repeat=4, i_prob=ipr)
+
+    # _do_plot()
+    # _do_plot(sbo=True)
+    # preselect_encoders()
+    check_manual_encoding()

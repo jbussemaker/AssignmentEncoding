@@ -134,38 +134,43 @@ def test_conn_idx_grouper():
 
 
 def test_conn_idx_encoder():
-    for by_src in [True, False]:
-        # Permutations
-        src = [Node([1], repeated_allowed=False) for _ in range(3)]
-        tgt = [Node([1], repeated_allowed=False) for _ in range(3)]
-        gen = AggregateAssignmentMatrixGenerator.create(src=src, tgt=tgt)
+    for binary in [False, True]:
+        for by_src in [True, False]:
+            # Permutations
+            src = [Node([1], repeated_allowed=False) for _ in range(3)]
+            tgt = [Node([1], repeated_allowed=False) for _ in range(3)]
+            gen = AggregateAssignmentMatrixGenerator.create(src=src, tgt=tgt)
 
-        matrix = gen.get_agg_matrix()[NodeExistence()]
-        encoder = ConnIdxGroupedEncoder(ClosestImputer(), matrix, by_src=by_src)
-        assert encoder.n_mat_max == 6
+            matrix = gen.get_agg_matrix()[NodeExistence()]
+            encoder = ConnIdxGroupedEncoder(ClosestImputer(), matrix, by_src=by_src, binary=binary)
+            assert encoder.n_mat_max == 6
 
-        assert len(encoder.design_vars) == 2
-        assert encoder.design_vars[0].n_opts == 3
-        assert encoder.design_vars[1].n_opts == 2
+            assert len(encoder.design_vars) == (3 if binary else 2)
+            if binary:
+                continue
 
-        dv_seen = set()
-        for i0 in range(encoder.design_vars[0].n_opts):
-            for i1 in range(encoder.design_vars[1].n_opts):
-                dv, mat = encoder.get_matrix([i0, i1])
-                assert encoder.is_valid_vector(dv)
-                assert dv == [i0, i1]
-                assert gen.validate_matrix(mat)
-                dv_seen.add(tuple(dv))
+            assert encoder.design_vars[0].n_opts == 3
+            assert encoder.design_vars[1].n_opts == 2
 
-        assert len(dv_seen) == 6
+            dv_seen = set()
+            for i0 in range(encoder.design_vars[0].n_opts):
+                for i1 in range(encoder.design_vars[1].n_opts):
+                    dv, mat = encoder.get_matrix([i0, i1])
+                    assert encoder.is_valid_vector(dv)
+                    assert dv == [i0, i1]
+                    assert gen.validate_matrix(mat)
+                    dv_seen.add(tuple(dv))
+
+            assert len(dv_seen) == 6
 
 
 def test_one_to_one_conn_idx(gen_one_per_existence: AggregateAssignmentMatrixGenerator):
-    encoder = ConnIdxGroupedEncoder(ClosestImputer())
-    encoder.matrix = gen_one_per_existence.get_agg_matrix()
-    assert len(encoder.design_vars) == 0
+    for binary in [False, True]:
+        encoder = ConnIdxGroupedEncoder(ClosestImputer(), binary=binary)
+        encoder.matrix = gen_one_per_existence.get_agg_matrix()
+        assert len(encoder.design_vars) == 0
 
-    assert encoder.get_n_design_points() == 1
-    assert encoder.get_imputation_ratio() == 1.2
-    assert encoder.get_information_index() == 1
-    assert encoder.get_distance_correlation() == 1
+        assert encoder.get_n_design_points() == 1
+        assert encoder.get_imputation_ratio() == 1.2
+        assert encoder.get_information_index() == 1
+        assert encoder.get_distance_correlation() == 1

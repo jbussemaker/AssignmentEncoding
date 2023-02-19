@@ -251,8 +251,23 @@ Conclusions:
   - Lazy encoders tend to be faster (~10x) in encoding due to not needing to generate matrices
   - However, lazy encoders tend to be slower (1 to 2 orders of magnitude) during sampling/decoding
     for higher imputation ratios due to slow imputers
+- Compared to automatic encoders, manually-encoded analytical problems had similar or worse performance, except for
+  - Large permutation problem (NSGA2): here the EA benefits from specific permutation operators and repair
+    - SBO does not rely on evolutionary operators (also not in its infill search) and thus does not enjoy this benefit
+  - Medium injective assignment problem (SBO):
+    - There is a high imputation ratio for direct-matrix encoders which prevents them from being selected
+    - Other encoders only achieve a low distance correlation, that however does correlate with performance
+    - Performance after the initial DOE was also ~40% worse, indicating ineffective imputation
+- Encoders are preselected according to the following procedure (separately for lazy and eager (non-enum) encoders):
+  - Using results of experiment 4 (NSGA2), only consider problem-encoder pairs with imp ratio < 10 and that have a dist corr value
+  - Repeat the following until no encoders are eliminated:
+    - For each problem, establish a Pareto front of imp ratio (+- 5e-4) vs dist corr (+- .025) points (excluding eliminated encoders)
+    - For each encoder, if no better point is found (incl positive margin), count as best
+    - The last encoder that has not been eliminated and was never counted as best is eliminated
+  - Preselecting encoders did not significantly influence performance compared to manual encoding, and can therefore be
+    used for the automatic selection algorithm
 
-Suggested selection:
+Conclusions:
 - Distance correlation can be accurately predicted with an adaptive stopping procedure,
   however should only be predicted for low (<500) imputation ratios
 - Try to select an encoder with as low imp ratio and high dist corr as possible
@@ -261,6 +276,7 @@ Suggested selection:
   (even if the matrix is already pre-generated), and for low imp ratios lazy encoders are not much slower for sampling
 - Only use enumeration-based (eager) encoders if all other encoders result in very high imputation ratios
 - Set a time limit on the encoding process (for each encoder)
+- Encoders are preselected based on how often they are Pareto-best in terms of imputation ratio and distance correlation
 
 #### 5. Selector Algorithm
 05_selector_algo

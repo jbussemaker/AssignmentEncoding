@@ -666,7 +666,7 @@ if __name__ == '__main__':
     # p = AnalyticalAssignmentProblem(DEFAULT_EAGER_ENCODER())  # Very high imputation ratios
     # p = AnalyticalAssignmentProblem(DEFAULT_EAGER_ENCODER(), injective=True, n_src=2, n_tgt=4)
     # p = AnalyticalAssignmentProblem(DEFAULT_EAGER_ENCODER(), injective=True)
-    # p = AnalyticalAssignmentProblem(DEFAULT_EAGER_ENCODER(), injective=True, n_src=6, n_tgt=6)
+    # p = AnalyticalAssignmentProblem(DEFAULT_EAGER_ENCODER(), injective=True, n_src=5, n_tgt=5)
     # p = AnalyticalAssignmentProblem(DEFAULT_EAGER_ENCODER(), surjective=True)
     # p = AnalyticalAssignmentProblem(DEFAULT_EAGER_ENCODER(), injective=True, surjective=True)
     p = AnalyticalAssignmentProblem(DEFAULT_EAGER_ENCODER(), n_src=2, n_tgt=4, repeatable=True)
@@ -679,8 +679,11 @@ if __name__ == '__main__':
     # p = AnalyticalIterCombinationsProblem(DEFAULT_EAGER_ENCODER())
     # p = AnalyticalIterCombinationsReplacementProblem(DEFAULT_EAGER_ENCODER(), n_take=3, n_tgt=3)
 
-    # p = p.get_for_encoder(EAGER_ENCODERS[0](DEFAULT_EAGER_IMPUTER()))
-    # print(p.get_imputation_ratio()), exit()
+    # p = p.get_for_encoder(EAGER_ENCODERS[3](DEFAULT_EAGER_IMPUTER()))
+    # print(p.get_imputation_ratio())
+    # print(p.get_information_index())
+    # print(p.assignment_manager.encoder.get_distance_correlation())
+    # exit()
 
     p.reset_pf_cache()
     p.plot_pf(show_approx_f_range=True, n_sample=1000), exit()

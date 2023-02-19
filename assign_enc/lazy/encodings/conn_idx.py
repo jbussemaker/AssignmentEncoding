@@ -12,68 +12,27 @@ __all__ = ['LazyConnIdxMatrixEncoder', 'ConnCombsEncoder', 'FlatConnCombsEncoder
 class ConnCombsEncoder:
     """Base class for an encoder that encodes a specific set of connections coming from a particular node"""
 
-    def __init__(self):
+    def __init__(self, binary=False):
+        self.binary = binary
         self._registry = {}
 
     def encode_prepare(self):
         self._registry = {}
 
     def encode(self, key, matrix: np.ndarray) -> List[DiscreteDV]:
-        raise NotImplementedError
-
-    def decode(self, key, vector: DesignVector) -> Optional[np.ndarray]:
-        raise NotImplementedError
-
-    def __repr__(self):
-        raise NotImplementedError
-
-    def __str__(self):
-        raise NotImplementedError
-
-
-class FlatConnCombsEncoder(ConnCombsEncoder):
-    """Encode by counting the nr of possible matrices"""
-
-    def encode(self, key, matrix: np.ndarray) -> List[DiscreteDV]:
-        self._registry[key] = matrix
-        return [DiscreteDV(n_opts=matrix.shape[0])] if matrix.shape[0] > 1 else []
-
-    def decode(self, key, vector: DesignVector) -> Optional[np.ndarray]:
-        matrix = self._registry[key]
-        if matrix.shape[0] == 0:
-            return np.zeros((matrix.shape[1],), dtype=np.int64)
-        i_matrix = vector[0] if len(vector) > 0 else 0
-        try:
-            return matrix[i_matrix, :]
-        except IndexError:
-            return
-
-    def __repr__(self):
-        return f'{self.__class__.__name__}()'
-
-    def __str__(self):
-        return 'Flat'
-
-
-class GroupedConnCombsEncoder(ConnCombsEncoder):
-    """Encode by grouping the values of the connection matrix"""
-
-    def encode(self, key, matrix: np.ndarray) -> List[DiscreteDV]:
         if matrix.shape[0] == 0:
             self._registry[key] = ({}, matrix)
             return []
 
-        dv_values = self._get_dv_values(matrix)
-        if dv_values is None:
+        dv_grouping_values = self._get_dv_grouping_values(matrix)
+        if dv_grouping_values is None:
             self._registry[key] = ({}, matrix)
             return []
 
+        dv_values = GroupedEncoder.group_by_values(dv_grouping_values, ordinal_base=2 if self.binary else None)
         dv_map = {tuple(dv): i for i, dv in enumerate(dv_values)}
         self._registry[key] = (dv_map, matrix)
         return [DiscreteDV(n_opts=n+1) for n in np.max(dv_values, axis=0)]
-
-    def _get_dv_values(self, matrix: np.ndarray) -> Optional[np.ndarray]:
-        return GroupedEncoder.group_by_values(matrix)
 
     def decode(self, key, vector: DesignVector) -> Optional[np.ndarray]:
         dv_map, matrix = self._registry[key]
@@ -90,22 +49,48 @@ class GroupedConnCombsEncoder(ConnCombsEncoder):
             return
 
     def __repr__(self):
-        return f'{self.__class__.__name__}()'
+        return f'{self.__class__.__name__}(binary={self.binary})'
 
     def __str__(self):
+        name = self._get_name()
+        if self.binary:
+            name += ' Bin'
+        return name
+
+    def _get_dv_grouping_values(self, matrix: np.ndarray) -> Optional[np.ndarray]:
+        raise NotImplementedError
+
+    def _get_name(self) -> str:
+        raise NotImplementedError
+
+
+class FlatConnCombsEncoder(ConnCombsEncoder):
+    """Encode by counting the nr of possible matrices"""
+
+    def _get_dv_grouping_values(self, matrix: np.ndarray) -> Optional[np.ndarray]:
+        return np.array([np.arange(0, matrix.shape[0])]).T
+
+    def _get_name(self) -> str:
+        return 'Flat'
+
+
+class GroupedConnCombsEncoder(ConnCombsEncoder):
+    """Encode by grouping the values of the connection matrix"""
+
+    def _get_dv_grouping_values(self, matrix: np.ndarray) -> Optional[np.ndarray]:
+        return matrix
+
+    def _get_name(self) -> str:
         return 'Grouped'
 
 
 class ConnIdxCombsEncoder(GroupedConnCombsEncoder):
     """Encode by grouping the indices of connections in the connection matrix"""
 
-    def _get_dv_values(self, matrix: np.ndarray) -> Optional[np.ndarray]:
-        conn_idx_values = ConnIdxGroupedEncoder.get_conn_indices(matrix)
-        if conn_idx_values is None:
-            return
-        return GroupedEncoder.group_by_values(conn_idx_values)
+    def _get_dv_grouping_values(self, matrix: np.ndarray) -> Optional[np.ndarray]:
+        return ConnIdxGroupedEncoder.get_conn_indices(matrix)
 
-    def __str__(self):
+    def _get_name(self) -> str:
         return 'ConnIdx'
 
 

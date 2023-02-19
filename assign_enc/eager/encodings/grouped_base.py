@@ -1,5 +1,6 @@
 import itertools
 import numpy as np
+from typing import Optional
 from assign_enc.encoding import *
 
 __all__ = ['GroupedEncoder', 'GroupByIndexEncoder']
@@ -20,10 +21,14 @@ class GroupedEncoder(EagerEncoder):
 
     def _encode(self, matrix: np.ndarray) -> np.ndarray:
         return self.group_by_values(
-            self._get_grouping_values(matrix), normalize_within_group=self.normalize_within_group)
+            self._get_grouping_values(matrix), normalize_within_group=self.normalize_within_group,
+            ordinal_base=self._get_ordinal_conv_base())
+
+    def _get_ordinal_conv_base(self) -> Optional[int]:
+        pass
 
     @classmethod
-    def group_by_values(cls, group_by_values: np.ndarray, normalize_within_group=True) -> np.ndarray:
+    def group_by_values(cls, group_by_values: np.ndarray, normalize_within_group=True, ordinal_base: int = None) -> np.ndarray:
         """
         Get design vectors that uniquely map to different value combinations. Example:
         [[1 2],      [[0 0],
@@ -32,7 +37,8 @@ class GroupedEncoder(EagerEncoder):
          [3 2],       [2 0],
 
         Optionally normalize only after determining all groups.
-        """
+        Optionally convert the grouped design vector values to some other base,
+        e.g. for base 2: [[1, 2, 3, 4]].T --> [[0, 0], [0, 1], [1, 0], [1, 1]]"""
         design_vectors = np.empty(group_by_values.shape, dtype=int)
         row_mask_list = [np.ones((group_by_values.shape[0],), dtype=bool)]
 
@@ -86,7 +92,34 @@ class GroupedEncoder(EagerEncoder):
         has_alternatives = np.any(design_vectors > 0, axis=0)
         design_vectors = design_vectors[:, has_alternatives]
 
+        # Convert to other base
+        if ordinal_base is not None:
+            design_vectors = cls.convert_to_base(design_vectors, ordinal_base)
+            has_alternatives = np.any(design_vectors > 0, axis=0)
+            design_vectors = design_vectors[:, has_alternatives]
+
         return design_vectors
+
+    @staticmethod
+    def convert_to_base(values: np.ndarray, base: int = 2) -> np.ndarray:
+        """Convert the ordinal-encoded values to another base"""
+        if base < 2 or base > 9:
+            raise ValueError('Base should be between 2 and 9')
+        if values.shape[1] == 0:
+            return values
+
+        columns = []
+        for i_col in range(values.shape[1]):
+            unique, unique_idx = np.unique(values[:, i_col], return_inverse=True)
+            n_converted = len(np.base_repr(len(unique)-1))
+            col_converted = np.zeros((values.shape[0], n_converted), dtype=int)
+            for i_value in range(len(unique)):
+                base_converted = [
+                    int(char) for char in (np.base_repr(i_value, base=base) if base != 2 else np.binary_repr(i_value))]
+                col_converted[unique_idx == i_value, -len(base_converted):] = base_converted
+
+            columns.append(col_converted)
+        return np.column_stack(columns)
 
     def _get_grouping_values(self, matrix: np.ndarray) -> np.ndarray:
         """Get a n_mat x n_dv matrix with values to sub-divide design variables by"""
