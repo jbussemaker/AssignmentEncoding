@@ -1,3 +1,4 @@
+import functools
 import numpy as np
 from typing import *
 from assign_enc.lazy_encoding import *
@@ -232,6 +233,10 @@ class FlatLazyConnectionEncoder(LazyConnectionEncoder):
 
     def encode(self, n_src_n_tgt: NList, existence: NodeExistence, encoder: OnDemandLazyEncoder) -> List[DiscreteDV]:
 
+        @functools.lru_cache(maxsize=None)
+        def _count_matrices(n_src_, n_tgt_):
+            return encoder.count_matrices(n_src_, n_tgt_)
+
         if len(n_src_n_tgt) == 0:
             return []
         n_conn = np.sum(np.array([n_src_conn for n_src_conn, _ in n_src_n_tgt]), axis=1)
@@ -239,7 +244,7 @@ class FlatLazyConnectionEncoder(LazyConnectionEncoder):
         n_matrix_max = 0
         for i, n in enumerate(n_conn):
             if n == n_conn_max:
-                n_matrix = encoder.count_matrices(*n_src_n_tgt[i])
+                n_matrix = _count_matrices(*n_src_n_tgt[i])
                 if n_matrix > n_matrix_max:
                     n_matrix_max = n_matrix
 
@@ -254,9 +259,35 @@ class FlatLazyConnectionEncoder(LazyConnectionEncoder):
 
         min_dist_to_half = np.min(dist_to_half)
         for i in np.where(dist_to_half == min_dist_to_half)[0]:
-            n_matrix = encoder.count_matrices(*n_src_n_tgt[i])
+            n_matrix = _count_matrices(*n_src_n_tgt[i])
             if n_matrix > n_matrix_max:
                 n_matrix_max = n_matrix
+
+        # Also check any src and tgt amounts where any of the two has all 1's for the non-zero entries
+        is_all_ones = np.array([(np.max(n_src_conn) == 1 or np.max(n_tgt_conn) == 1) for n_src_conn, n_tgt_conn in n_src_n_tgt])
+        if not np.all(is_all_ones):
+            for i, is_all_one in enumerate(is_all_ones):
+                if is_all_one:
+                    n_matrix = _count_matrices(*n_src_n_tgt[i])
+                    if n_matrix > n_matrix_max:
+                        n_matrix_max = n_matrix
+
+        # Also check any src and tgt amounts where all the amounts are the same
+        for n_src_conn, n_tgt_conn in n_src_n_tgt:
+            non_zero_src_conn = np.array(n_src_conn)
+            non_zero_src_conn = non_zero_src_conn[non_zero_src_conn != 0]
+            if len(non_zero_src_conn) == 0:
+                continue
+
+            non_zero_tgt_conn = np.array(n_tgt_conn)
+            non_zero_tgt_conn = non_zero_tgt_conn[non_zero_tgt_conn != 0]
+            if len(non_zero_tgt_conn) == 0:
+                continue
+
+            if np.all(non_zero_src_conn == non_zero_src_conn[0]) and np.all(non_zero_tgt_conn == non_zero_src_conn[0]):
+                n_matrix = _count_matrices(n_src_conn, n_tgt_conn)
+                if n_matrix > n_matrix_max:
+                    n_matrix_max = n_matrix
 
         self._n_exist_max[existence] = n_matrix_max
         return [DiscreteDV(n_opts=n_matrix_max)] if n_matrix_max > 1 else []

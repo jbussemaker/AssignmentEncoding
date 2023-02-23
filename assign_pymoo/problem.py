@@ -433,10 +433,14 @@ class MultiAssignmentProblem(AssignmentProblemBase):
         return self._assignment_managers[-1]
 
     def name(self) -> str:
-        name_parts = [str(self)]
+        am_name_parts = []
         for am in self._assignment_managers:
-            name_parts.append(str(am.encoder))
-        return ' / '.join(name_parts)
+            am_name_parts.append(str(am.encoder))
+        am_name_parts = ' / '.join(am_name_parts)
+        if len(am_name_parts) > 32:
+            am_name_parts = hashlib.md5(am_name_parts.encode('utf-8')).hexdigest()[:20]
+
+        return f'{str(self)} / {am_name_parts}'
 
     def correct_x(self, x: np.ndarray) -> np.ndarray:
         x_corr_parts = self._separate_x_parts(x)

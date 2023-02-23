@@ -5,7 +5,7 @@ from assign_enc.matrix import *
 from assign_enc.encoding import *
 from assign_experiments.problems.analytical import *
 
-__all__ = ['MultiAnalyticalProblemBase', 'MultiCombinationProblem', 'MultiAssignmentProblem',
+__all__ = ['MultiAnalyticalProblemBase', 'MultiCombinationProblem', 'MultiAnalyticalAssignmentProblem',
            'MultiPermIterCombProblem']
 
 
@@ -91,7 +91,7 @@ class MultiCombinationProblem(MultiAnalyticalProblemBase):
         return f'{self.get_problem_name()} {self._n_src} -> {self._n_tgt}'
 
 
-class MultiAssignmentProblem(MultiAnalyticalProblemBase):
+class MultiAnalyticalAssignmentProblem(MultiAnalyticalProblemBase):
     """Assignment problem where parts of the sources and/or targets may be deactivated"""
 
     def __init__(self, *args, injective=False, surjective=False, repeatable=False, n_act_src: int = 2,
@@ -193,7 +193,7 @@ if __name__ == '__main__':
     from assign_pymoo.metrics_compare import *
 
     # p = MultiCombinationProblem(DEFAULT_EAGER_ENCODER())
-    # p = MultiAssignmentProblem(DEFAULT_EAGER_ENCODER())
+    # p = MultiAnalyticalAssignmentProblem(DEFAULT_EAGER_ENCODER())
     p = MultiPermIterCombProblem(DEFAULT_EAGER_ENCODER())
 
     p.reset_pf_cache(), p.plot_pf(show_approx_f_range=True, n_sample=1000), exit()
