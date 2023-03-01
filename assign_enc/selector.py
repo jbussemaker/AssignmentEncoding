@@ -22,7 +22,7 @@ class EncoderSelector:
     _global_disable_cache = False  # For testing/experiments
     _print_stats = False
 
-    encoding_timeout = .15  # sec
+    encoding_timeout = .25  # sec
     n_mat_max_eager = 1e3
     imputation_ratio_limits = [10, 40, 100]
 
@@ -49,9 +49,9 @@ class EncoderSelector:
 
         enc_timeout, n_mme, limit_dc_time = self.encoding_timeout, self.n_mat_max_eager, self.limit_dist_corr_time
         if not limit_time:
-            self.encoding_timeout = 5
+            self.encoding_timeout = 10
             self.n_mat_max_eager = 1e5
-            self.limit_dist_corr_time = False
+            # self.limit_dist_corr_time = False
 
         assignment_manager = self._get_best_assignment_manager()
 

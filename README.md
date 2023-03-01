@@ -291,7 +291,8 @@ Conclusions:
   - If `n_mat <= n_mat_eager_max`, encode both eager and lazy encoders, otherwise only encode lazy encoders
     - For each, calculate the imputation ratio, information index, and distance correlation
     - Do no calculate distance correlation if imputation ratio is higher than
-      the last (eager) or first (lazy) band of imputation ratios
+      the last (eager) or first (lazy) band of imputation ratios; and limit dist corr calculation time
+      - Not limiting the dist corr calculation time actually leads to more enum-based selections (i.e worse results)
     - Several imputation ratios can be used, with different existence-wise aggregations:
       the **min imputation** ratio is most effective at selecting suitable encoders, because imputers apply for each
       existence scheme separately, and the min imputation ratio applies to the largest matrix that needs to be imputed
@@ -334,13 +335,11 @@ Conclusions:
   - However, increasing the allowed time does not result in better encoding scores and optimization results
   - This could be because the encoders that take most time are the ones that use design variable grouping, which is
     normally used in encoders with very high imputation ratios, and are therefore usually not interesting anyway
-!!!UPDATE BELOW!!! TODO:
-- Most selected encoders reside either on the imputation ratio = 1 or information index = 1 lines
+- Most selected encoders reside either on the imputation ratio = 1 or distance correlation = 1 lines
   - Many even lie at the intersection (which is the best encoding score possible)
-  - Maximum imputation ratio was about 30, even for relatively large problems
-  - Encoders with information index = 1 all reach very good optimization results
-  - Encoders with imputation ratio = 1 reach very good optimization results if information index > approx .5
-    - Below that, results are still acceptable
+  - Maximum imputation ratio was about 10 (first limit), even for relatively large problems
+  - Encoders with dist corr > 0.4 (and especially dist corr = 1) all reach very good optimization results
+  - Encoders with imputation ratio = 1 have mixed results regarding optimization results and dist corr values
 - Heuristics wrt imputation ratios apply per (sub) assignment problem (due to the effort required to perform
   imputation), if an architecting problem contains multiple assignment problems, the total imputation ratio can
   be relatively large (as imputation ratios of independent assignment problems are (approx.) multiplied to get to
@@ -349,6 +348,6 @@ Conclusions:
 Conclusion:
 - The selector algorithm is able to select the best encoder for the problem at hand, in a low amount of initial time
   - The result is cached, however, so subsequent encoding requests are close to instant
-- Setting `n_mat_eager_max = 1000` and `encoding_time_limit = .15` result in good results, within max 8 sec
+- Setting `n_mat_eager_max = 1000` and `encoding_time_limit = .25` result in good results, within max 9 sec
   - This is a good setting for use in a user interface, where interactivity is beneficial
   - However, it should also be possible to increase the time limit to get a better result

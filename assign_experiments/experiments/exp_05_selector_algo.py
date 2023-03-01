@@ -35,10 +35,14 @@ def _get_prob_factory(cls, **kwargs):
 
 def get_gnc_problem_factories() -> List[Callable[[Optional[Encoder]], AssignmentProblemBase]]:
     factories = []
-    factories += [_get_prob_factory(GNCProblem, choose_nr=False, n_max=n, choose_type=False) for n in [3, 4]]  # 265, 41503, [24 997 921]
+    # factories += [_get_prob_factory(GNCProblem, choose_nr=False, n_max=n, choose_type=False) for n in [3, 4]]  # 265, 41503, [24 997 921]
     factories += [_get_prob_factory(GNCProblem, choose_nr=True, n_max=n, choose_type=False) for n in [3, 4]]  # 327, 46312
-    factories += [_get_prob_factory(GNCProblem, choose_nr=False, n_max=n, choose_type=True) for n in [2, 3, 4]]  # 252, 26500, [9 338 175]
-    factories += [_get_prob_factory(GNCProblem, choose_nr=True, n_max=n, choose_type=True) for n in [2, 3, 4]]  # 297, 29857, [10 030 642]
+    factories += [_get_prob_factory(GNCProblem, choose_nr=False, n_max=n, choose_type=True) for n in [2, 3, 4]]  # 252, 26500, 9 338 175
+    factories += [_get_prob_factory(GNCProblem, choose_nr=True, n_max=n, choose_type=True) for n in [2, 3, 4]]  # 297, 29857, 10 030 642
+    # factories += [_get_prob_factory(GNCProblem, choose_nr=False, n_max=n, choose_type=False, actuators=True) for n in [3]]  # 70225, [1 722 499 009]
+    factories += [_get_prob_factory(GNCProblem, choose_nr=True, n_max=n, choose_type=False, actuators=True) for n in [3]]  # 85779
+    factories += [_get_prob_factory(GNCProblem, choose_nr=False, n_max=n, choose_type=True, actuators=True) for n in [2, 3]]  # 10584, 70 225 000
+    factories += [_get_prob_factory(GNCProblem, choose_nr=True, n_max=n, choose_type=True, actuators=True) for n in [2, 3]]  # 12393, 79 091 323
     return factories
 
 
@@ -65,15 +69,15 @@ def get_multi_comb_problem_factories() -> List[Callable[[Optional[Encoder]], Ass
 
     factories += [_get_prob_factory(MultiCombinationProblem, n_multi=n_multi, n_tgt=n_tgt)
                   for n_multi, n_tgt in [(5, 20), (10, 50)]]  # 100, 500
-    factories += [_get_prob_factory(MultiAssignmentProblem, n_act_src=nas, n_act_tgt=nat, n_src=ns, n_tgt=nt)
+    factories += [_get_prob_factory(MultiAnalyticalAssignmentProblem, n_act_src=nas, n_act_tgt=nat, n_src=ns, n_tgt=nt)
                   for nas, nat, ns, nt in [(2, 3, 3, 4), (2, 3, 5, 5), (3, 3, 5, 5)]]  # 768, 6400, 51200
-    factories += [_get_prob_factory(MultiAssignmentProblem, n_act_src=nas, n_act_tgt=nat, n_src=ns, n_tgt=nt, injective=True)
+    factories += [_get_prob_factory(MultiAnalyticalAssignmentProblem, n_act_src=nas, n_act_tgt=nat, n_src=ns, n_tgt=nt, injective=True)
                   for nas, nat, ns, nt in [(2, 3, 3, 4), (3, 3, 5, 5), (3, 4, 5, 5)]]  # 324, 6400, 12800
-    factories += [_get_prob_factory(MultiAssignmentProblem, n_act_src=nas, n_act_tgt=nat, n_src=ns, n_tgt=nt, surjective=True)
+    factories += [_get_prob_factory(MultiAnalyticalAssignmentProblem, n_act_src=nas, n_act_tgt=nat, n_src=ns, n_tgt=nt, surjective=True)
                   for nas, nat, ns, nt in [(2, 3, 3, 4), (3, 3, 4, 4), (3, 4, 4, 5)]]  # 324, 5488, 48020
-    factories += [_get_prob_factory(MultiAssignmentProblem, n_act_src=nas, n_act_tgt=nat, n_src=ns, n_tgt=nt, injective=True, surjective=True)
+    factories += [_get_prob_factory(MultiAnalyticalAssignmentProblem, n_act_src=nas, n_act_tgt=nat, n_src=ns, n_tgt=nt, injective=True, surjective=True)
                   for nas, nat, ns, nt in [(2, 3, 4, 4), (3, 4, 5, 5), (4, 4, 5, 6)]]  # 192, 4050, 19200
-    factories += [_get_prob_factory(MultiAssignmentProblem, n_act_src=nas, n_act_tgt=nat, n_src=ns, n_tgt=nt, repeatable=True)
+    factories += [_get_prob_factory(MultiAnalyticalAssignmentProblem, n_act_src=nas, n_act_tgt=nat, n_src=ns, n_tgt=nt, repeatable=True)
                   for nas, nat, ns, nt in [(2, 2, 3, 3), (2, 3, 4, 4)]]  # 630, 23352
     factories += [_get_prob_factory(MultiPermIterCombProblem, n_take=n_take, n=n)
                   for n_take, n in [(3, 5), (3, 7), (4, 8)]]  # 130, 5075, 40390
@@ -290,8 +294,8 @@ class SelCompEffort(enum.Enum):
     VERY_HIGH = 4
 
 
-def run_experiment(i_prob: int, effort: SelCompEffort, sbo=False, n_repeat=8, do_run=True, force_stats=False,
-                   force_plot=False):
+def run_experiment(i_prob: int, effort: SelCompEffort, sbo=False, n_repeat=8, n_repeat_opt=8, do_run=True,
+                   force_stats=False, force_plot=False):
     EncoderSelector._global_disable_cache = True
     Experimenter.capture_log()
     pop_size = 30 if sbo else 50
@@ -315,13 +319,13 @@ def run_experiment(i_prob: int, effort: SelCompEffort, sbo=False, n_repeat=8, do
         SelCompEffort.HIGH: 1e4,
         SelCompEffort.VERY_HIGH: 1e5,
     }[effort]
-    EncoderSelector.limit_dist_corr_time = {
-        SelCompEffort.VERY_LOW: True,
-        SelCompEffort.LOW: True,
-        SelCompEffort.MED: True,
-        SelCompEffort.HIGH: False,
-        SelCompEffort.VERY_HIGH: False,
-    }[effort]
+    # EncoderSelector.limit_dist_corr_time = {
+    #     SelCompEffort.VERY_LOW: True,
+    #     SelCompEffort.LOW: True,
+    #     SelCompEffort.MED: True,
+    #     SelCompEffort.HIGH: False,
+    #     SelCompEffort.VERY_HIGH: False,
+    # }[effort]
 
     exp_name = get_exp_name(effort, sbo)
     set_results_folder(exp_name)
@@ -480,15 +484,15 @@ def run_experiment(i_prob: int, effort: SelCompEffort, sbo=False, n_repeat=8, do
     merge_csv_files(res_folder, 'stats_init', len(problem_factories))
 
     if do_run:
-        if i_prob == 0:
+        if i_prob == 0 and effort != SelCompEffort.VERY_LOW:
             pre_copy_exp_04_results(res_folder, effort, sbo)
         # if len(problems) == 0:  # Used for testing
         #     return True
-        run(exp_name, problems, algorithms, algo_names=algo_names, plot_names=plot_names, n_repeat=n_repeat,
+        run(exp_name, problems, algorithms, algo_names=algo_names, plot_names=plot_names, n_repeat=n_repeat_opt,
             n_eval_max=n_eval, do_run=do_run, do_plot=False, only_if_needed=True)
 
     # Get and plot results
-    exp = run(exp_name, problems, algorithms, algo_names=algo_names, plot_names=plot_names, n_repeat=n_repeat,
+    exp = run(exp_name, problems, algorithms, algo_names=algo_names, plot_names=plot_names, n_repeat=n_repeat_opt,
               n_eval_max=n_eval, return_exp=True)
     for i, experimenter in enumerate(exp):
         i_stats = i_map[i]
@@ -756,9 +760,9 @@ if __name__ == '__main__':
     # EncoderSelector._print_stats = True
     for eft in list(SelCompEffort):
         for ip in list(range(90)):
-            if not run_experiment(ip, eft, n_repeat=4):
+            if not run_experiment(ip, eft, n_repeat=4, n_repeat_opt=24):
                 break
-    # for eft in list(SelCompEffort):
+    # for eft in list(SelCompEffort)[:4]:
     #     for ip in list(range(90)):
-    #         if not run_experiment(ip, eft, sbo=True, n_repeat=8):
+    #         if not run_experiment(ip, eft, sbo=True, n_repeat=4, n_repeat_opt=8):
     #             break
