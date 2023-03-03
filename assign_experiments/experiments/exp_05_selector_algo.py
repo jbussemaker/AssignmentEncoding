@@ -746,6 +746,24 @@ def plot_selector_areas():
     plt.show()
 
 
+def results_copy_out(dest_folder):
+    import glob
+    import shutil
+    results_folder = os.path.dirname(set_results_folder('key'))
+    for files in [glob.glob(results_folder+'/*'), glob.glob(results_folder+'/*/*')]:
+        for file in files:
+            if os.path.isdir(file):
+                continue
+            rel_path = file.replace(results_folder, '')[1:]
+
+            if os.sep in rel_path:
+                rel_folder = os.path.join(dest_folder, os.path.dirname(rel_path))
+                os.makedirs(rel_folder, exist_ok=True)
+
+            print(rel_path)
+            shutil.copy(file, os.path.join(dest_folder, rel_path))
+
+
 if __name__ == '__main__':
     # show_gnc_problem_sizes(), exit()
     # show_multi_comb_problem_sizes(), exit()
