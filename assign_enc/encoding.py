@@ -5,8 +5,9 @@ from typing import *
 from assign_enc.matrix import *
 from dataclasses import dataclass
 
-__all__ = ['DiscreteDV', 'DesignVector', 'PartialDesignVector', 'MatrixSelectMask', 'EagerImputer', 'Encoder',
-           'EagerEncoder', 'filter_design_vectors', 'flatten_matrix', 'NodeExistence']
+__all__ = ['DiscreteDV', 'DesignVector', 'PartialDesignVector', 'MatrixSelectMask', 'X_INACTIVE_VALUE',
+           'IsActiveVector', 'EagerImputer', 'Encoder', 'EagerEncoder', 'filter_design_vectors', 'flatten_matrix',
+           'NodeExistence']
 
 
 @dataclass
@@ -18,8 +19,11 @@ class DiscreteDV:
 
 
 DesignVector = Union[List[int], np.ndarray]
+IsActiveVector = Union[List[bool], np.ndarray]
 PartialDesignVector = List[Optional[int]]
 MatrixSelectMask = np.ndarray
+
+X_INACTIVE_VALUE = -1
 
 
 def filter_design_vectors(design_vectors: np.ndarray, vector: PartialDesignVector) -> MatrixSelectMask:
@@ -45,18 +49,21 @@ class EagerImputer:
     def __init__(self):
         self._matrix: Optional[Dict[NodeExistence, np.ndarray]] = None
         self._design_vectors: Optional[Dict[NodeExistence, np.ndarray]] = None
+        self._design_vectors_zero: Optional[Dict[NodeExistence, np.ndarray]] = None
         self._design_vars: Optional[List[DiscreteDV]] = None
 
     def initialize(self, matrix: Dict[NodeExistence, np.ndarray], design_vectors: Dict[NodeExistence, np.ndarray],
-                   design_vars: List[DiscreteDV]):
+                   design_vectors_zero: Dict[NodeExistence, np.ndarray], design_vars: List[DiscreteDV]):
         self._matrix = matrix
         self._design_vectors = design_vectors
+        self._design_vectors_zero = design_vectors_zero
         self._design_vars = design_vars
 
-    def _get_design_vectors(self, existence: NodeExistence) -> np.ndarray:
-        if existence not in self._design_vectors:
+    def _get_design_vectors(self, existence: NodeExistence, zero=True) -> np.ndarray:
+        dv_map = self._design_vectors_zero if zero else self._design_vectors
+        if existence not in dv_map:
             return np.empty((0, 0), dtype=int)
-        return self._design_vectors[existence]
+        return dv_map[existence]
 
     def _get_matrix(self, existence: NodeExistence) -> np.ndarray:
         return EagerEncoder.get_matrix_for_existence(self._matrix, existence)[0]
@@ -67,7 +74,7 @@ class EagerImputer:
         return filter_design_vectors(design_vectors, vector)
 
     def _return_imputation(self, i_dv: int, existence: NodeExistence) -> Tuple[DesignVector, np.ndarray]:
-        design_vectors = self._get_design_vectors(existence)
+        design_vectors = self._get_design_vectors(existence, zero=False)
         matrix = self._get_matrix(existence)
         return design_vectors[i_dv, :], matrix[i_dv, :, :]
 
@@ -218,6 +225,7 @@ class EagerEncoder(Encoder):
     def __init__(self, imputer: EagerImputer, matrix: np.ndarray = None):
         self._matrix = {}
         self._design_vectors = {}
+        self._design_vectors_zeros = {}
         self._design_vector_map = {}
         self._design_vars = []
         self._imputer = imputer
@@ -237,15 +245,25 @@ class EagerEncoder(Encoder):
         # Encode separately for each existence mode
         self._matrix = matrix
         self._design_vectors = des_vectors = {existence: self._encode(mat) for existence, mat in matrix.items()}
+
+        self._design_vectors_zeros = des_vectors_zero = {}
+        for existence, des_vec in des_vectors.items():
+            des_vec_zeros = des_vec.copy()
+            des_vec_zeros[des_vec_zeros == X_INACTIVE_VALUE] = 0
+            des_vectors_zero[existence] = des_vec_zeros
+
+        # Inactive variables in the design vectors are encoded as -1 (X_INACTIVE_VALUE), however, for lookup
+        # (_design_vector_map) they are stored as 0's, as that is what real design vectors would also have
         self._design_vector_map = {existence: {tuple(dv): i for i, dv in enumerate(des_vec)}
-                                   for existence, des_vec in des_vectors.items()}
+                                   for existence, des_vec in des_vectors_zero.items()}
+
         self._design_vars = self.get_design_variables(des_vectors)
-        self._imputer.initialize(matrix, self._design_vectors, self._design_vars)
+        self._imputer.initialize(matrix, self._design_vectors, self._design_vectors_zeros, self._design_vars)
 
     def set_imputer(self, imputer: EagerImputer):
         self._imputer = imputer
         if self._matrix is not None:
-            self._imputer.initialize(self._matrix, self._design_vectors, self._design_vars)
+            self._imputer.initialize(self._matrix, self._design_vectors, self._design_vectors_zeros, self._design_vars)
 
     def get_for_imputer(self, imputer: EagerImputer):
         encoder: EagerEncoder = copy.deepcopy(self)
@@ -263,7 +281,7 @@ class EagerEncoder(Encoder):
     def _iter_sampled_dv_mat(self, n: int, sampled_dvs: dict):
         for existence, matrix in self._matrix.items():
             matrix = self.flatten_matrix(matrix)
-            des_vectors = self._design_vectors[existence]
+            des_vectors = self._design_vectors_zeros[existence]
             if des_vectors.shape[0] == 0:
                 continue
 
@@ -321,10 +339,11 @@ class EagerEncoder(Encoder):
 
     def get_matrix(self, vector: DesignVector, existence: NodeExistence = None,
                    matrix_mask: MatrixSelectMask = None) -> Tuple[DesignVector, np.ndarray]:
-        """Select a connection matrix (n_src x n_tgt) and impute the design vector if needed."""
+        """Select a connection matrix (n_src x n_tgt) and impute the design vector if needed.
+        Inactive design variables get a value of -1."""
 
         vector, n_dv, n_extra = self._correct_vector_size(vector)
-        extra_vector = [0]*n_extra
+        extra_vector = [X_INACTIVE_VALUE]*n_extra
         vector, _ = self.correct_vector_bounds(vector, self.design_vars)
 
         i_mat, existence = self.get_matrix_index(vector, existence=existence, matrix_mask=matrix_mask)
@@ -332,7 +351,7 @@ class EagerEncoder(Encoder):
 
         # If this existence mode has no matrices, return the zero vector
         if not self._has_existence(existence):
-            vector = [0]*len(vector)
+            vector = [X_INACTIVE_VALUE]*len(vector)
             null_matrix = np.zeros((matrix.shape[1], matrix.shape[2]), dtype=int)
             return vector+extra_vector, null_matrix
 
@@ -344,11 +363,11 @@ class EagerEncoder(Encoder):
             # If the mask filters out all design vectors, there is no need to try imputing
             elif np.all(~matrix_mask):
                 null_matrix = matrix[0, :, :]*0
-                return [0]*len(vector)+extra_vector, null_matrix
+                return [X_INACTIVE_VALUE]*len(vector)+extra_vector, null_matrix
 
             vector, matrix = self._imputer.impute(vector, existence, matrix_mask)
             if len(vector) < n_dv:
-                vector = list(vector)+[0]*(n_dv-len(vector))
+                vector = list(vector) + [X_INACTIVE_VALUE]*(n_dv-len(vector))
             return list(vector)+extra_vector, matrix
 
         # Design vector directly maps to possible matrix
@@ -368,11 +387,9 @@ class EagerEncoder(Encoder):
         if i_mat is None:
             return False
 
+        vector = list(self._design_vectors[existence][i_mat, :])
         corr_vector = self._correct_vector(vector, existence)
         if not np.all(corr_vector == vector):
-            return False
-
-        if n_extra > 0 and sum(original_vector[n_dv:]) != 0:
             return False
         return True
 
@@ -407,7 +424,7 @@ class EagerEncoder(Encoder):
 
         corrected_vector = vector.copy()
         for i_dv in range(n_dv, len(vector)):
-            corrected_vector[i_dv] = 0
+            corrected_vector[i_dv] = X_INACTIVE_VALUE
         return corrected_vector
 
     @staticmethod
@@ -455,7 +472,7 @@ class EagerEncoder(Encoder):
                 raise RuntimeError('Not all design vectors are unique!')
 
             # Check bounds
-            if np.min(des_vectors) != 0:
+            if np.min(des_vectors[des_vectors != X_INACTIVE_VALUE]) != 0:
                 raise RuntimeError('Design variables should start at zero!')
 
             n_opts_max = np.max(des_vectors, axis=0)+1
@@ -493,15 +510,18 @@ class EagerEncoder(Encoder):
             return design_vectors
 
         # Move to zero
+        design_vectors = design_vectors.copy()
         if not remove_gaps:
-            design_vectors -= np.min(design_vectors, axis=0)
+            for i_dv in range(design_vectors.shape[1]):
+                is_act_mask = design_vectors[:, i_dv] != X_INACTIVE_VALUE
+                min_value = np.min(design_vectors[is_act_mask, i_dv])
+                design_vectors[is_act_mask, i_dv] -= min_value
 
         # Remove gaps (also moves to zero)
         else:
-            design_vectors = design_vectors.copy()
             for i_dv in range(design_vectors.shape[1]):
                 des_var = design_vectors[:, i_dv].copy()
-                unique_values = np.sort(np.unique(des_var))
+                unique_values = np.sort(np.unique(des_var[des_var != X_INACTIVE_VALUE]))
                 for i_unique, value in enumerate(unique_values):
                     design_vectors[des_var == value, i_dv] = i_unique
 
@@ -515,7 +535,7 @@ class EagerEncoder(Encoder):
         """
         Encode a matrix of size n_patterns x n_src x n_tgt as discrete design variables.
         Returns the list of design vectors for each matrix in a n_patterns x n_dv array.
-        Assumes values range between 0 and the number of options per design variable.
+        Assumes values range between 0 and the number of options per design variable, or -1 for inactive variables.
         """
         raise NotImplementedError
 

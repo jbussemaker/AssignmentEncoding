@@ -19,10 +19,10 @@ def test_half_grouped_encoder():
     matrix = np.random.randint(0, 3, (11, 4, 3))
     encoder = ProductEncoder(FirstImputer(), matrix)
     assert np.all(list(encoder._design_vectors.values())[0] == np.array([
-        [0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1],
-        [0, 0, 0, 0, 1, 1, 1, 1, 0, 0, 0],
-        [0, 0, 1, 1, 0, 0, 1, 1, 0, 0, 1],
-        [0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0],
+        [0, 0, 0, 0, 0, 0, 0, 0,  1,  1,  1],
+        [0, 0, 0, 0, 1, 1, 1, 1, -1, -1, -1],
+        [0, 0, 1, 1, 0, 0, 1, 1,  0,  0,  1],
+        [0, 1, 0, 1, 0, 1, 0, 1,  0,  1, -1],
     ]).T)
     assert len(encoder.design_vars) == 4
     assert all([dv.n_opts == 2 for dv in encoder.design_vars])
@@ -32,13 +32,13 @@ def test_no_group_normalize():
     matrix = np.random.randint(0, 3, (11, 4, 3))
     encoder = ProductEncoder(FirstImputer(), matrix, normalize_within_group=False)
     assert np.all(list(encoder._design_vectors.values())[0] == np.array([
-        [0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1],
-        [0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2],
-        [0, 0, 1, 1, 2, 2, 3, 3, 2, 2, 3],
-        [0, 1, 2, 3, 2, 3, 4, 5, 2, 3, 4],
+        [0, 0, 0, 0, 0, 0, 0, 0,  1,  1,  1],
+        [0, 0, 0, 0, 1, 1, 1, 1, -1, -1, -1],
+        [0, 0, 1, 1, 2, 2, 3, 3,  2,  2,  3],
+        [0, 1, 2, 3, 2, 3, 4, 5,  2,  3, -1],
     ]).T)
     assert len(encoder.design_vars) == 4
-    assert [dv.n_opts for dv in encoder.design_vars] == [2, 3, 4, 6]
+    assert [dv.n_opts for dv in encoder.design_vars] == [2, 2, 4, 6]
 
 
 class EvenNonUniqueGrouper(GroupedEncoder):
@@ -58,10 +58,10 @@ def test_skip_des_var():
     matrix = np.random.randint(0, 3, (11, 4, 3))
     encoder = EvenNonUniqueGrouper(FirstImputer(), matrix=matrix)
     assert np.all(list(encoder._design_vectors.values())[0] == np.array([
-        [0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1],
-        [0, 0, 0, 0, 1, 1, 1, 1, 0, 0, 0],
-        [0, 0, 1, 1, 0, 0, 1, 1, 0, 0, 1],
-        [0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0],
+        [0, 0, 0, 0, 0, 0, 0, 0,  1,  1,  1],
+        [0, 0, 0, 0, 1, 1, 1, 1, -1, -1, -1],
+        [0, 0, 1, 1, 0, 0, 1, 1,  0,  0,  1],
+        [0, 1, 0, 1, 0, 1, 0, 1,  0,  1, -1],
     ]).T)
 
 
@@ -69,17 +69,17 @@ def test_index_grouped_encoder():
     matrix = np.random.randint(0, 3, (11, 4, 3))
     encoder = GroupByIndexEncoder(FirstImputer(), n_groups=2, matrix=matrix)
     assert np.all(list(encoder._design_vectors.values())[0] == np.array([
-        [0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1],
-        [0, 0, 0, 0, 1, 1, 1, 1, 0, 0, 0],
-        [0, 0, 1, 1, 0, 0, 1, 1, 0, 0, 1],
-        [0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0],
+        [0, 0, 0, 0, 0, 0, 0, 0,  1,  1,  1],
+        [0, 0, 0, 0, 1, 1, 1, 1, -1, -1, -1],
+        [0, 0, 1, 1, 0, 0, 1, 1,  0,  0,  1],
+        [0, 1, 0, 1, 0, 1, 0, 1,  0,  1, -1],
     ]).T)
 
     encoder = GroupByIndexEncoder(FirstImputer(), n_groups=3, matrix=matrix)
     assert np.all(list(encoder._design_vectors.values())[0] == np.array([
-        [0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1],
-        [0, 0, 0, 1, 1, 1, 2, 2, 2, 0, 0],
-        [0, 1, 2, 0, 1, 2, 0, 1, 2, 0, 1],
+        [0, 0, 0, 0, 0, 0, 0, 0, 0,  1,  1],
+        [0, 0, 0, 1, 1, 1, 2, 2, 2, -1, -1],
+        [0, 1, 2, 0, 1, 2, 0, 1, 2,  0,  1],
     ]).T)
 
     encoder = GroupByIndexEncoder(FirstImputer(), n_groups=4, matrix=matrix)
@@ -110,3 +110,17 @@ def test_grouped_encoder_by_sub_matrix_idx():
         [0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1],
         [0, 1, 2, 3, 4, 0, 1, 2, 3, 4, 5],
     ]).T)
+
+
+def test_ordinal_base_grouping():
+    assert np.all(GroupedEncoder.group_by_values(np.array([
+        [0, 0],
+        [0, 1],
+        [1, 0],
+        [2, 0],
+    ]), ordinal_base=2) == np.array([
+        [0, 0,  0],
+        [0, 0,  1],
+        [0, 1, -1],
+        [1, 0, -1],
+    ]))

@@ -105,10 +105,10 @@ def test_encoder_existence():
     assert np.all(mat == np.array([[1, 0], [0, 1]]))
 
     dv, mat = encoder.get_matrix([1, 0, 0, 0], existence=exist.patterns[1])
-    assert np.all(dv == [1, 0, 0, 0])
+    assert np.all(dv == [1, 0, -1, -1])
     assert np.all(mat == np.array([[1, 0], [0, 0]]))
     dv, mat = encoder.get_matrix([1, 0, 0, 1], existence=exist.patterns[1])
-    assert np.all(dv == [1, 0, 0, 0])
+    assert np.all(dv == [1, 0, -1, -1])
     assert np.all(mat == np.array([[1, 0], [0, 0]]))
 
 

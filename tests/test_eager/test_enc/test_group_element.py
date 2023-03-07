@@ -21,10 +21,10 @@ def test_element_grouper():
     encoder.matrix = matrix
 
     assert np.all(list(encoder._design_vectors.values())[0] == np.array([
-        [0, 0],
-        [2, 0],
-        [1, 0],
-        [1, 1],
+        [0, -1],
+        [2, -1],
+        [1,  0],
+        [1,  1],
     ]))
 
     assert [dv.n_opts for dv in encoder.design_vars] == [3, 2]
@@ -34,10 +34,10 @@ def test_element_grouper():
     encoder.normalize_within_group = False
     encoder.matrix = matrix
     assert np.all(list(encoder._design_vectors.values())[0] == np.array([
-        [0, 1, 0],
-        [2, 0, 0],
-        [1, 1, 0],
-        [1, 1, 1],
+        [0, -1],
+        [2, -1],
+        [1,  0],
+        [1,  1],
     ]))
 
 
@@ -95,17 +95,17 @@ def test_conn_idx_grouper():
 
         if by_src:
             assert np.all(list(encoder._design_vectors.values())[0] == np.array([
-                [1, 0, 0],
-                [0, 0, 0],
-                [0, 1, 1],
-                [0, 1, 0],
+                [1, -1, -1],
+                [0,  0, -1],
+                [0,  1,  1],
+                [0,  1,  0],
             ]))
         else:
             assert np.all(list(encoder._design_vectors.values())[0] == np.array([
-                [1, 0, 0],
-                [0, 0, 0],
-                [0, 1, 0],
-                [0, 1, 1],
+                [1, -1, -1],
+                [0,  0, -1],
+                [0,  1,  0],
+                [0,  1,  1],
             ]))
 
         assert [dv.n_opts for dv in encoder.design_vars] == [2, 2, 2]

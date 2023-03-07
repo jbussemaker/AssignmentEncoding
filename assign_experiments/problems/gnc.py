@@ -135,7 +135,8 @@ class GNCProblem(MultiAssignmentProblem):
 
         return matrix_gen_settings
 
-    def _resolve_existence(self, x_parts: List[DesignVector]) -> Tuple[List[DesignVector], List[Optional[List[Tuple[int, int]]]], dict]:
+    def _resolve_existence(self, x_parts: List[DesignVector]) \
+            -> Tuple[List[Tuple[DesignVector, IsActiveVector]], List[Optional[List[Tuple[int, int]]]], dict]:
         """Resolve design vectors for each assignment manager into a list of connection lists, or None if any of the
         matrices is invalid"""
         design_vector_parts = []
@@ -143,9 +144,9 @@ class GNCProblem(MultiAssignmentProblem):
         assignment_managers = self._assignment_managers
         n = 3 if self.actuators else 2
 
-        def _add_next(dv_, conns_):
+        def _add_next(dv_, is_active_, conns_):
             nonlocal x_parts, assignment_managers
-            design_vector_parts.append(dv_)
+            design_vector_parts.append((dv_, is_active_))
             connections.append(conns_)
             x_parts = x_parts[1:]
             assignment_managers = assignment_managers[1:]
@@ -154,8 +155,8 @@ class GNCProblem(MultiAssignmentProblem):
         if self.choose_nr:
             n_objs = []
             for i in range(n):
-                dv, conns = assignment_managers[0].get_conn_idx(x_parts[0])
-                _add_next(dv, conns)
+                dv, is_active, conns = assignment_managers[0].get_conn_idx(x_parts[0])
+                _add_next(dv, is_active, conns)
                 n_objs.append(len(conns) if conns is not None else self.n_max)
 
         # If numbers are not chosen, set object amounts to max nr
@@ -166,8 +167,8 @@ class GNCProblem(MultiAssignmentProblem):
         if self.choose_type:
             for n_obj in n_objs:
                 obj_existence = NodeExistence(src_n_conn_override={0: [n_obj]})
-                dv, conns = assignment_managers[0].get_conn_idx(x_parts[0], existence=obj_existence)
-                _add_next(dv, conns)
+                dv, is_active, conns = assignment_managers[0].get_conn_idx(x_parts[0], existence=obj_existence)
+                _add_next(dv, is_active, conns)
 
         # Get inter-object connections
         for i_conns, n_src in enumerate(n_objs[:-1]):
@@ -175,8 +176,8 @@ class GNCProblem(MultiAssignmentProblem):
             conn_existence = NodeExistence(src_exists=[i < n_src for i in range(self.n_max)],
                                            tgt_exists=[i < n_tgt for i in range(self.n_max)])
 
-            dv, conns = assignment_managers[0].get_conn_idx(x_parts[0], existence=conn_existence)
-            _add_next(dv, conns)
+            dv, is_active, conns = assignment_managers[0].get_conn_idx(x_parts[0], existence=conn_existence)
+            _add_next(dv, is_active, conns)
 
         eval_kwargs = {'n_objs': n_objs}
         return design_vector_parts, connections, eval_kwargs

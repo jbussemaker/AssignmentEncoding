@@ -61,11 +61,11 @@ def test_encoding_amount_first():
     assert len(encoder.design_vars) == 4
 
     dv, mat = encoder.get_matrix([0, 0, 0, 0], existence=encoder.existence_patterns.patterns[0])
-    assert np.all(dv == [0, 0, 0, 0])
+    assert np.all(dv == [-1, -1, -1, -1])
     assert mat[0, 0] == -1
 
     dv, mat = encoder.get_matrix([1, 1, 1, 1], existence=encoder.existence_patterns.patterns[0])
-    assert np.all(dv == [1, 1, 1, 1])
+    assert np.all(dv == [1, -1, 1, -1])
     assert np.all(mat == np.array([[1, 0], [0, 1], [0, 1]]))
 
 
@@ -108,7 +108,7 @@ def test_encoding_conn_idx():
         assert np.all(mat == np.array([[1, 0], [1, 0], [1, 1]]))
 
         dv, mat = encoder.get_matrix([0, 1, 0, 1], existence=encoder.existence_patterns.patterns[0])
-        assert np.all(dv == [0, 1, 0, 1])
+        assert np.all(dv == [0, -1, 0, -1])
         assert mat[0, 0] == -1
 
 

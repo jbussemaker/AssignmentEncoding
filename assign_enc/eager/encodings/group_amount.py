@@ -205,6 +205,8 @@ class CoordIndexLocationGrouper(LocationGrouper):
         for i_mat in range(n_mat):
             loc_idx = self._get_loc_indices(matrix_flat[i_mat, :], idx_map)
             dv_loc_idx[i_mat, :len(loc_idx)] = loc_idx
+
+        dv_loc_idx -= np.min(dv_loc_idx, axis=0)
         return dv_loc_idx
 
     @classmethod
@@ -218,7 +220,7 @@ class CoordIndexLocationGrouper(LocationGrouper):
                 conn_arr[idx] -= 1
             else:
                 idx += 1
-        return np.array([idx for (i_src, i_tgt) in loc_idx for idx in [i_src, i_tgt]])
+        return np.array([idx for (i_src, i_tgt) in loc_idx for idx in [i_src, i_tgt]]).astype(int)
 
     def __repr__(self):
         return f'{self.__class__.__name__}()'

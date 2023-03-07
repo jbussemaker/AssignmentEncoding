@@ -12,9 +12,9 @@ class ClosestImputer(EagerImputer):
         super().__init__()
         self.euclidean = euclidean
 
-    def impute(self, vector: DesignVector, existence: NodeExistence, matrix_mask: MatrixSelectMask) -> Tuple[DesignVector, np.ndarray]:
+    def impute(self, vector: DesignVector, existence: NodeExistence, matrix_mask: MatrixSelectMask) \
+            -> Tuple[DesignVector, np.ndarray]:
         design_vectors = self._get_design_vectors(existence)[matrix_mask, :]
-        matrices = self._get_matrix(existence)[matrix_mask, :, :]
 
         if len(design_vectors) == 0:
             return vector, np.zeros((0, 0), dtype=int)
@@ -24,9 +24,10 @@ class ClosestImputer(EagerImputer):
             dist = self._calc_dist_euclidean(elements, target)
         else:
             dist = self._calc_dist_manhattan(elements, target)
-        i_min_dist = np.argmin(dist)
+        i_min_dist = int(np.argmin(dist))
 
-        return design_vectors[i_min_dist, :], matrices[i_min_dist, :, :]
+        i_mask = np.where(matrix_mask)[0]
+        return self._return_imputation(i_mask[i_min_dist], existence)
 
     @staticmethod
     def _calc_dist_euclidean(elements: np.ndarray, target: np.ndarray) -> np.ndarray:

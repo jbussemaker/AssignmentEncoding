@@ -5,7 +5,7 @@ from typing import *
 from assign_enc.matrix import *
 from assign_enc.encoding import *
 
-__all__ = ['LazyImputer', 'LazyEncoder', 'DesignVector', 'DiscreteDV', 'NodeExistence']
+__all__ = ['LazyImputer', 'LazyEncoder', 'DesignVector', 'DiscreteDV', 'NodeExistence', 'X_INACTIVE_VALUE']
 
 
 class LazyImputer:
@@ -27,7 +27,7 @@ class LazyImputer:
         self._decode_func = decode_func
         self._impute_cache = {}
 
-    def _decode(self, vector: DesignVector, existence: NodeExistence) -> Optional[np.ndarray]:
+    def _decode(self, vector: DesignVector, existence: NodeExistence) -> Optional[Tuple[DesignVector, np.ndarray]]:
         return self._decode_func(vector, existence)
 
     def impute(self, vector: DesignVector, matrix: Optional[np.ndarray], existence: NodeExistence,
@@ -47,7 +47,7 @@ class LazyImputer:
         # If none of the nodes exist, return empty matrix
         n_src, n_tgt = len(self._matrix_gen.src), len(self._matrix_gen.tgt)
         if existence.none_exists(n_src, n_tgt):
-            imputed_vector = [0]*len(vector)
+            imputed_vector = [X_INACTIVE_VALUE]*len(vector)
             imputed_matrix = np.zeros((n_src, n_tgt), dtype=int)
 
         else:
@@ -237,7 +237,8 @@ class LazyEncoder(Encoder):
         return vector, n_dv, n_extra
 
     def get_matrix(self, vector: DesignVector, existence: NodeExistence = None) -> Tuple[DesignVector, np.ndarray]:
-        """Select a connection matrix (n_src x n_tgt) and impute the design vector if needed."""
+        """Select a connection matrix (n_src x n_tgt) and impute the design vector if needed.
+        Inactive design variables get a value of -1."""
         vector, extra_vector, existence, matrix, valid = self._get_validate_matrix(vector, existence=existence)
         if valid:
             return list(vector)+extra_vector, matrix
@@ -251,11 +252,11 @@ class LazyEncoder(Encoder):
     def _get_validate_matrix(self, vector: DesignVector, existence: NodeExistence = None) \
             -> Tuple[List[int], List[int], NodeExistence, np.ndarray, bool]:
         vector, n_dv, n_extra = self._correct_vector_size(vector)
-        extra_vector = [0]*n_extra
+        extra_vector = [X_INACTIVE_VALUE]*n_extra
         vector, _ = EagerEncoder.correct_vector_bounds(vector, self.design_vars)
 
         # Decode matrix
-        matrix, existence = self._decode_vector(vector, existence)
+        vector, matrix, existence = self._decode_vector(vector, existence)
 
         # Validate matrix
         valid = matrix is not None and self._matrix_gen.validate_matrix(matrix, existence=existence)
@@ -269,7 +270,7 @@ class LazyEncoder(Encoder):
         if is_corrected:
             return False
 
-        matrix, existence = self._decode_vector(vector, existence)
+        vector, matrix, existence = self._decode_vector(vector, existence)
         if matrix is None:
             return False
 
@@ -283,8 +284,12 @@ class LazyEncoder(Encoder):
     def _decode_vector(self, vector: DesignVector, existence: NodeExistence = None):
         if existence is None:
             existence = NodeExistence()
-        matrix = self._decode(vector, existence=existence)
-        return matrix, existence
+        results = self._decode(vector, existence=existence)
+        if results is None:
+            return vector, None, existence
+
+        vector, matrix = results
+        return vector, matrix, existence
 
     def get_conn_idx(self, matrix: np.ndarray) -> List[Tuple[int, int]]:
         """Convert matrix to edge tuples"""
@@ -320,15 +325,15 @@ class LazyEncoder(Encoder):
         return valid_dv, i_valid_dv, len(dvs)
 
     @staticmethod
-    def _unfilter_dvs(vector: DesignVector, i_valid_dv: np.ndarray, n: int) -> Optional[DesignVector]:
+    def _unfilter_dvs(vector: DesignVector, i_valid_dv: np.ndarray, n: int) -> Tuple[DesignVector, DesignVector]:
         all_vector = np.zeros((n,), dtype=int)
         all_vector[i_valid_dv] = vector[:n]
 
-        # Ensure that all further design variables are zero to avoid multiple design vectors mapping to the same design
-        if n < len(vector) and sum(vector[n:]) != 0:
-            return
+        # Ensure that all further design variables are inactive
+        imputed_vector = np.array(vector)
+        imputed_vector[n:] = X_INACTIVE_VALUE
 
-        return all_vector
+        return all_vector, imputed_vector
 
     @staticmethod
     def _merge_design_vars(design_vars_list: List[List[DiscreteDV]]) -> List[DiscreteDV]:
@@ -341,7 +346,7 @@ class LazyEncoder(Encoder):
         """Encode the assignment problem (given by src and tgt nodes) directly to design variables"""
         raise NotImplementedError
 
-    def _decode(self, vector: DesignVector, existence: NodeExistence) -> Optional[np.ndarray]:
+    def _decode(self, vector: DesignVector, existence: NodeExistence) -> Optional[Tuple[DesignVector, np.ndarray]]:
         """Return the connection matrix as would be encoded by the given design vector"""
         raise NotImplementedError
 

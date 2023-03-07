@@ -117,14 +117,14 @@ def test_source_amount_encoder():
     assert encoder.design_vars[2].n_opts == 2
 
     dv, matrix = encoder.get_matrix([0, 0, 0, 0])
-    assert np.all(dv == [0, 0, 0, 0])
+    assert np.all(dv == [0, 0, -1, 0])
     assert np.all(matrix == np.array([[0, 0], [0, 1]]))
 
     dv, matrix = encoder.get_matrix([1, 0, 0, 0], existence=encoder.existence_patterns.patterns[1])
-    assert np.all(dv == [1, 0, 0, 0])
+    assert np.all(dv == [1, -1, -1, -1])
     assert np.all(matrix == np.array([[1, 0], [0, 0]]))
     dv, matrix = encoder.get_matrix([1, 0, 0, 1], existence=encoder.existence_patterns.patterns[1])
-    assert np.all(dv == [1, 0, 0, 0])
+    assert np.all(dv == [1, -1, -1, -1])
     assert np.all(matrix == np.array([[1, 0], [0, 0]]))
 
 

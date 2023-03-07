@@ -18,7 +18,7 @@ class DeltaImputer(EagerImputer):
     def initialize(self, *args, **kwargs):
         super().initialize(*args, **kwargs)
         self._dv_idx_map = {existence: {tuple(dv): i for i, dv in enumerate(dvs)}
-                            for existence, dvs in self._design_vectors.items()}
+                            for existence, dvs in self._design_vectors_zero.items()}
 
     def impute(self, vector: DesignVector, existence: NodeExistence, matrix_mask: MatrixSelectMask) -> Tuple[DesignVector, np.ndarray]:
         design_vectors = self._get_design_vectors(existence)[matrix_mask, :]

@@ -11,8 +11,8 @@ class DummyOnDemandLazyEncoder(OnDemandLazyEncoder):
     def _encode(self, existence: NodeExistence) -> List[DiscreteDV]:
         return [DiscreteDV(n_opts=2)]
 
-    def _decode(self, vector: DesignVector, existence: NodeExistence) -> np.ndarray:
-        return np.zeros((len(self._matrix_gen.src), len(self._matrix_gen.tgt)))
+    def _decode(self, vector: DesignVector, existence: NodeExistence) -> Optional[Tuple[DesignVector, np.ndarray]]:
+        return vector, np.zeros((len(self._matrix_gen.src), len(self._matrix_gen.tgt)))
 
 
 def test_on_demand_lazy_encoder():

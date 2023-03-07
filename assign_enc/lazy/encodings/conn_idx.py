@@ -30,23 +30,42 @@ class ConnCombsEncoder:
             return []
 
         dv_values = GroupedEncoder.group_by_values(dv_grouping_values, ordinal_base=2 if self.binary else None)
-        dv_map = {tuple(dv): i for i, dv in enumerate(dv_values)}
-        self._registry[key] = (dv_map, matrix)
+        self._registry[key] = (self.get_dv_map_for_lookup(dv_values), matrix)
         return [DiscreteDV(n_opts=n+1) for n in np.max(dv_values, axis=0)]
 
-    def decode(self, key, vector: DesignVector) -> Optional[np.ndarray]:
+    @staticmethod
+    def get_dv_map_for_lookup(dv_values) -> Dict[tuple, Dict[tuple, Tuple[int, DesignVector]]]:
+        active_mask_dv_map = {}
+        for i, dv in enumerate(dv_values):
+            active_mask = np.array(dv != X_INACTIVE_VALUE)
+            active_mask_key = tuple(active_mask)
+            if active_mask_key not in active_mask_dv_map:
+                active_mask_dv_map[active_mask_key] = {}
+
+            dv_active = dv[active_mask]
+            active_mask_dv_map[active_mask_key][tuple(dv_active)] = (i, dv)
+
+        return active_mask_dv_map
+
+    @staticmethod
+    def lookup_dv(active_mask_dv_map, dv: np.ndarray) -> Optional[Tuple[int, DesignVector]]:
+        for active_mask, dv_map in active_mask_dv_map.items():
+            dv_active = tuple(dv[np.array(active_mask, dtype=bool)])
+            idx_and_dv = dv_map.get(dv_active)
+            if idx_and_dv is not None:
+                return idx_and_dv
+
+    def decode(self, key, vector: DesignVector) -> Optional[Tuple[DesignVector, np.ndarray]]:
         dv_map, matrix = self._registry[key]
         if matrix.shape[0] == 0:
-            return np.zeros((matrix.shape[1],), dtype=np.int64)
+            return vector, np.zeros((matrix.shape[1],), dtype=np.int64)
         if len(vector) == 0:
-            return matrix[0, :]
-        i_matrix = dv_map.get(tuple(vector))
-        if i_matrix is None:
-            return
-        try:
-            return matrix[i_matrix, :]
-        except IndexError:
-            return
+            return vector, matrix[0, :]
+
+        idx_and_dv = self.lookup_dv(dv_map, np.array(vector))
+        if idx_and_dv is not None:
+            i, dv = idx_and_dv
+            return dv, matrix[i, :]
 
     def __repr__(self):
         return f'{self.__class__.__name__}(binary={self.binary})'
@@ -186,13 +205,14 @@ class LazyConnIdxMatrixEncoder(LazyEncoder):
             all_dvs += dvs
         return all_dvs
 
-    def _decode(self, vector: DesignVector, existence: NodeExistence) -> Optional[np.ndarray]:
+    def _decode(self, vector: DesignVector, existence: NodeExistence) -> Optional[Tuple[DesignVector, np.ndarray]]:
         by_src, amount_first = self._by_src, self._amount_first
         dv_idx_map = self._dv_idx_map.get(existence, {})
         matrix = np.zeros((self.n_src, self.n_tgt), dtype=int)
         if not by_src:
             matrix = matrix.T
 
+        imp_vector = np.array(vector).copy()
         for i, (i_dv_start, n_dv, keys) in dv_idx_map.items():
             vector_i = vector[i_dv_start:i_dv_start+n_dv]
             i_key = 0
@@ -204,12 +224,16 @@ class LazyConnIdxMatrixEncoder(LazyEncoder):
                 key, n_dv_i = keys[i_key]
             except IndexError:
                 return
-            sub_matrix = self._conn_enc.decode(key, vector_i[:n_dv_i])
+            imp_vector_i, sub_matrix = self._conn_enc.decode(key, vector_i[:n_dv_i])
             if sub_matrix is None:
                 return
+            imp_vector[i_dv_start:i_dv_start+n_dv] = X_INACTIVE_VALUE
+            imp_vector[i_dv_start:i_dv_start+len(imp_vector_i)] = imp_vector_i
             matrix[i, :] = sub_matrix
 
-        return matrix if by_src else matrix.T
+        if not by_src:
+            matrix = matrix.T
+        return imp_vector, matrix
 
     def __repr__(self):
         return f'{self.__class__.__name__}({self._imputer!r}, {self._conn_enc!r}, ' \

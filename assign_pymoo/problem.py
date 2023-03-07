@@ -208,7 +208,8 @@ class AssignmentProblemBase(CachedParetoFrontMixin, Problem):
     def assignment_manager(self) -> AssignmentManagerBase:
         raise NotImplementedError
 
-    def correct_x(self, x: np.ndarray) -> np.ndarray:
+    def correct_x(self, x: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+        """Returns both the corrected x and the is_active vector"""
         raise NotImplementedError
 
     def _evaluate(self, x, out, *args, **kwargs):
@@ -276,31 +277,35 @@ class AssignmentProblem(AssignmentProblemBase):
             src, tgt, excluded=excluded, existence_patterns=existence_patterns)
         return matrix_gen.count_all_matrices()
 
-    def correct_x(self, x: np.ndarray) -> np.ndarray:
+    def correct_x(self, x: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
         n_aux = self.n_aux
         x_corr = x.copy().astype(np.int)
+        is_active = np.ones(x_corr.shape, dtype=bool)
         for i_dv in range(x_corr.shape[0]):
-            x_corr[i_dv, :n_aux], existence, _ = self.correct_x_aux(x_corr[i_dv, :n_aux])
-            x_corr[i_dv, n_aux:] = self.assignment_manager.correct_vector(x_corr[i_dv, n_aux:], existence=existence)
-        return x_corr
+            x_corr[i_dv, :n_aux], is_active[i_dv, :n_aux], existence, _ = self.correct_x_aux(x_corr[i_dv, :n_aux])
+            x_corr[i_dv, n_aux:], is_active[i_dv, n_aux:] = \
+                self.assignment_manager.correct_vector(x_corr[i_dv, n_aux:], existence=existence)
+        return x_corr, is_active
 
     def _evaluate(self, x, out, *args, **kwargs):
         x = np.round(x.astype(np.float64)).astype(np.int)
         n = x.shape[0]
+        is_active_out = np.ones(x.shape, dtype=bool)
         x_out = np.empty((n, self.n_var))
         f_out = np.empty((n, self.n_obj))
         g_out = np.zeros((n, self.n_constr))
 
         n_aux = self.n_aux
         for i in range(n):
-            x_aux, existence, is_violated = self.correct_x_aux(x[i, :n_aux])
+            x_aux, is_active_out[i, :n_aux], existence, is_violated = self.correct_x_aux(x[i, :n_aux])
             x_out[i, :n_aux] = x_aux
             if is_violated:
                 f_out[i, :] = 0
                 g_out[i, 0] = 1
                 continue
 
-            x_out[i, n_aux:], conn_idx = self.assignment_manager.get_conn_idx(x[i, n_aux:], existence=existence)
+            x_out[i, n_aux:], is_active_out[i, n_aux:], conn_idx = \
+                self.assignment_manager.get_conn_idx(x[i, n_aux:], existence=existence)
             if conn_idx is None:
                 f_out[i, :] = 0
                 g_out[i, 0] = 1
@@ -308,6 +313,7 @@ class AssignmentProblem(AssignmentProblemBase):
                 f_out[i, :], g_out[i, 1:] = self._do_evaluate(conn_idx, x_aux=x_aux)
 
         out['X'] = x_out
+        out['is_active'] = is_active_out
         out['F'] = f_out
         out['G'] = g_out
 
@@ -354,10 +360,10 @@ class AssignmentProblem(AssignmentProblemBase):
         existence_patterns = self.get_existence_patterns()
         return MatrixGenSettings(src, tgt, excluded=excluded, existence=existence_patterns)
 
-    def correct_x_aux(self, x_aux: DesignVector) -> Tuple[DesignVector, Optional[NodeExistence], bool]:
+    def correct_x_aux(self, x_aux: DesignVector) -> Tuple[DesignVector, IsActiveVector, Optional[NodeExistence], bool]:
         """Correct auxiliary design vector, return imputed design vector, optional NodeExistence, and flag whether the
         design is invalid"""
-        return x_aux, None, False
+        return x_aux, np.ones((len(x_aux),), dtype=bool), None, False
 
     def _do_evaluate(self, conns: List[Tuple[int, int]], x_aux: Optional[DesignVector]) -> Tuple[List[float], List[float]]:
         """Returns [objectives, constraints]"""
@@ -442,22 +448,22 @@ class MultiAssignmentProblem(AssignmentProblemBase):
 
         return f'{str(self)} / {am_name_parts}'
 
-    def correct_x(self, x: np.ndarray) -> np.ndarray:
-        x_corr_parts = self._separate_x_parts(x)
+    def correct_x(self, x: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+        x_corr_parts, is_act_parts = self._separate_x_parts(x)
         for i in range(x.shape[0]):
             resolved_dv_parts, _, _ = self._resolve_existence([part[i, :] for part in x_corr_parts])
             for i_part, part in enumerate(x_corr_parts):
-                part[i, :] = resolved_dv_parts[i_part]
-        return np.column_stack(x_corr_parts)
+                part[i, :], is_act_parts[i_part][i, :] = resolved_dv_parts[i_part]
+        return np.column_stack(x_corr_parts), np.column_stack(is_act_parts)
 
     def _evaluate(self, x, out, *args, **kwargs):
-        x_corr_parts = self._separate_x_parts(x)
+        x_corr_parts, is_act_parts = self._separate_x_parts(x)
         f_out = np.zeros((x.shape[0], self.n_obj))
         g_out = np.zeros((x.shape[0], self.n_constr))
         for i in range(x.shape[0]):
             resolved_dv_parts, conn_list, eval_kwargs = self._resolve_existence([part[i, :] for part in x_corr_parts])
             for i_part, part in enumerate(x_corr_parts):
-                part[i, :] = resolved_dv_parts[i_part]
+                part[i, :], is_act_parts[i_part][i, :] = resolved_dv_parts[i_part]
 
             if any(conns is None for conns in conn_list):
                 g_out[i, 0] = 1
@@ -466,17 +472,20 @@ class MultiAssignmentProblem(AssignmentProblemBase):
             f_out[i, :], g_out[i, 1:] = self._do_evaluate(conn_list, **eval_kwargs)
 
         out['X'] = np.column_stack(x_corr_parts)
+        out['is_active'] = np.column_stack(is_act_parts)
         out['F'] = f_out
         out['G'] = g_out
 
-    def _separate_x_parts(self, x) -> List[np.ndarray]:
+    def _separate_x_parts(self, x) -> Tuple[List[np.ndarray], List[np.ndarray]]:
         x = np.round(x.astype(np.float64)).astype(np.int)
         x_parts = []
+        is_active_parts = []
         i = 0
         for n_dv in self._n_dv:
             x_parts.append(x[:, i:i+n_dv])
+            is_active_parts.append(np.ones(x_parts[-1].shape, dtype=bool))
             i += n_dv
-        return x_parts
+        return x_parts, is_active_parts
 
     def get_matrix_gen_settings(self) -> List[MatrixGenSettings]:
         """The list of matrix generator settings that defines this problem, already correctly configured existence patterns,
@@ -484,7 +493,8 @@ class MultiAssignmentProblem(AssignmentProblemBase):
         any existence patterns)"""
         raise NotImplementedError
 
-    def _resolve_existence(self, x_parts: List[DesignVector]) -> Tuple[List[DesignVector], List[Optional[List[Tuple[int, int]]]], dict]:
+    def _resolve_existence(self, x_parts: List[DesignVector]) \
+            -> Tuple[List[Tuple[DesignVector, IsActiveVector]], List[Optional[List[Tuple[int, int]]]], dict]:
         """Resolve design vectors for each assignment manager into a list of connection lists, or None if any of the
         matrices is invalid"""
         raise NotImplementedError
@@ -512,7 +522,7 @@ class AssignmentRepair(Repair):
 
         x = np.round(x.astype(np.float64)).astype(np.int)
         if isinstance(problem, AssignmentProblemBase):
-            x = problem.correct_x(x)
+            x, _ = problem.correct_x(x)
 
         if is_array:
             return x

@@ -3,6 +3,7 @@ import numpy as np
 from typing import *
 from assign_enc.lazy_encoding import *
 from assign_enc.lazy.encodings.on_demand_base import *
+from assign_enc.lazy.encodings.conn_idx import ConnCombsEncoder
 from assign_enc.eager.encodings.grouped_base import GroupedEncoder
 
 __all__ = ['LazyAmountFirstEncoder', 'FlatLazyAmountEncoder', 'TotalLazyAmountEncoder', 'SourceLazyAmountEncoder',
@@ -25,7 +26,7 @@ class LazyAmountEncoder:
         raise NotImplementedError
 
     def decode(self, vector: DesignVector, existence: NodeExistence) \
-            -> Optional[Tuple[Tuple[int, ...], Tuple[int, ...]]]:
+            -> Optional[Tuple[DesignVector, Tuple[int, ...], Tuple[int, ...]]]:
         raise NotImplementedError
 
     def __repr__(self):
@@ -45,7 +46,7 @@ class LazyConnectionEncoder:
         raise NotImplementedError
 
     def decode(self, n_src_conn, n_tgt_conn, vector: DesignVector, encoder: OnDemandLazyEncoder,
-               existence: NodeExistence) -> Optional[np.ndarray]:
+               existence: NodeExistence) -> Optional[Tuple[DesignVector, np.ndarray]]:
         raise NotImplementedError
 
     def __repr__(self):
@@ -93,27 +94,37 @@ class LazyAmountFirstEncoder(OnDemandLazyEncoder):
 
         return dv_amount+dv_conn
 
-    def _decode(self, vector: DesignVector, existence: NodeExistence) -> Optional[np.ndarray]:
+    def _decode(self, vector: DesignVector, existence: NodeExistence) -> Optional[Tuple[DesignVector, np.ndarray]]:
         if existence not in self._n_dv_amount:
             return
         n_dv_amt = self._n_dv_amount[existence]
 
         amount_vector = vector[:n_dv_amt]
-        amount_vector_expanded = self._unfilter_dvs(
-            amount_vector, self._i_dv_amount[existence], self._n_dv_amount_expand[existence])
-        if amount_vector_expanded is None:
-            return
+        amount_vector_expanded, _ = \
+            self._unfilter_dvs(amount_vector, self._i_dv_amount[existence], self._n_dv_amount_expand[existence])
+
         n_src_tgt_conn = self.amount_encoder.decode(amount_vector_expanded, existence)
         if n_src_tgt_conn is None:
             return
-        n_src_conn, n_tgt_conn = n_src_tgt_conn
+        imp_amt_vector_expanded, n_src_conn, n_tgt_conn = n_src_tgt_conn
+        imp_amount_vector_sel = imp_amt_vector_expanded[self._i_dv_amount[existence]]
+        imp_amount_vector = np.ones((len(amount_vector),), dtype=int)*X_INACTIVE_VALUE
+        imp_amount_vector[:len(imp_amount_vector_sel)] = imp_amount_vector_sel
 
         conn_vector = vector[n_dv_amt:]
-        conn_vector_expanded = self._unfilter_dvs(
+        conn_vector_expanded, _ = self._unfilter_dvs(
             conn_vector, self._i_dv_conn[existence], self._n_dv_conn_expand[existence])
-        if conn_vector_expanded is None:
+
+        matrix_data = self.conn_encoder.decode(n_src_conn, n_tgt_conn, conn_vector_expanded, self, existence)
+        if matrix_data is None:
             return
-        return self.conn_encoder.decode(n_src_conn, n_tgt_conn, conn_vector_expanded, self, existence)
+        imp_conn_vector_expanded, matrix = matrix_data
+        imp_conn_vector_sel = np.array(imp_conn_vector_expanded)[self._i_dv_conn[existence]]
+        imp_conn_vector = np.ones((len(conn_vector),), dtype=int)*X_INACTIVE_VALUE
+        imp_conn_vector[:len(imp_conn_vector_sel)] = imp_conn_vector_sel
+
+        imp_vector = list(imp_amount_vector)+list(imp_conn_vector)
+        return imp_vector, matrix
 
     @staticmethod
     def group_by_values(values: np.ndarray) -> np.ndarray:
@@ -139,14 +150,18 @@ class FlatLazyAmountEncoder(LazyAmountEncoder):
         return [DiscreteDV(n_opts=len(n_src_n_tgt))]
 
     def decode(self, vector: DesignVector, existence: NodeExistence) \
-            -> Optional[Tuple[Tuple[int, ...], Tuple[int, ...]]]:
+            -> Optional[Tuple[DesignVector, Tuple[int, ...], Tuple[int, ...]]]:
         n_existence = self._n_src_n_tgt[existence]
         if len(n_existence) == 0:
             return
+
         idx = vector[0]
         if idx >= len(n_existence):
-            return
-        return n_existence[idx]
+            idx = len(n_existence)-1
+            vector = [idx]
+
+        n_src, n_tgt = n_existence[idx]
+        return vector, n_src, n_tgt
 
     def __repr__(self):
         return f'{self.__class__.__name__}()'
@@ -170,14 +185,20 @@ class GroupedLazyAmountEncoder(LazyAmountEncoder):
 
         dv_group_values = self._get_dv_group_values(n_src, n_tgt, n_src_tgt_arr)
         dv_values = LazyAmountFirstEncoder.group_by_values(dv_group_values)
-        self._dv_val_map[existence] = {tuple(dv_val): n_src_n_tgt[i] for i, dv_val in enumerate(dv_values)}
+        self._dv_val_map[existence] = (ConnCombsEncoder.get_dv_map_for_lookup(dv_values), n_src_n_tgt)
         return [DiscreteDV(n_opts=n) for n in np.max(dv_values, axis=0)+1]
 
-    def decode(self, vector: DesignVector, existence: NodeExistence) -> Optional[Tuple[Tuple[int, ...], Tuple[int, ...]]]:
-        try:
-            return self._dv_val_map[existence][tuple(vector)]
-        except KeyError:
-            pass
+    def decode(self, vector: DesignVector, existence: NodeExistence) \
+            -> Optional[Tuple[DesignVector, Tuple[int, ...], Tuple[int, ...]]]:
+
+        if existence not in self._dv_val_map:
+            return
+        dv_map, n_src_n_tgt = self._dv_val_map[existence]
+        idx_and_dv = ConnCombsEncoder.lookup_dv(dv_map, np.array(vector))
+        if idx_and_dv is not None:
+            i, dv = idx_and_dv
+            n_src, n_tgt = n_src_n_tgt[i]
+            return dv, n_src, n_tgt
 
     def _get_dv_group_values(self, n_src, n_tgt, n_src_tgt_arr: np.ndarray) -> np.ndarray:
         raise NotImplementedError
@@ -293,21 +314,24 @@ class FlatLazyConnectionEncoder(LazyConnectionEncoder):
         return [DiscreteDV(n_opts=n_matrix_max)] if n_matrix_max > 1 else []
 
     def decode(self, n_src_conn, n_tgt_conn, vector: DesignVector, encoder: OnDemandLazyEncoder,
-               existence: NodeExistence) -> Optional[np.ndarray]:
+               existence: NodeExistence) -> Optional[Tuple[DesignVector, np.ndarray]]:
 
         matrices = encoder.get_matrices(n_src_conn, n_tgt_conn)
+        if matrices.shape[0] == 0:
+            return vector, np.zeros((len(n_src_conn), len(n_tgt_conn)), dtype=int)
         if len(vector) == 0:
-            if matrices.shape[0] == 0:
-                return np.zeros((len(n_src_conn), len(n_tgt_conn)), dtype=int)
-            return matrices[0, :, :]
+            return vector, matrices[0, :, :]
 
         if matrices.shape[0] > self._n_exist_max.get(existence, 0):
             raise RuntimeError(f'Sub-matrix found ({n_src_conn}, {n_tgt_conn}) with '
                                f'{matrices.shape[0]} > {self._n_exist_max.get(existence, 0)} possibilities')
 
         i_conn = vector[0]
-        if i_conn < matrices.shape[0]:
-            return matrices[i_conn, :, :]
+        if i_conn >= matrices.shape[0]:
+            i_conn = matrices.shape[0]-1
+            vector = [i_conn]
+
+        return vector, matrices[i_conn, :, :]
 
     def __repr__(self):
         return f'{self.__class__.__name__}()'

@@ -68,18 +68,18 @@ def test_encoder():
     assert enc.get_matrix_index([0]) == (0, exist)
     assert enc.is_valid_vector([0])
     assert enc.is_valid_vector([0, 0])
-    assert not enc.is_valid_vector([0, 1])
+    assert enc.is_valid_vector([0, 1])
 
     dv, mat = enc.get_matrix([0])
     assert dv == [0]
     assert np.all(mat == matrix[0, :, :])
 
     dv, mat = enc.get_matrix([0, 0])
-    assert dv == [0, 0]
+    assert dv == [0, -1]
     assert np.all(mat == matrix[0, :, :])
 
     dv, mat = enc.get_matrix([0, 1])
-    assert dv == [0, 0]
+    assert dv == [0, -1]
     assert np.all(mat == matrix[0, :, :])
 
     assert enc.is_valid_vector([9])
@@ -101,7 +101,7 @@ def test_encoder():
     matrix_mask = np.zeros((10,), dtype=bool)
     assert not enc.is_valid_vector([0], matrix_mask=matrix_mask)
     dv, mat = enc.get_matrix([0], matrix_mask=matrix_mask)
-    assert np.all(dv == [0])
+    assert np.all(dv == [-1])
     assert np.all(mat == 0)
 
 
@@ -182,8 +182,8 @@ def test_encoder_existence():
     assert enc.get_matrix([0, 0], existence=exist1)
 
     assert enc.is_valid_vector([0, 0], existence=exist2)
+    assert enc.is_valid_vector([0, 1], existence=exist2)
     assert enc.is_valid_vector([2, 0], existence=exist2)
-    assert not enc.is_valid_vector([0, 1], existence=exist2)
 
     assert enc._has_existence(exist1)
     assert not enc._has_existence(NodeExistence(tgt_exists=[True, False]))
@@ -192,11 +192,11 @@ def test_encoder_existence():
     assert enc.get_matrix_index([1, 0], existence=exist2)[0] == 1
 
     dv, mat = enc.get_matrix([1, 1], existence=exist2)  # Correct last des var value
-    assert dv == [1, 0]
+    assert dv == [1, -1]
     assert np.all(mat == enc._matrix[exist2][1, :, :])
 
     dv, mat = enc.get_matrix([4, 1], existence=exist2)  # Impute
-    assert dv == [0, 0]
+    assert dv == [0, -1]
     assert np.all(mat == enc._matrix[exist2][0, :, :])
 
 
@@ -218,7 +218,7 @@ class LowerThanZeroEncoder(EagerEncoder):
 
     def _encode(self, matrix: np.ndarray) -> np.ndarray:
         n_mat = matrix.shape[0]
-        return np.column_stack([np.arange(0, n_mat)-1, np.arange(0, n_mat)])
+        return np.column_stack([np.arange(0, n_mat)-2, np.arange(0, n_mat)])
 
 
 class HigherThanZeroEncoder(EagerEncoder):
@@ -246,19 +246,19 @@ def test_normalize_dvs():
     des_vectors = np.array([
         [0, 1, 0, 2, -1],
         [1, 2, 3, 0,  0],
-        [2, 3, 2, 0,  1],
+        [2, 3, 2, 0,  2],
     ])
 
     assert np.all(EagerEncoder.normalize_design_vectors(des_vectors, remove_gaps=False) == np.array([
-        [0, 0, 0, 2, 0],
-        [1, 1, 3, 0, 1],
+        [0, 0, 0, 2, -1],
+        [1, 1, 3, 0, 0],
         [2, 2, 2, 0, 2],
     ]))
 
     assert np.all(EagerEncoder.normalize_design_vectors(des_vectors) == np.array([
-        [0, 0, 0, 1, 0],
-        [1, 1, 2, 0, 1],
-        [2, 2, 1, 0, 2],
+        [0, 0, 0, 1, -1],
+        [1, 1, 2, 0, 0],
+        [2, 2, 1, 0, 1],
     ]))
 
 
@@ -293,7 +293,7 @@ def test_encoder_zero_dvs():
     assert dv == [0]
     assert np.all(mat == np.array([[1, 0], [0, 1]]))
     dv, mat = encoder.get_matrix([0], existence=exist.patterns[1])
-    assert dv == [0]
+    assert dv == [-1]
     assert np.all(mat == np.array([[1, 0], [0, 0]]))
 
 

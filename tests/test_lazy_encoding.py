@@ -12,7 +12,7 @@ class DummyImputer(LazyImputer):
                 validate: Callable[[np.ndarray], bool], tried_vectors: Set[Tuple[int, ...]]) -> Tuple[DesignVector, np.ndarray]:
         assert not validate(matrix)
         assert tuple(vector) in tried_vectors
-        imputed_dv = np.array(vector)*0
+        imputed_dv = np.array(vector)*0+X_INACTIVE_VALUE
         imputed_matrix = matrix*0-1
         return imputed_dv, imputed_matrix
 
@@ -27,8 +27,8 @@ class DummyLazyEncoder(LazyEncoder):
         n_dv = len(self.src)*len(self.tgt)
         return [DiscreteDV(n_opts=self._n_opts) for _ in range(n_dv)]
 
-    def _decode(self, vector: DesignVector, existence: NodeExistence) -> Optional[np.ndarray]:
-        return np.reshape(np.array(vector), (self.n_src, self.n_tgt))
+    def _decode(self, vector: DesignVector, existence: NodeExistence) -> Optional[Tuple[DesignVector, np.ndarray]]:
+        return vector, np.reshape(np.array(vector), (self.n_src, self.n_tgt))
 
 
 def test_lazy_encoder():
@@ -45,9 +45,10 @@ def test_lazy_encoder():
     assert len(dv) == 4
     assert all([d.n_opts == 2 for d in dv])
 
-    assert np.all(enc._decode([0, 1, 1, 1], NodeExistence(np.array([True]*2), np.array([True]*2))) == np.array([[0, 1], [1, 1]]))
+    assert np.all(enc._decode([0, 1, 1, 1], NodeExistence(np.array([True]*2), np.array([True]*2)))[1] == np.array([[0, 1], [1, 1]]))
 
-    matrix, _ = enc._decode_vector([0, 1, 1, 1])
+    dv, matrix, _ = enc._decode_vector([0, 1, 1, 1])
+    assert np.all(dv == [0, 1, 1, 1])
     assert np.all(matrix == np.array([[0, 1], [1, 1]]))
 
     assert not enc.is_valid_vector([0, 1, 1, 1])
@@ -66,17 +67,17 @@ def test_lazy_encoder():
     assert np.all(matrix == np.array([[0, 1], [1, 0]]))
 
     dv, matrix = enc.get_matrix([0, 1, 1, 0, 0])
-    assert np.all(dv == [0, 1, 1, 0, 0])
+    assert np.all(dv == [0, 1, 1, 0, -1])
     assert np.all(matrix == np.array([[0, 1], [1, 0]]))
     dv, matrix = enc.get_matrix([0, 1, 1, 0, 1])
-    assert np.all(dv == [0, 1, 1, 0, 0])
+    assert np.all(dv == [0, 1, 1, 0, -1])
     assert np.all(matrix == np.array([[0, 1], [1, 0]]))
 
     assert enc.get_conn_idx(matrix) == [(0, 1), (1, 0)]
     assert enc.get_conns(matrix) == [(src[0], tgt[1]), (src[1], tgt[0])]
 
     dv, matrix = enc.get_matrix([0, 1, 1, 1])
-    assert np.all(dv == [0, 0, 0, 0])
+    assert np.all(dv == [-1, -1, -1, -1])
     assert np.all(matrix == -1)
 
     assert enc._matrix_gen.count_all_matrices() == 7
@@ -91,16 +92,16 @@ def test_lazy_imputer_none_exist():
     enc = DummyLazyEncoder(DummyImputer())
     enc.set_settings(MatrixGenSettings(src=[Node([0, 1]), Node([0, 1])], tgt=[Node([0, 1]), Node([0, 1])]))
 
-    matrix, _ = enc._decode_vector([0, 1, 1, 0])
+    _, matrix, _ = enc._decode_vector([0, 1, 1, 0])
     assert np.all(matrix == np.array([[0, 1], [1, 0]]))
 
     dv, matrix = enc.get_matrix([0, 1, 1, 0], NodeExistence(src_exists=[False, False], tgt_exists=[False, False]))
-    assert np.all(dv == [0, 0, 0, 0])
+    assert np.all(dv == [-1, -1, -1, -1])
     assert np.all(matrix == 0)
 
     dv, matrix = enc.get_matrix(np.array([0, 1, 1, 0]),
                                 NodeExistence(src_exists=[False, False], tgt_exists=[False, False]))
-    assert np.all(dv == [0, 0, 0, 0])
+    assert np.all(dv == [-1, -1, -1, -1])
     assert np.all(matrix == 0)
 
 
@@ -145,16 +146,21 @@ def test_lazy_assignment_manager():
     assert len(dv) == 4
     assert all([d.n_opts == 2 for d in dv])
 
-    dv, matrix = manager.get_matrix([0, 1, 1, 0])
+    dv, is_active, matrix = manager.get_matrix([0, 1, 1, 0])
     assert np.all(dv == [0, 1, 1, 0])
+    assert np.all(is_active)
     assert np.all(matrix == np.array([[0, 1], [1, 0]]))
 
-    assert manager.correct_vector([0, 1, 1, 0]) == dv
-    assert np.all(manager.correct_vector([0, 1, 1, 1]) == [0, 0, 0, 0])
+    dv_, is_active_ = manager.correct_vector([0, 1, 1, 0])
+    assert np.all(dv_ == dv)
+    assert np.all(is_active_)
+    dv_, is_active_ = manager.correct_vector([0, 1, 1, 1])
+    assert np.all(dv_ == [0, 0, 0, 0])
+    assert np.all(~is_active_)
 
-    _, conn_idx = manager.get_conn_idx([0, 1, 1, 0])
+    _, _, conn_idx = manager.get_conn_idx([0, 1, 1, 0])
     assert conn_idx == [(0, 1), (1, 0)]
-    _, conn_idx = manager.get_conn_idx([0, 1, 1, 1])
+    _, _, conn_idx = manager.get_conn_idx([0, 1, 1, 1])
     assert not conn_idx
 
 

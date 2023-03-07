@@ -42,19 +42,19 @@ def test_source_amount_grouper():
     encoder.matrix = matrix
 
     assert np.all(list(encoder._design_vectors.values())[0] == np.array([
-        [0, 0, 0],
-        [1, 0, 0],
-        [1, 0, 1],
-        [1, 1, 0],
+        [0, -1, -1],
+        [1,  0,  0],
+        [1,  0,  1],
+        [1,  1, -1],
     ]))
 
     encoder.normalize_within_group = False
     encoder.matrix = matrix
     assert np.all(list(encoder._design_vectors.values())[0] == np.array([
-        [0, 0, 0],
-        [1, 1, 1],
-        [1, 1, 2],
-        [1, 2, 3],
+        [0, -1, -1],
+        [1,  0,  0],
+        [1,  0,  1],
+        [1,  1, -1],
     ]))
 
 
@@ -74,19 +74,19 @@ def test_source_amount_flat_grouper():
     encoder.matrix = matrix
 
     assert np.all(list(encoder._design_vectors.values())[0] == np.array([
-        [0, 0],
-        [1, 0],
-        [1, 1],
-        [2, 0],
+        [0, -1],
+        [1,  0],
+        [1,  1],
+        [2, -1],
     ]))
 
     encoder.normalize_within_group = False
     encoder.matrix = matrix
     assert np.all(list(encoder._design_vectors.values())[0] == np.array([
-        [0, 0],
-        [1, 1],
-        [1, 2],
-        [2, 3],
+        [0, -1],
+        [1,  0],
+        [1,  1],
+        [2, -1],
     ]))
 
 
@@ -106,19 +106,19 @@ def test_target_amount_grouper():
     encoder.matrix = matrix
 
     assert np.all(list(encoder._design_vectors.values())[0] == np.array([
-        [0, 0],
-        [2, 0],
-        [1, 0],
-        [1, 1],
+        [0, -1],
+        [2, -1],
+        [1,  0],
+        [1,  1],
     ]))
 
     encoder.normalize_within_group = False
     encoder.matrix = matrix
     assert np.all(list(encoder._design_vectors.values())[0] == np.array([
-        [0, 1],
-        [2, 0],
-        [1, 1],
-        [1, 2],
+        [0, -1],
+        [2, -1],
+        [1,  0],
+        [1,  1],
     ]))
 
 
@@ -182,21 +182,21 @@ def test_flat_index_loc_grouper():
         [2, 5, 5],
     ]))
     assert np.all(list(encoder._design_vectors.values())[0] == np.array([
-        [0, 0, 0],
-        [1, 0, 0],
-        [1, 0, 1],
-        [1, 1, 0],
-        [1, 2, 0],
+        [0, -1, -1],
+        [1,  0,  0],
+        [1,  0,  1],
+        [1,  1, -1],
+        [1,  2, -1],
     ]))
 
     encoder.normalize_within_group = False
     encoder.matrix = matrix
     assert np.all(list(encoder._design_vectors.values())[0] == np.array([
-        [0, 0, 0],
-        [1, 0, 0],
-        [1, 0, 1],
-        [1, 1, 1],
-        [1, 2, 1],
+        [0, -1, -1],
+        [1,  0,  0],
+        [1,  0,  1],
+        [1,  1, -1],
+        [1,  2, -1],
     ]))
 
 
@@ -228,21 +228,21 @@ def test_rel_flat_index_loc_grouper():
         [2, 3, 0],
     ]))
     assert np.all(list(encoder._design_vectors.values())[0] == np.array([
-        [0, 0, 0],
-        [1, 0, 0],
-        [1, 0, 1],
-        [1, 1, 0],
-        [1, 2, 0],
+        [0, -1, -1],
+        [1,  0,  0],
+        [1,  0,  1],
+        [1,  1, -1],
+        [1,  2, -1],
     ]))
 
     encoder.normalize_within_group = False
     encoder.matrix = matrix
     assert np.all(list(encoder._design_vectors.values())[0] == np.array([
-        [0, 1, 1],
-        [1, 0, 1],
-        [1, 0, 2],
-        [1, 1, 1],
-        [1, 2, 0],
+        [0, -1, -1],
+        [1,  0,  0],
+        [1,  0,  1],
+        [1,  1, -1],
+        [1,  2, -1],
     ]))
 
 
@@ -267,28 +267,28 @@ def test_coord_index_loc_grouper():
 
     assert len(encoder.design_vars) == 3
     assert np.all(loc_grouper.get_grouping_values(matrix) == np.array([
-        [0, 1, 1, 0, 1, 1],
-        [0, 2, 1, 0, 1, 1],
-        [0, 2, 1, 0, 1, 2],
-        [0, 2, 1, 1, 1, 2],
-        [0, 2, 1, 2, 1, 2],
+        [0, 0, 0, 0, 0, 0],
+        [0, 1, 0, 0, 0, 0],
+        [0, 1, 0, 0, 0, 1],
+        [0, 1, 0, 1, 0, 1],
+        [0, 1, 0, 2, 0, 1],
     ]))
     assert np.all(list(encoder._design_vectors.values())[0] == np.array([
-        [0, 0, 0],
-        [1, 0, 0],
-        [1, 0, 1],
-        [1, 1, 0],
-        [1, 2, 0],
+        [0, -1, -1],
+        [1,  0,  0],
+        [1,  0,  1],
+        [1,  1, -1],
+        [1,  2, -1],
     ]))
 
     encoder.normalize_within_group = False
     encoder.matrix = matrix
     assert np.all(list(encoder._design_vectors.values())[0] == np.array([
-        [0, 0, 0],
-        [1, 0, 0],
-        [1, 0, 1],
-        [1, 1, 1],
-        [1, 2, 1],
+        [0, -1, -1],
+        [1,  0,  0],
+        [1,  0,  1],
+        [1,  1, -1],
+        [1,  2, -1],
     ]))
 
 
@@ -313,28 +313,28 @@ def test_rel_coord_index_loc_grouper():
 
     assert len(encoder.design_vars) == 3
     assert np.all(loc_grouper.get_grouping_values(matrix) == np.array([
-        [0, 1, 1, -1, 0, 1],
-        [0, 2, 1, -2, 0, 1],
-        [0, 2, 1, -2, 0, 2],
-        [0, 2, 1, -1, 0, 1],
-        [0, 2, 1,  0, 0, 0],
+        [0, 0, 0, 1, 0, 1],
+        [0, 1, 0, 0, 0, 1],
+        [0, 1, 0, 0, 0, 2],
+        [0, 1, 0, 1, 0, 1],
+        [0, 1, 0, 2, 0, 0],
     ]))
     assert np.all(list(encoder._design_vectors.values())[0] == np.array([
-        [0, 0, 0],
-        [1, 0, 0],
-        [1, 0, 1],
-        [1, 1, 0],
-        [1, 2, 0],
+        [0, -1, -1],
+        [1,  0,  0],
+        [1,  0,  1],
+        [1,  1, -1],
+        [1,  2, -1],
     ]))
 
     encoder.normalize_within_group = False
     encoder.matrix = matrix
     assert np.all(list(encoder._design_vectors.values())[0] == np.array([
-        [0, 1, 1],
-        [1, 0, 1],
-        [1, 0, 2],
-        [1, 1, 1],
-        [1, 2, 0],
+        [0, -1, -1],
+        [1,  0,  0],
+        [1,  0,  1],
+        [1,  1, -1],
+        [1,  2, -1],
     ]))
 
 

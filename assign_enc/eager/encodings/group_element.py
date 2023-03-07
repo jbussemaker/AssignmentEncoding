@@ -56,7 +56,7 @@ class ConnIdxGroupedEncoder(GroupedEncoder):
         conn_idx = -np.ones((conn_matrix.shape[0], n_conn_max), dtype=int)
         for i, row in enumerate(conn_matrix):
             cls._set_conn_indices(row, conn_idx[i, :])
-        return conn_idx
+        return conn_idx+1
 
     @staticmethod
     def _set_conn_indices(conn_arr: np.ndarray, tgt: np.ndarray):

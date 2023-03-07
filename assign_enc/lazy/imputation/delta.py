@@ -35,7 +35,7 @@ class LazyDeltaImputer(LazyImputer):
             dv = vector+np.array(dv_delta)
 
             # Validate associated matrix
-            matrix = self._decode(dv, existence)
+            dv, matrix = self._decode(dv, existence)
             if validate(matrix):
                 return dv, matrix
 

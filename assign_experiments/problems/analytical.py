@@ -23,7 +23,7 @@ class ManualBestEncoder(LazyEncoder):
         """Encode the assignment problem (given by src and tgt nodes) directly to design variables"""
         raise NotImplementedError
 
-    def _decode(self, vector: DesignVector, existence: NodeExistence) -> Optional[np.ndarray]:
+    def _decode(self, vector: DesignVector, existence: NodeExistence) -> Optional[Tuple[DesignVector, np.ndarray]]:
         """Return the connection matrix as would be encoded by the given design vector"""
         raise NotImplementedError
 
@@ -143,10 +143,10 @@ class CombinationBestEncoder(ManualBestEncoder):
     def _encode(self, existence: NodeExistence) -> List[DiscreteDV]:
         return [DiscreteDV(n_opts=self.n_tgt)]
 
-    def _decode(self, vector: DesignVector, existence: NodeExistence) -> Optional[np.ndarray]:
+    def _decode(self, vector: DesignVector, existence: NodeExistence) -> Optional[Tuple[DesignVector, np.ndarray]]:
         matrix = np.zeros((1, self.n_tgt), dtype=int)
         matrix[0, vector[0]] = 1
-        return matrix
+        return vector, matrix
 
     def _pattern_name(self) -> str:
         return 'Combination'
@@ -218,8 +218,8 @@ class AssigningBestEncoder(ManualBestEncoder):
         n_max = self._n_max
         return [DiscreteDV(n_opts=n_max+1) for _ in range(self.n_src*self.n_tgt)]
 
-    def _decode(self, vector: DesignVector, existence: NodeExistence) -> Optional[np.ndarray]:
-        return np.array(vector, dtype=int).reshape((self.n_src, self.n_tgt))
+    def _decode(self, vector: DesignVector, existence: NodeExistence) -> Optional[Tuple[DesignVector, np.ndarray]]:
+        return vector, np.array(vector, dtype=int).reshape((self.n_src, self.n_tgt))
 
     def _pattern_name(self) -> str:
         return 'Assigning'
@@ -309,12 +309,12 @@ class PartitioningBestEncoder(ManualBestEncoder):
     def _encode(self, existence: NodeExistence) -> List[DiscreteDV]:
         return [DiscreteDV(n_opts=self.n_src) for _ in range(self.n_tgt)]
 
-    def _decode(self, vector: DesignVector, existence: NodeExistence) -> Optional[np.ndarray]:
+    def _decode(self, vector: DesignVector, existence: NodeExistence) -> Optional[Tuple[DesignVector, np.ndarray]]:
         vector = np.array(vector)
         matrix = np.zeros((self.n_src, self.n_tgt), dtype=int)
         for i in range(self.n_src):
             matrix[i, vector == i] = 1
-        return matrix
+        return vector, matrix
 
     def _pattern_name(self) -> str:
         return 'Partitioning'
@@ -359,8 +359,8 @@ class DownselectingBestEncoder(ManualBestEncoder):
     def _encode(self, existence: NodeExistence) -> List[DiscreteDV]:
         return [DiscreteDV(n_opts=2) for _ in range(self.n_tgt)]
 
-    def _decode(self, vector: DesignVector, existence: NodeExistence) -> Optional[np.ndarray]:
-        return np.array(vector, dtype=int).reshape((1, self.n_tgt))
+    def _decode(self, vector: DesignVector, existence: NodeExistence) -> Optional[Tuple[DesignVector, np.ndarray]]:
+        return vector, np.array(vector, dtype=int).reshape((1, self.n_tgt))
 
     def _pattern_name(self) -> str:
         return 'Downselecting'
@@ -419,13 +419,13 @@ class ConnectingBestEncoder(ManualBestEncoder):
             n_dv = int(n_dv/2)
         return [DiscreteDV(n_opts=2) for _ in range(n_dv)]
 
-    def _decode(self, vector: DesignVector, existence: NodeExistence) -> Optional[np.ndarray]:
+    def _decode(self, vector: DesignVector, existence: NodeExistence) -> Optional[Tuple[DesignVector, np.ndarray]]:
         matrix = np.zeros((self.n_src, self.n_src), dtype=int)
         n_upper = int(len(vector)/2) if self.directed else len(vector)
         matrix[np.triu_indices(self.n_src, k=1)] = vector[:n_upper]
         if self.directed:
             matrix[np.tril_indices(self.n_src, k=-1)] = vector[n_upper:]
-        return matrix
+        return vector, matrix
 
     def _pattern_name(self) -> str:
         return 'Connecting'
@@ -463,10 +463,10 @@ class PermutingBestEncoder(ManualBestEncoder):
     def _encode(self, existence: NodeExistence) -> List[DiscreteDV]:
         return [DiscreteDV(n_opts=self.n_src) for _ in range(self.n_src)]
 
-    def _decode(self, vector: DesignVector, existence: NodeExistence) -> Optional[np.ndarray]:
+    def _decode(self, vector: DesignVector, existence: NodeExistence) -> Optional[Tuple[DesignVector, np.ndarray]]:
         matrix = np.zeros((self.n_src, self.n_src), dtype=int)
         matrix[np.arange(self.n_src), np.array(vector)] = 1
-        return matrix
+        return vector, matrix
 
     def _pattern_name(self) -> str:
         return 'Permuting'
@@ -545,12 +545,12 @@ class UnorderedCombiningBestEncoder(ManualBestEncoder):
         # Without replacement, each variable can only take n-n_take positions
         return [DiscreteDV(n_opts=self.n_tgt-(self.n_take-1)) for _ in range(self.n_take)]
 
-    def _decode(self, vector: DesignVector, existence: NodeExistence) -> Optional[np.ndarray]:
+    def _decode(self, vector: DesignVector, existence: NodeExistence) -> Optional[Tuple[DesignVector, np.ndarray]]:
         matrix = np.zeros((1, self.n_tgt), dtype=int)
         for i_dv, i in enumerate(vector):
             offset = 0 if self.with_replacement else i_dv
             matrix[0, i+offset] += 1
-        return matrix
+        return vector, matrix
 
     def _pattern_name(self) -> str:
         return 'Combinations With Replacement' if self.with_replacement else 'Combinations'

@@ -29,15 +29,18 @@ def test_assignment_manager():
     assert manager.encoder.n_mat_max == 2
     assert len(manager.design_vars) == 4
 
-    dv, mat = manager.get_matrix([1, 0, 1, 0])
+    dv, is_active, mat = manager.get_matrix([1, 0, 1, 0])
     assert np.all(dv == [1, 0, 1, 0])
+    assert np.all(is_active)
     assert np.all(mat == -1)
 
-    dv, conn_idx = manager.get_conn_idx([1, 0, 1, 0])
+    dv, is_active, conn_idx = manager.get_conn_idx([1, 0, 1, 0])
     assert np.all(dv == [1, 0, 1, 0])
+    assert np.all(is_active)
     assert conn_idx is None
-    dv, conns = manager.get_conns([1, 0, 1, 0])
+    dv, is_active, conns = manager.get_conns([1, 0, 1, 0])
     assert np.all(dv == [1, 0, 1, 0])
+    assert np.all(is_active)
     assert conns is None
 
 

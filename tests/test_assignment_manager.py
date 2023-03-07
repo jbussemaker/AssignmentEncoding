@@ -35,10 +35,11 @@ def test_manager():
     seen_dvs = set()
     for _ in range(100):
         dv = manager.get_random_design_vector()
-        imp_dv, conn_idx = manager.get_conn_idx(dv)
-        imp_dv, conn = manager.get_conns(dv)
+        imp_dv, is_active, conn_idx = manager.get_conn_idx(dv)
+        imp_dv, is_active, conn = manager.get_conns(dv)
 
         assert imp_dv is not None
+        assert is_active is not None
         assert conn is not None
         assert len(conn) > 0
 
@@ -47,7 +48,11 @@ def test_manager():
 
         seen_dvs.add(tuple(imp_dv))
 
-        assert np.all(manager.correct_vector(dv) == imp_dv)
-        assert np.all(manager.correct_vector(imp_dv) == imp_dv)
+        dv_corr, is_act_corr = manager.correct_vector(dv)
+        assert np.all(dv_corr == imp_dv)
+        assert np.all(is_act_corr == is_active)
+        dv_corr, is_act_corr = manager.correct_vector(imp_dv)
+        assert np.all(dv_corr == imp_dv)
+        assert np.all(is_act_corr == is_active)
 
     assert len(seen_dvs) < 100

@@ -28,13 +28,14 @@ class GroupedEncoder(EagerEncoder):
         pass
 
     @classmethod
-    def group_by_values(cls, group_by_values: np.ndarray, normalize_within_group=True, ordinal_base: int = None) -> np.ndarray:
+    def group_by_values(cls, group_by_values: np.ndarray, normalize_within_group=True,
+                        ordinal_base: int = None) -> np.ndarray:
         """
         Get design vectors that uniquely map to different value combinations. Example:
         [[1 2],      [[0 0],
          [1 3],  -->  [0 1],
-         [2 2],       [1 0],
-         [3 2],       [2 0],
+         [2 2],       [1 -1],
+         [3 2],       [2 -1],  # -1 means inactive
 
         Optionally normalize only after determining all groups.
         Optionally convert the grouped design vector values to some other base,
@@ -54,19 +55,21 @@ class GroupedEncoder(EagerEncoder):
                 group_by_values_sub = group_by_values[row_mask, i_col]
                 if len(group_by_values_sub) == 1:
                     next_row_masks.append(row_mask)
-                    design_vectors[row_mask, i_col] = 0 if normalize_within_group else group_by_values_sub[0]
+                    design_vectors[row_mask, i_col] = X_INACTIVE_VALUE
                     continue
 
                 # Check if there are multiple unique values in this sub-division
                 unique_values = sorted(list(set(group_by_values_sub)))
                 if len(unique_values) == 1:
                     next_row_masks.append(row_mask)
-                    design_vectors[row_mask, i_col] = 0 if normalize_within_group else unique_values[0]
+                    design_vectors[row_mask, i_col] = X_INACTIVE_VALUE
                     grouping_needed = True
                     continue
 
                 # Loop over unique values in sub-divisions
                 for value_idx, value in enumerate(unique_values):
+                    if value < 0:
+                        raise ValueError('Values to group by should not contain negative values!')
 
                     # Assign indices for each unique value
                     next_row_mask = row_mask.copy()
@@ -110,9 +113,17 @@ class GroupedEncoder(EagerEncoder):
 
         columns = []
         for i_col in range(values.shape[1]):
-            unique, unique_idx = np.unique(values[:, i_col], return_inverse=True)
+            col_values = values[:, i_col]
+            active_mask = col_values != X_INACTIVE_VALUE
+
+            unique, unique_idx_active = np.unique(col_values[active_mask], return_inverse=True)
+            unique_idx = np.ones((len(col_values),))*X_INACTIVE_VALUE
+            unique_idx[active_mask] = unique_idx_active
+
             n_converted = len(np.base_repr(len(unique)-1))
             col_converted = np.zeros((values.shape[0], n_converted), dtype=int)
+            col_converted[~active_mask, :] = X_INACTIVE_VALUE
+
             for i_value in range(len(unique)):
                 base_converted = [
                     int(char) for char in (np.base_repr(i_value, base=base) if base != 2 else np.binary_repr(i_value))]

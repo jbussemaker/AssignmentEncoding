@@ -39,7 +39,7 @@ class OnDemandLazyEncoder(LazyEncoder):
         """Encode the assignment problem (given by src and tgt nodes) directly to design variables"""
         raise NotImplementedError
 
-    def _decode(self, vector: DesignVector, existence: NodeExistence) -> Optional[np.ndarray]:
+    def _decode(self, vector: DesignVector, existence: NodeExistence) -> Optional[Tuple[DesignVector, np.ndarray]]:
         """Return the connection matrix as would be encoded by the given design vector"""
         raise NotImplementedError
 
