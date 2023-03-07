@@ -224,9 +224,10 @@ class LazyConnIdxMatrixEncoder(LazyEncoder):
                 key, n_dv_i = keys[i_key]
             except IndexError:
                 return
-            imp_vector_i, sub_matrix = self._conn_enc.decode(key, vector_i[:n_dv_i])
-            if sub_matrix is None:
+            decoded_data = self._conn_enc.decode(key, vector_i[:n_dv_i])
+            if decoded_data is None:
                 return
+            imp_vector_i, sub_matrix = decoded_data
             imp_vector[i_dv_start:i_dv_start+n_dv] = X_INACTIVE_VALUE
             imp_vector[i_dv_start:i_dv_start+len(imp_vector_i)] = imp_vector_i
             matrix[i, :] = sub_matrix
