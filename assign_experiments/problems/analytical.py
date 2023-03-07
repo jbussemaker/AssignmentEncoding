@@ -44,7 +44,7 @@ class AnalyticalProblemBase(AssignmentProblem):
     """Test problem where the objective is calculated from the sum of the products of the coefficient of each
     connection, defined by an exponential function."""
 
-    def __init__(self, encoder, n_src: int = 2, n_tgt: int = 3):
+    def __init__(self, encoder=None, n_src: int = 2, n_tgt: int = 3):
         self._n_src = n_src
         self._n_tgt = n_tgt
         self.coeff = self.get_coefficients(self._n_src, self._n_tgt)

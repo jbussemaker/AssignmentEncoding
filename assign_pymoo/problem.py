@@ -414,7 +414,7 @@ class MultiAssignmentProblem(AssignmentProblemBase):
                 selector = EncoderSelector(settings)
                 assignment_manager = selector.get_best_assignment_manager()
                 selector_stage_ = selector._last_selection_stage
-                if selector_stage is None or selector_stage_ > selector_stage:
+                if selector_stage_ is not None and (selector_stage is None or selector_stage_ > selector_stage):
                     selector_stage = selector_stage_
 
             elif isinstance(encoder, (LazyEncoder, EagerEncoder)):
