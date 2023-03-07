@@ -107,7 +107,7 @@ class LazyAmountFirstEncoder(OnDemandLazyEncoder):
         if n_src_tgt_conn is None:
             return
         imp_amt_vector_expanded, n_src_conn, n_tgt_conn = n_src_tgt_conn
-        imp_amount_vector_sel = imp_amt_vector_expanded[self._i_dv_amount[existence]]
+        imp_amount_vector_sel = np.array(imp_amt_vector_expanded)[self._i_dv_amount[existence]]
         imp_amount_vector = np.ones((len(amount_vector),), dtype=int)*X_INACTIVE_VALUE
         imp_amount_vector[:len(imp_amount_vector_sel)] = imp_amount_vector_sel
 
