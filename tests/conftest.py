@@ -1,6 +1,8 @@
 import pytest
+import timeit
 import itertools
 from assign_enc.matrix import *
+from assign_enc.selector import *
 
 
 @pytest.fixture
@@ -12,3 +14,21 @@ def gen_one_per_existence():
         exist.append(NodeExistence(src_exists=[i == i_src for i in range(len(src))],
                                    tgt_exists=[i == i_tgt for i in range(len(tgt))]))
     return AggregateAssignmentMatrixGenerator.create(src=src, tgt=tgt, existence=NodeExistencePatterns(exist))
+
+
+def do_initialize_numba():
+    selector = EncoderSelector(MatrixGenSettings(src=[Node([0, 1])], tgt=[Node([0, 1])]))
+
+    d = None
+    for i in range(2):
+        EncoderSelector._numba_initialized = False
+        t = timeit.default_timer()
+        selector.initialize_numba()
+        delta_t = timeit.default_timer()-t
+        if d is None:
+            d = delta_t
+        else:
+            assert delta_t < d
+
+
+do_initialize_numba()

@@ -21,6 +21,7 @@ class EncoderSelector:
 
     _global_disable_cache = False  # For testing/experiments
     _print_stats = False
+    _numba_initialized = False
 
     encoding_timeout = .25  # sec
     n_mat_max_eager = 1e3
@@ -46,6 +47,7 @@ class EncoderSelector:
         if not self._global_disable_cache and cache and os.path.exists(cache_path):
             with open(cache_path, 'rb') as fp:
                 return pickle.load(fp)
+        self.initialize_numba()
 
         enc_timeout, n_mme, limit_dc_time = self.encoding_timeout, self.n_mat_max_eager, self.limit_dist_corr_time
         if not limit_time:
@@ -62,6 +64,24 @@ class EncoderSelector:
         with open(cache_path, 'wb') as fp:
             pickle.dump(assignment_manager, fp)
         return assignment_manager
+
+    def initialize_numba(self):
+        """Run a simple encoding problem so that numba functions are JIT compiled and compilation time doesn't influence
+        selection timeouts"""
+        if self.__class__._numba_initialized:
+            return
+        self.__class__._numba_initialized = True
+
+        enc_timeout, settings = self.encoding_timeout, self.settings
+
+        self.encoding_timeout = 10
+        self.settings = MatrixGenSettings(
+            src=[Node([0, 1]) for _ in range(2)], tgt=[Node([0, 1]) for _ in range(2)],
+        )
+        log.debug('Initializing numba...')
+        self._get_best_assignment_manager()
+
+        self.encoding_timeout, self.settings = enc_timeout, settings
 
     def _get_best_assignment_manager(self) -> AssignmentManager:
         log.debug('Counting matrices...')

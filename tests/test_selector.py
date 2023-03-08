@@ -8,6 +8,7 @@ def test_selector():
     src = [Node([1], repeated_allowed=False) for _ in range(2)]
     tgt = [Node([0, 1], repeated_allowed=False) for _ in range(4)]
     selector = EncoderSelector(MatrixGenSettings(src, tgt))
+    assert selector._numba_initialized
 
     assert selector._get_n_mat() == (12, 1)
 

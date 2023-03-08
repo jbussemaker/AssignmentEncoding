@@ -799,7 +799,7 @@ class AggregateAssignmentMatrixGenerator:
         return node.conns[0]
 
 
-@numba.jit()
+@numba.njit()
 def _validate_matrix(matrix: np.ndarray, max_conn_mat: np.ndarray, src_node_settings: np.ndarray,
                      tgt_node_settings: np.ndarray, src_n_override: np.ndarray, tgt_n_override: np.ndarray,
                      max_src: np.ndarray, max_tgt: np.ndarray) -> bool:
@@ -834,7 +834,7 @@ def _validate_matrix(matrix: np.ndarray, max_conn_mat: np.ndarray, src_node_sett
     return True
 
 
-@numba.jit()
+@numba.njit()
 def _check_conns(n_conns, node_settings: np.ndarray, max_conn: int) -> bool:  # See get_node_settings for data structure
     if n_conns > max_conn:
         return False
