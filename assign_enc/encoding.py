@@ -1,9 +1,12 @@
 import copy
 import numba
+import warnings
 import numpy as np
 from typing import *
 from assign_enc.matrix import *
 from dataclasses import dataclass
+from scipy.spatial import distance
+from scipy.stats import pearsonr, ConstantInputWarning
 
 __all__ = ['DiscreteDV', 'DesignVector', 'PartialDesignVector', 'MatrixSelectMask', 'X_INACTIVE_VALUE',
            'IsActiveVector', 'EagerImputer', 'Encoder', 'EagerEncoder', 'filter_design_vectors', 'flatten_matrix',
@@ -187,17 +190,14 @@ class Encoder:
 
     @staticmethod
     def _calc_internal_dv_distance(arr: np.ndarray) -> np.ndarray:
-        from scipy.spatial import distance
         return distance.cdist(arr, arr, 'cityblock')  # Manhattan distance
 
     @staticmethod
     def _calc_internal_distance(arr: np.ndarray) -> np.ndarray:
-        from scipy.spatial import distance
         return distance.cdist(arr, arr, 'cityblock')  # Manhattan distance
 
     @staticmethod
     def _calc_distance_corr(dist1, dist2) -> float:
-        from scipy.stats import pearsonr
         if isinstance(dist1, list) and len(dist1) > 0 and isinstance(dist1[0], list):
             dist1 = np.array([val for values in dist1 for val in values])
             dist2 = np.array([val for values in dist2 for val in values])
@@ -205,6 +205,8 @@ class Encoder:
             raise RuntimeError(f'Different lengths: {len(dist1)} != {len(dist2)}')
         if len(dist1) < 2:
             return 1.
+
+        warnings.filterwarnings('ignore', category=ConstantInputWarning)
         corr = pearsonr(dist1, dist2).statistic
         return 1. if np.isnan(corr) else corr
 
