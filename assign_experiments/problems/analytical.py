@@ -331,7 +331,7 @@ class AnalyticalDownselectingProblem(AnalyticalProblemBase):
     """Downselecting pattern: 1 source selecting one or more of the targets:
     source has any number connection, targets 0 or 1, no repetitions"""
 
-    def __init__(self, encoder, n_tgt: int = 3):
+    def __init__(self, encoder=None, n_tgt: int = 3):
         super().__init__(encoder, n_src=1, n_tgt=n_tgt)
 
     def get_init_kwargs(self) -> dict:
@@ -371,7 +371,7 @@ class AnalyticalConnectingProblem(AnalyticalProblemBase):
     sources and targets have any nr of connections, but cannot be connected to themselves, no repetitions;
     optionally undirected --> only one triangle of the matrix can be connected to"""
 
-    def __init__(self, encoder, n: int = 3, directed=True):
+    def __init__(self, encoder=None, n: int = 3, directed=True):
         self._src_nodes = [Node(min_conn=0, repeated_allowed=False) for _ in range(n)]
         self._tgt_nodes = [Node(min_conn=0, repeated_allowed=False) for _ in range(n)]
         self._n = n
@@ -434,7 +434,7 @@ class ConnectingBestEncoder(ManualBestEncoder):
 class AnalyticalPermutingProblem(AnalyticalProblemBase):
     """Permutation pattern: sources and targets (same amount) have 1 connection each, no repetitions"""
 
-    def __init__(self, encoder, n: int = 3):
+    def __init__(self, encoder=None, n: int = 3):
         super().__init__(encoder, n_src=n, n_tgt=n)
 
     def get_init_kwargs(self) -> dict:
@@ -507,7 +507,7 @@ class AnalyticalUnorderedNonReplaceCombiningProblem(AnalyticalProblemBase):
     """Unordered non-replacing combining pattern (itertools combinations function: select n_take elements from n_tgt targets):
     1 source has n_take connections to n_tgt targets, no repetition"""
 
-    def __init__(self, encoder, n_take: int = 2, n_tgt: int = 3):
+    def __init__(self, encoder=None, n_take: int = 2, n_tgt: int = 3):
         self._n_take = min(n_take, n_tgt)
         super().__init__(encoder, n_src=1, n_tgt=n_tgt)
 
