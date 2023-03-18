@@ -92,7 +92,7 @@ def _get_problem_factory(cls, **kwargs) -> Callable[[Encoder], AssignmentProblem
 
 
 def get_problems(size: Size, return_factories=False) -> Union[List[AssignmentProblem], List[Callable[[Encoder], AssignmentProblem]]]:
-    init_enc = lambda: OneVarEncoder(DEFAULT_EAGER_IMPUTER())
+    init_enc = lambda: EnumOrdinalEncoder(DEFAULT_LAZY_IMPUTER())
     prob_kwargs = [
         (AnalyticalAssignmentProblem, {Size.SM: {'n_src': 2, 'n_tgt': 4}, Size.MD: {'n_src': 3, 'n_tgt': 4},
                                        Size.LG: {'n_src': 4, 'n_tgt': 4}}, init_enc()),
@@ -131,12 +131,6 @@ def show_problem_sizes(size: Size, reset_pf=False):
         print('')
 
 
-def _get_recursive_encoder_factory(n_divide: int):
-    def _encoder_factory(imp):
-        return RecursiveEncoder(imp, n_divide=n_divide)
-    return _encoder_factory
-
-
 def exp_dist_corr_convergence(n_repeat=8):
     Experimenter.capture_log()
     n_dist_corr = [10, 20, 50, 100, 200, 500, 1000, 2000, -1]
@@ -153,7 +147,7 @@ def exp_dist_corr_convergence(n_repeat=8):
         DirectMatrixEncoder(DEFAULT_EAGER_IMPUTER()),
         AmountFirstGroupedEncoder(DEFAULT_EAGER_IMPUTER(), TotalAmountGrouper(), OneVarLocationGrouper()),
         AmountFirstGroupedEncoder(DEFAULT_EAGER_IMPUTER(), SourceAmountGrouper(), FlatIndexLocationGrouper()),
-        RecursiveEncoder(DEFAULT_EAGER_IMPUTER(), n_divide=2),
+        EnumRecursiveEncoder(DEFAULT_LAZY_IMPUTER(), n_divide=2),
         LazyDirectMatrixEncoder(lazy_imputer()),
         LazyConnIdxMatrixEncoder(lazy_imputer(), FlatConnCombsEncoder()),
         LazyConnIdxMatrixEncoder(lazy_imputer(), FlatConnCombsEncoder(), amount_first=True),
@@ -224,7 +218,7 @@ def exp_dist_corr_perm():
     encoders += EXP4_EAGER_ENCODERS
     imputers += [DEFAULT_EAGER_IMPUTER]*len(EXP4_EAGER_ENCODERS)
     encoders += EAGER_ENUM_ENCODERS
-    imputers += [DEFAULT_EAGER_IMPUTER]*len(EAGER_ENUM_ENCODERS)
+    imputers += [DEFAULT_LAZY_IMPUTER]*len(EAGER_ENUM_ENCODERS)
     encoders += EXP4_LAZY_ENCODERS
     imputers += [DEFAULT_LAZY_IMPUTER]*len(EXP4_LAZY_ENCODERS)
 
@@ -300,7 +294,7 @@ def exp_sbo_convergence(size: Size, n_repeat=8, i_prob=None, do_run=True):
     encoders += eager_encoders
     imputers += [DEFAULT_EAGER_IMPUTER]*len(eager_encoders)
     encoders += EAGER_ENUM_ENCODERS
-    imputers += [DEFAULT_EAGER_IMPUTER]*len(EAGER_ENUM_ENCODERS)
+    imputers += [DEFAULT_LAZY_IMPUTER]*len(EAGER_ENUM_ENCODERS)
     encoders += EXP4_LAZY_ENCODERS
     imputers += [DEFAULT_LAZY_IMPUTER]*len(EXP4_LAZY_ENCODERS)
 
@@ -448,7 +442,7 @@ def run_experiment(size: Size, sbo=False, n_repeat=8, i_prob=None, do_run=True, 
     encoders += eager_encoders
     imputers += [DEFAULT_EAGER_IMPUTER]*len(eager_encoders)
     encoders += EAGER_ENUM_ENCODERS
-    imputers += [DEFAULT_EAGER_IMPUTER]*len(EAGER_ENUM_ENCODERS)
+    imputers += [DEFAULT_LAZY_IMPUTER]*len(EAGER_ENUM_ENCODERS)
     encoders += EXP4_LAZY_ENCODERS
     imputers += [DEFAULT_LAZY_IMPUTER]*len(EXP4_LAZY_ENCODERS)
 
@@ -699,7 +693,7 @@ def check_manual_encoding():
     from scipy.stats import pearsonr
 
     preselected_encoders = [str(enc_factory(DEFAULT_EAGER_IMPUTER())) for enc_factory in EAGER_ENCODERS]
-    preselected_encoders += [str(enc_factory(DEFAULT_EAGER_IMPUTER())) for enc_factory in EAGER_ENUM_ENCODERS]
+    preselected_encoders += [str(enc_factory(DEFAULT_LAZY_IMPUTER())) for enc_factory in EAGER_ENUM_ENCODERS]
     preselected_encoders += [str(enc_factory(DEFAULT_LAZY_IMPUTER())) for enc_factory in LAZY_ENCODERS]
     preselected_encoders = set(preselected_encoders)
 

@@ -1,3 +1,4 @@
+from assign_enc.enumerating import *
 from assign_enc.lazy.encodings import *
 from assign_enc.lazy.imputation import *
 from assign_enc.eager.encodings import *
@@ -5,7 +6,7 @@ from assign_enc.eager.imputation import *
 
 
 EAGER_ENCODERS = [
-    lambda imp: DirectMatrixEncoder(imp),
+    # lambda imp: DirectMatrixEncoder(imp),  # Lazy direct matrix is as good
     # lambda imp: DirectMatrixEncoder(imp, remove_gaps=False),
     # lambda imp: ElementGroupedEncoder(imp),
     lambda imp: ElementGroupedEncoder(imp, normalize_within_group=False),
@@ -45,14 +46,7 @@ EAGER_ENCODERS = [
     # lambda imp: AmountFirstGroupedEncoder(imp, TargetAmountFlattenedGrouper(), RelCoordIndexLocationGrouper()),
 ]
 
-DEFAULT_EAGER_ENCODER = lambda: OneVarEncoder(DEFAULT_EAGER_IMPUTER())
-
-EAGER_ENUM_ENCODERS = [  # Encoders only based on counting the possibilities, ignoring the actual connection patterns
-    lambda imp: OneVarEncoder(imp),
-    lambda imp: RecursiveEncoder(imp, n_divide=2),
-    lambda imp: RecursiveEncoder(imp, n_divide=3),
-    lambda imp: RecursiveEncoder(imp, n_divide=4),
-]
+DEFAULT_EAGER_ENCODER = lambda: DirectMatrixEncoder(DEFAULT_EAGER_IMPUTER())
 
 EAGER_IMPUTERS = [
     lambda: FirstImputer(),
@@ -93,6 +87,13 @@ LAZY_ENCODERS = [
 ]
 
 DEFAULT_LAZY_ENCODER = lambda: LazyDirectMatrixEncoder(DEFAULT_LAZY_IMPUTER())
+
+EAGER_ENUM_ENCODERS = [  # Encoders only based on counting the possibilities, ignoring the actual connection patterns
+    lambda imp: EnumOrdinalEncoder(imp),
+    lambda imp: EnumRecursiveEncoder(imp, n_divide=2),
+    lambda imp: EnumRecursiveEncoder(imp, n_divide=3),
+    lambda imp: EnumRecursiveEncoder(imp, n_divide=4),
+]
 
 LAZY_IMPUTERS = [
     lambda: LazyFirstImputer(),

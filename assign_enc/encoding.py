@@ -256,7 +256,7 @@ class EagerEncoder(Encoder):
 
         # Inactive variables in the design vectors are encoded as -1 (X_INACTIVE_VALUE), however, for lookup
         # (_design_vector_map) they are stored as 0's, as that is what real design vectors would also have
-        self._design_vector_map = {existence: {tuple(dv): i for i, dv in enumerate(des_vec)}
+        self._design_vector_map = {existence: {tuple(dv.tolist()): i for i, dv in enumerate(des_vec)}
                                    for existence, des_vec in des_vectors_zero.items()}
 
         self._design_vars = self.get_design_variables(des_vectors)
@@ -379,7 +379,6 @@ class EagerEncoder(Encoder):
     def is_valid_vector(self, vector: DesignVector, existence: NodeExistence = None,
                         matrix_mask: MatrixSelectMask = None) -> bool:
 
-        original_vector = vector
         vector, n_dv, n_extra = self._correct_vector_size(vector)
         vector, is_corrected = self.correct_vector_bounds(vector, self.design_vars)
         if is_corrected:
@@ -470,8 +469,12 @@ class EagerEncoder(Encoder):
                 continue
 
             # Check if all design vectors are unique
-            if len({tuple(dv) for dv in des_vectors}) < des_vectors.shape[0]:
-                raise RuntimeError('Not all design vectors are unique!')
+            seen_dvs = set()
+            for dv in des_vectors:
+                dv_key = tuple(dv.tolist())
+                if dv_key in seen_dvs:
+                    raise RuntimeError('Not all design vectors are unique!')
+                seen_dvs.add(dv_key)
 
             # Check bounds
             if np.min(des_vectors[des_vectors != X_INACTIVE_VALUE]) != 0:

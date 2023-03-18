@@ -663,13 +663,15 @@ if __name__ == '__main__':
     # _do_time(), exit()
 
     # p = AnalyticalCombinationProblem(DEFAULT_EAGER_ENCODER())
-    # p = AnalyticalAssignmentProblem(DEFAULT_EAGER_ENCODER())  # Very high imputation ratios
+    # p = AnalyticalAssignmentProblem(DEFAULT_EAGER_ENCODER())
+    p = AnalyticalAssignmentProblem(EnumRecursiveEncoder(DEFAULT_LAZY_IMPUTER(), n_divide=2), n_src=3, n_tgt=4)
+    # p = AnalyticalAssignmentProblem(DEFAULT_EAGER_ENCODER(), n_src=3, n_tg=4)
     # p = AnalyticalAssignmentProblem(DEFAULT_EAGER_ENCODER(), injective=True, n_src=2, n_tgt=4)
     # p = AnalyticalAssignmentProblem(DEFAULT_EAGER_ENCODER(), injective=True)
     # p = AnalyticalAssignmentProblem(DEFAULT_EAGER_ENCODER(), injective=True, n_src=5, n_tgt=5)
     # p = AnalyticalAssignmentProblem(DEFAULT_EAGER_ENCODER(), surjective=True)
     # p = AnalyticalAssignmentProblem(DEFAULT_EAGER_ENCODER(), injective=True, surjective=True)
-    p = AnalyticalAssignmentProblem(DEFAULT_EAGER_ENCODER(), n_src=2, n_tgt=4, repeatable=True)
+    # p = AnalyticalAssignmentProblem(DEFAULT_EAGER_ENCODER(), n_src=2, n_tgt=4, repeatable=True)
     # p = AnalyticalPartitioningProblem(DEFAULT_EAGER_ENCODER())
     # p = AnalyticalPartitioningProblem(DEFAULT_EAGER_ENCODER(), covering=True, n_src=3, n_tgt=4)
     # p = AnalyticalPartitioningProblem(LazyAmountFirstEncoder(DEFAULT_LAZY_IMPUTER(), FlatLazyAmountEncoder(), FlatLazyConnectionEncoder()), n_src=2, n_tgt=4, covering=True)

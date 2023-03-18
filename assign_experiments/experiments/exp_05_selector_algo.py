@@ -48,7 +48,7 @@ def get_gnc_problem_factories() -> List[Callable[[Optional[Encoder]], Assignment
 
 def show_gnc_problem_sizes(reset_pf=False, plot=False):
     for problem_factory in get_gnc_problem_factories():
-        problem = problem_factory(OneVarEncoder(DEFAULT_EAGER_IMPUTER()))
+        problem = problem_factory(EnumOrdinalEncoder(DEFAULT_LAZY_IMPUTER()))
         show_problem_size(problem)
         if reset_pf:
             problem.reset_pf_cache()
@@ -87,7 +87,7 @@ def get_multi_comb_problem_factories() -> List[Callable[[Optional[Encoder]], Ass
 
 def show_multi_comb_problem_sizes(reset_pf=False, plot=False):
     for problem_factory in get_multi_comb_problem_factories():
-        problem = problem_factory(OneVarEncoder(DEFAULT_EAGER_IMPUTER()))
+        problem = problem_factory(EnumOrdinalEncoder(DEFAULT_LAZY_IMPUTER()))
         show_problem_size(problem)
         if reset_pf:
             problem.reset_pf_cache()
@@ -113,12 +113,12 @@ def plot_pareto_fronts(reset_pf=False):
     factories = get_problem_factories()
     if reset_pf:
         for i, problem_factory in enumerate(factories):
-            problem = problem_factory(OneVarEncoder(DEFAULT_EAGER_IMPUTER()))
+            problem = problem_factory(EnumOrdinalEncoder(DEFAULT_LAZY_IMPUTER()))
             log.info(f'PF of problem {i+1}/{len(factories)}: {problem!s}')
             problem.reset_pf_cache()
             problem.pareto_front()
     for i, problem_factory in enumerate(factories):
-        problem = problem_factory(OneVarEncoder(DEFAULT_EAGER_IMPUTER()))
+        problem = problem_factory(EnumOrdinalEncoder(DEFAULT_LAZY_IMPUTER()))
         log.info(f'Plotting problem {i+1}/{len(factories)}: {problem!s}')
         problem.plot_pf(show_approx_f_range=True, n_sample=1000, show=False,
                         filename=f'{res_folder}/{i:02d}_pf_{secure_filename(str(problem))}.png')

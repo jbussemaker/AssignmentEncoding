@@ -19,7 +19,7 @@ def get_vary_information_error_problem():
     problem = AnalyticalConnectingProblem(DEFAULT_EAGER_ENCODER(), n=4)
     encoders = [
         DirectMatrixEncoder(DEFAULT_EAGER_IMPUTER()),
-        OneVarEncoder(DEFAULT_EAGER_IMPUTER()),
+        EnumOrdinalEncoder(DEFAULT_LAZY_IMPUTER()),
     ]
     return problem, encoders
 
@@ -27,7 +27,7 @@ def get_vary_information_error_problem():
 def get_vary_information_index_problem():
     problem = AnalyticalConnectingProblem(DEFAULT_EAGER_ENCODER(), n=4)
     encoders = [
-        OneVarEncoder(DEFAULT_EAGER_IMPUTER()),
+        EnumOrdinalEncoder(DEFAULT_LAZY_IMPUTER()),
         DirectMatrixEncoder(DEFAULT_EAGER_IMPUTER()),
     ]
     return problem, encoders

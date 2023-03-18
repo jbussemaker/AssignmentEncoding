@@ -205,7 +205,7 @@ class EncoderSelector:
                 return assignment_managers[i_best]
 
         # Also include enumeration-based encoders
-        df_enum, enum_assignment_mgr = _create_managers(EAGER_ENUM_ENCODERS, self.eager_imputer, dist_corr_eager_limit)
+        df_enum, enum_assignment_mgr = _create_managers(EAGER_ENUM_ENCODERS, self.lazy_imputer, dist_corr_eager_limit)
         if np.all(np.isnan(df_score.dist_corr)):
             df_enum.dist_corr = np.nan
         df_score = pd.concat([df_score, df_enum], ignore_index=True)

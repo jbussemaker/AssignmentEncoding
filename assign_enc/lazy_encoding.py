@@ -5,7 +5,8 @@ from typing import *
 from assign_enc.matrix import *
 from assign_enc.encoding import *
 
-__all__ = ['LazyImputer', 'LazyEncoder', 'DesignVector', 'DiscreteDV', 'NodeExistence', 'X_INACTIVE_VALUE']
+__all__ = ['LazyImputer', 'LazyEncoder', 'DesignVector', 'DiscreteDV', 'NodeExistence', 'X_INACTIVE_VALUE',
+           'QuasiLazyEncoder']
 
 
 class LazyImputer:
@@ -348,6 +349,46 @@ class LazyEncoder(Encoder):
 
     def _decode(self, vector: DesignVector, existence: NodeExistence) -> Optional[Tuple[DesignVector, np.ndarray]]:
         """Return the connection matrix as would be encoded by the given design vector"""
+        raise NotImplementedError
+
+    def __repr__(self):
+        raise NotImplementedError
+
+    def __str__(self):
+        raise NotImplementedError
+
+
+class QuasiLazyEncoder(LazyEncoder):
+    """Lazy encoder that does depend on generating all matrices, however does not explicitly define all design vectors"""
+
+    def __init__(self, imputer: LazyImputer):
+        super().__init__(imputer)
+        self._matrix_map = None
+
+    def _encode_prepare(self):
+        self._matrix_map = self._matrix_gen.get_agg_matrix(cache=True)
+
+    def _get_matrix(self, existence: NodeExistence) -> Optional[np.ndarray]:
+        return self._matrix_map.get(existence)
+
+    def _encode(self, existence: NodeExistence) -> List[DiscreteDV]:
+        matrix = self._get_matrix(existence)
+        if matrix is None:
+            raise RuntimeError(f'Encoding an unknown existence scheme: {existence!r}')
+        return self._encode_matrix(matrix)
+
+    def _decode(self, vector: DesignVector, existence: NodeExistence) -> Optional[Tuple[DesignVector, np.ndarray]]:
+        matrix = self._get_matrix(existence)
+        if matrix is None or matrix.shape[0] == 0:
+            null_matrix = np.zeros((len(self._matrix_gen.src), len(self._matrix_gen.tgt)), dtype=int)
+            return vector, null_matrix
+
+        return self._decode_matrix(vector, matrix)
+
+    def _encode_matrix(self, matrix: np.ndarray) -> List[DiscreteDV]:
+        raise NotImplementedError
+
+    def _decode_matrix(self, vector: DesignVector, matrix: np.ndarray) -> Optional[Tuple[DesignVector, np.ndarray]]:
         raise NotImplementedError
 
     def __repr__(self):

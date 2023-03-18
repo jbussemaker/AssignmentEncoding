@@ -1,33 +1,36 @@
 import numpy as np
 from assign_enc.matrix import *
-from assign_enc.eager.imputation.first import *
-from assign_enc.eager.encodings.matrix_count import *
+from assign_enc.enumerating.ordinal import *
+from assign_enc.enumerating.recursive import *
+from assign_enc.lazy.imputation.first import *
 
 
 def test_encoding():
-    for n in range(15):
-        matrix = np.random.randint(0, 3, (n, 3, 4))
-        enc = OneVarEncoder(FirstImputer(), matrix)
+    enc = EnumOrdinalEncoder(LazyFirstImputer())
+    enc.set_settings(MatrixGenSettings(src=[Node([1])], tgt=[Node([0])]))
+    assert len(enc.design_vars) == 0
 
-        assert enc.n_mat_max == n
-        if n <= 1:
-            assert len(enc.design_vars) == 0
-            continue
-        assert len(enc.design_vars) == 1
-        assert enc.design_vars[0].n_opts == n
+    settings = MatrixGenSettings(src=[Node(min_conn=0, repeated_allowed=False) for _ in range(2)],
+                                 tgt=[Node([0, 1], repeated_allowed=False) for _ in range(2)])
+    enc = EnumOrdinalEncoder(LazyFirstImputer())
+    enc.set_settings(settings)
+    matrix = enc.matrix_gen.get_agg_matrix()[NodeExistence()]
 
-        assert enc.get_imputation_ratio() == 1.
-        assert enc.get_distance_correlation()
+    assert len(enc.design_vars) == 1
+    assert enc.design_vars[0].n_opts == matrix.shape[0]
 
-        for i in range(n):
-            dv, mat = enc.get_matrix([i])
-            assert dv == [i]
-            assert np.all(mat == matrix[i, :, :])
+    assert enc.get_imputation_ratio() == 1.
+    assert enc.get_distance_correlation()
+
+    for i in range(matrix.shape[0]):
+        dv, mat = enc.get_matrix([i])
+        assert dv == [i]
+        assert np.all(mat == matrix[i, :, :])
 
 
 def test_one_to_one(gen_one_per_existence: AggregateAssignmentMatrixGenerator):
-    encoder = OneVarEncoder(FirstImputer())
-    encoder.matrix = gen_one_per_existence.get_agg_matrix()
+    encoder = EnumOrdinalEncoder(LazyFirstImputer())
+    encoder.set_settings(gen_one_per_existence.settings)
     assert len(encoder.design_vars) == 0
 
     assert encoder.get_n_design_points() == 1
@@ -39,11 +42,13 @@ def test_one_to_one(gen_one_per_existence: AggregateAssignmentMatrixGenerator):
 def test_recursive_encoding():
     for n_divide in range(15):
         for n in range(15):
-            enc = RecursiveEncoder(FirstImputer(), n_divide=n_divide)
-            assert enc.n_divide == max(2, n_divide)
-            enc.matrix = np.random.randint(0, 3, (n, 3, 4))
+            settings = MatrixGenSettings(src=[Node([1])], tgt=[Node([0, 1]) for _ in range(n)])
 
-            assert enc.n_mat_max == n
+            enc = EnumRecursiveEncoder(LazyFirstImputer(), n_divide=n_divide)
+            assert enc.n_divide == max(2, n_divide)
+            enc.set_settings(settings)
+            assert enc.matrix_gen.count_all_matrices() == n
+
             if n <= 1:
                 assert len(enc.design_vars) == 0
                 continue
@@ -65,8 +70,8 @@ def test_recursive_encoding():
 
 def test_one_to_one_recursive(gen_one_per_existence: AggregateAssignmentMatrixGenerator):
     for n_divide in range(2, 4):
-        encoder = RecursiveEncoder(FirstImputer(), n_divide=n_divide)
-        encoder.matrix = gen_one_per_existence.get_agg_matrix()
+        encoder = EnumRecursiveEncoder(LazyFirstImputer(), n_divide=n_divide)
+        encoder.set_settings(gen_one_per_existence.settings)
         assert len(encoder.design_vars) == 0
 
         assert encoder.get_n_design_points() == 1

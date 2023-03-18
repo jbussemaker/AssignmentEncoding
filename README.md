@@ -242,6 +242,7 @@ Conclusions:
   - For some problems their imputation is low, but then other encoders with low imputation ratio are also available
 - The following eager encoders can be disregarded for selection:
   - Direct matrix encoding without gap removal: usually results in same metrics as direct matrix, however might be worse
+  - Direct matrix encoding: usually the same results as for the lazy equivalent
   - Element grouping without group normalization: results in same metrics, or worse imputation ratio
   - The relative versions of flat index and coord index location groupers: are same as their non-relative versions
 - Regarding timings:
