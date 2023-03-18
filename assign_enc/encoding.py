@@ -217,6 +217,7 @@ class Encoder:
 
             matrix = matrix[:n]
             des_vectors = des_vectors[:n]
+            des_vectors[des_vectors == X_INACTIVE_VALUE] = 0
             dv_dist_all.append(list(self._calc_internal_dv_distance(des_vectors)[np.triu_indices(des_vectors.shape[0], k=1)]))
             mat_dist_all.append(list(self._calc_internal_distance(matrix)[np.triu_indices(matrix.shape[0], k=1)]))
 

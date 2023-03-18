@@ -375,7 +375,7 @@ class QuasiLazyEncoder(LazyEncoder):
         matrix = self._get_matrix(existence)
         if matrix is None:
             raise RuntimeError(f'Encoding an unknown existence scheme: {existence!r}')
-        return self._encode_matrix(matrix)
+        return self._encode_matrix(matrix, existence)
 
     def _decode(self, vector: DesignVector, existence: NodeExistence) -> Optional[Tuple[DesignVector, np.ndarray]]:
         matrix = self._get_matrix(existence)
@@ -383,12 +383,13 @@ class QuasiLazyEncoder(LazyEncoder):
             null_matrix = np.zeros((len(self._matrix_gen.src), len(self._matrix_gen.tgt)), dtype=int)
             return vector, null_matrix
 
-        return self._decode_matrix(vector, matrix)
+        return self._decode_matrix(vector, matrix, existence)
 
-    def _encode_matrix(self, matrix: np.ndarray) -> List[DiscreteDV]:
+    def _encode_matrix(self, matrix: np.ndarray, existence: NodeExistence) -> List[DiscreteDV]:
         raise NotImplementedError
 
-    def _decode_matrix(self, vector: DesignVector, matrix: np.ndarray) -> Optional[Tuple[DesignVector, np.ndarray]]:
+    def _decode_matrix(self, vector: DesignVector, matrix: np.ndarray, existence: NodeExistence) \
+            -> Optional[Tuple[DesignVector, np.ndarray]]:
         raise NotImplementedError
 
     def __repr__(self):

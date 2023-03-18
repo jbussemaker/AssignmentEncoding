@@ -22,7 +22,7 @@ class EnumRecursiveEncoder(QuasiLazyEncoder):
         self._dv_last = None
         self._dv_inactive_key = None
 
-    def _encode_matrix(self, matrix: np.ndarray) -> List[DiscreteDV]:
+    def _encode_matrix(self, matrix: np.ndarray, existence: NodeExistence) -> List[DiscreteDV]:
         n_mat = matrix.shape[0]
         if n_mat <= 1:
             return []
@@ -44,7 +44,8 @@ class EnumRecursiveEncoder(QuasiLazyEncoder):
 
         return [DiscreteDV(n_opts=n) for _ in range(n_var)]
 
-    def _decode_matrix(self, vector: DesignVector, matrix: np.ndarray) -> Optional[Tuple[DesignVector, np.ndarray]]:
+    def _decode_matrix(self, vector: DesignVector, matrix: np.ndarray, existence: NodeExistence) \
+            -> Optional[Tuple[DesignVector, np.ndarray]]:
         if len(vector) == 0:
             return vector, matrix[0, :, :]
 

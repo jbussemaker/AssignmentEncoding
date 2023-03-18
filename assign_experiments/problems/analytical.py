@@ -683,7 +683,8 @@ if __name__ == '__main__':
 
     try:
         with Encoder.with_early_detect_high_imp_ratio(100):
-            p = p.get_for_encoder(EAGER_ENCODERS[1](DEFAULT_EAGER_IMPUTER()))
+            # p = p.get_for_encoder(EAGER_ENCODERS[1](DEFAULT_EAGER_IMPUTER()))
+            p = p.get_for_encoder(LazyAmountFirstEncoder(DEFAULT_LAZY_IMPUTER(), TotalLazyAmountEncoder(), FlatLazyConnectionEncoder()))
     except DetectedHighImpRatio:
         exit()
     print(p.get_imputation_ratio())

@@ -1,8 +1,8 @@
 import functools
 import numpy as np
 from typing import *
+from collections import defaultdict
 from assign_enc.lazy_encoding import *
-from assign_enc.lazy.encodings.on_demand_base import *
 from assign_enc.lazy.encodings.conn_idx import ConnCombsEncoder
 from assign_enc.eager.encodings.grouped_base import GroupedEncoder
 
@@ -43,10 +43,11 @@ class LazyConnectionEncoder:
     def encode_prepare(self):
         pass
 
-    def encode(self, n_src_n_tgt: NList, existence: NodeExistence, encoder: OnDemandLazyEncoder) -> List[DiscreteDV]:
+    def encode(self, n_src_n_tgt: NList, n_matrix_map: Dict[tuple, np.ndarray], existence: NodeExistence,
+               encoder: QuasiLazyEncoder) -> List[DiscreteDV]:
         raise NotImplementedError
 
-    def decode(self, n_src_conn, n_tgt_conn, vector: DesignVector, encoder: OnDemandLazyEncoder,
+    def decode(self, n_src_conn, n_tgt_conn, matrices: np.ndarray, vector: DesignVector, encoder: QuasiLazyEncoder,
                existence: NodeExistence) -> Optional[Tuple[DesignVector, np.ndarray]]:
         raise NotImplementedError
 
@@ -57,7 +58,7 @@ class LazyConnectionEncoder:
         raise NotImplementedError
 
 
-class LazyAmountFirstEncoder(OnDemandLazyEncoder):
+class LazyAmountFirstEncoder(QuasiLazyEncoder):
     """Base class for an encoder that first defines one or more design variables for selecting the amount of
     connections, and then selects the connection pattern. Generates matrices only when needed (on demand)."""
 
@@ -70,6 +71,7 @@ class LazyAmountFirstEncoder(OnDemandLazyEncoder):
         self._n_dv_amount = {}
         self._i_dv_conn = {}
         self._n_dv_conn_expand = {}
+        self._n_matrix_map = {}
 
     def _encode_prepare(self):
         super()._encode_prepare()
@@ -79,27 +81,37 @@ class LazyAmountFirstEncoder(OnDemandLazyEncoder):
         self._n_dv_amount = {}
         self._i_dv_conn = {}
         self._n_dv_conn_expand = {}
+        self._n_matrix_map = {}
 
         self.amount_encoder.encode_prepare()
         self.conn_encoder.encode_prepare()
 
-    def _encode(self, existence: NodeExistence) -> List[DiscreteDV]:
-        n_src_n_tgt = [(n_src_conn, n_tgt_conn)
-                       for n_src_conn, n_tgt_conn, _ in self.iter_n_src_n_tgt(existence=existence)]
+    def _encode_matrix(self, matrix: np.ndarray, existence: NodeExistence) -> List[DiscreteDV]:
+        mat_n_src, mat_n_tgt = np.sum(matrix, axis=2), np.sum(matrix, axis=1)
+
+        n_src_n_tgt_map = defaultdict(list)
+        for i, n_src in enumerate(mat_n_src):
+            n_src_n_tgt_map[(tuple(n_src), tuple(mat_n_tgt[i]))].append(i)
+        n_src_n_tgt = list(n_src_n_tgt_map.keys())
+
         dv_amount = self.amount_encoder.encode(self.n_src, self.tgt, n_src_n_tgt, existence)
         dv_amount, self._i_dv_amount[existence], self._n_dv_amount_expand[existence] = self._filter_dvs(dv_amount)
         self._n_dv_amount[existence] = len(dv_amount)
 
-        dv_conn = self.conn_encoder.encode(n_src_n_tgt, existence, self)
+        self._n_matrix_map[existence] = n_matrix_map = \
+            {n_conn_key: matrix[indices, :, :] for n_conn_key, indices in n_src_n_tgt_map.items()}
+        dv_conn = self.conn_encoder.encode(n_src_n_tgt, n_matrix_map, existence, self)
         dv_conn, self._i_dv_conn[existence], self._n_dv_conn_expand[existence] = self._filter_dvs(dv_conn)
 
         return dv_amount+dv_conn
 
-    def _decode(self, vector: DesignVector, existence: NodeExistence) -> Optional[Tuple[DesignVector, np.ndarray]]:
+    def _decode_matrix(self, vector: DesignVector, matrix: np.ndarray, existence: NodeExistence) \
+            -> Optional[Tuple[DesignVector, np.ndarray]]:
         if existence not in self._n_dv_amount:
             return
         n_dv_amt = self._n_dv_amount[existence]
 
+        # Decode connection amounts
         amount_vector = vector[:n_dv_amt]
         amount_vector_expanded, _ = \
             self._unfilter_dvs(amount_vector, self._i_dv_amount[existence], self._n_dv_amount_expand[existence])
@@ -116,7 +128,13 @@ class LazyAmountFirstEncoder(OnDemandLazyEncoder):
         conn_vector_expanded, _ = self._unfilter_dvs(
             conn_vector, self._i_dv_conn[existence], self._n_dv_conn_expand[existence])
 
-        matrix_data = self.conn_encoder.decode(n_src_conn, n_tgt_conn, conn_vector_expanded, self, existence)
+        # Decode connections matrix
+        n_conn_key = (tuple(n_src_conn), tuple(n_tgt_conn))
+        matrices = self._n_matrix_map.get(existence, {}).get(n_conn_key)
+        if matrices is None:
+            return
+
+        matrix_data = self.conn_encoder.decode(n_src_conn, n_tgt_conn, matrices, conn_vector_expanded, self, existence)
         if matrix_data is None:
             return
         imp_conn_vector_expanded, matrix = matrix_data
@@ -255,71 +273,20 @@ class FlatLazyConnectionEncoder(LazyConnectionEncoder):
     def encode_prepare(self):
         self._n_exist_max = {}
 
-    def encode(self, n_src_n_tgt: NList, existence: NodeExistence, encoder: OnDemandLazyEncoder) -> List[DiscreteDV]:
+    def encode(self, n_src_n_tgt: NList, n_matrix_map: Dict[tuple, np.ndarray], existence: NodeExistence,
+               encoder: QuasiLazyEncoder) -> List[DiscreteDV]:
 
-        @functools.lru_cache(maxsize=None)
-        def _count_matrices(n_src_, n_tgt_):
-            return encoder.count_matrices(n_src_, n_tgt_)
-
-        if len(n_src_n_tgt) == 0:
-            return []
-        n_conn = np.sum(np.array([n_src_conn for n_src_conn, _ in n_src_n_tgt]), axis=1)
-        n_conn_max = np.max(n_conn)
-        n_matrix_max = 0
-        for i, n in enumerate(n_conn):
-            if n == n_conn_max:
-                n_matrix = _count_matrices(*n_src_n_tgt[i])
-                if n_matrix > n_matrix_max:
-                    n_matrix_max = n_matrix
-
-        # Get the combination of src and tgt amounts that are closest to half of the max amounts
-        # For half of the max amount (where max amount is given by the nr of nodes of the other type --> max src
-        # connections is the amount of tgt nodes), there are the most amount of connection permutations possible
-        n_src_tgt_half = np.array(list(encoder.matrix_gen.get_max_src_appear(existence=existence)) +
-                                  list(encoder.matrix_gen.get_max_tgt_appear(existence=existence)))/2
-        dist_to_half = np.empty((len(n_src_n_tgt),))
-        for i, (n_src_conn, n_tgt_conn) in enumerate(n_src_n_tgt):
-            dist_to_half[i] = np.sum(np.abs(np.array(list(n_src_conn)+list(n_tgt_conn))-n_src_tgt_half))
-
-        min_dist_to_half = np.min(dist_to_half)
-        for i in np.where(dist_to_half == min_dist_to_half)[0]:
-            n_matrix = _count_matrices(*n_src_n_tgt[i])
-            if n_matrix > n_matrix_max:
-                n_matrix_max = n_matrix
-
-        # Also check any src and tgt amounts where any of the two has all 1's for the non-zero entries
-        is_all_ones = np.array([(np.max(n_src_conn) == 1 or np.max(n_tgt_conn) == 1) for n_src_conn, n_tgt_conn in n_src_n_tgt])
-        if not np.all(is_all_ones):
-            for i, is_all_one in enumerate(is_all_ones):
-                if is_all_one:
-                    n_matrix = _count_matrices(*n_src_n_tgt[i])
-                    if n_matrix > n_matrix_max:
-                        n_matrix_max = n_matrix
-
-        # Also check any src and tgt amounts where all the amounts are the same
-        for n_src_conn, n_tgt_conn in n_src_n_tgt:
-            non_zero_src_conn = np.array(n_src_conn)
-            non_zero_src_conn = non_zero_src_conn[non_zero_src_conn != 0]
-            if len(non_zero_src_conn) == 0:
-                continue
-
-            non_zero_tgt_conn = np.array(n_tgt_conn)
-            non_zero_tgt_conn = non_zero_tgt_conn[non_zero_tgt_conn != 0]
-            if len(non_zero_tgt_conn) == 0:
-                continue
-
-            if np.all(non_zero_src_conn == non_zero_src_conn[0]) and np.all(non_zero_tgt_conn == non_zero_src_conn[0]):
-                n_matrix = _count_matrices(n_src_conn, n_tgt_conn)
-                if n_matrix > n_matrix_max:
-                    n_matrix_max = n_matrix
+        if len(n_matrix_map) == 0:
+            n_matrix_max = 1
+        else:
+            n_matrix_max = max([matrix.shape[0] for matrix in n_matrix_map.values()])
 
         self._n_exist_max[existence] = n_matrix_max
         return [DiscreteDV(n_opts=n_matrix_max)] if n_matrix_max > 1 else []
 
-    def decode(self, n_src_conn, n_tgt_conn, vector: DesignVector, encoder: OnDemandLazyEncoder,
+    def decode(self, n_src_conn, n_tgt_conn, matrices: np.ndarray, vector: DesignVector, encoder: QuasiLazyEncoder,
                existence: NodeExistence) -> Optional[Tuple[DesignVector, np.ndarray]]:
 
-        matrices = encoder.get_matrices(n_src_conn, n_tgt_conn)
         if matrices.shape[0] == 0:
             return vector, np.zeros((len(n_src_conn), len(n_tgt_conn)), dtype=int)
         if len(vector) == 0:

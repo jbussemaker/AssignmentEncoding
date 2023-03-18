@@ -23,28 +23,27 @@ def test_flat_connection_encoder():
     encoder = LazyAmountFirstEncoder(LazyConstraintViolationImputer(), FlatLazyAmountEncoder(), FlatLazyConnectionEncoder())
     encoder.set_settings(settings)
 
-    n_tgt_n_src = list(encoder.iter_n_src_n_tgt())
-    assert len(n_tgt_n_src) == 19
-    assert ((2, 2), (1, 3), NodeExistence()) in n_tgt_n_src
+    n_tgt_n_src = list(encoder._n_matrix_map[NodeExistence()].keys())
+    assert len(n_tgt_n_src) == 17
+    assert ((2, 2), (1, 3)) in n_tgt_n_src
 
     assert len(encoder.design_vars) == 2
-    assert encoder.design_vars[0].n_opts == 19
+    assert encoder.design_vars[0].n_opts == 17
 
-    matrices_max = encoder.get_matrices((2, 2), (1, 3))
+    matrices_max = encoder._n_matrix_map[NodeExistence()][(2, 2), (1, 3)]
     assert matrices_max.shape[0] == 2
     assert encoder.design_vars[1].n_opts == 2
 
-    dv, matrix = encoder.get_matrix([17, 0])
-    assert np.all(dv == [17, 0])
+    dv, matrix = encoder.get_matrix([15, 0])
+    assert np.all(dv == [15, 0])
     assert np.all(matrix == matrices_max[0, :, :])
     assert np.all(matrix == np.array([[1, 1], [0, 2]]))
-    dv, matrix = encoder.get_matrix([17, 1])
-    assert np.all(dv == [17, 1])
+    dv, matrix = encoder.get_matrix([15, 1])
+    assert np.all(dv == [15, 1])
     assert np.all(matrix == matrices_max[1, :, :])
 
-    assert encoder.get_n_design_points() == 38
-    # assert encoder._matrix_gen.count_all_matrices() == 21
-    assert encoder.get_imputation_ratio() == 38/21
+    assert encoder.get_n_design_points() == 34
+    assert encoder.get_imputation_ratio() == 34/21
     assert encoder.get_distance_correlation()
 
 
@@ -55,7 +54,7 @@ def test_flat_connection_encoder_multi_max():
         tgt=[Node([1], repeated_allowed=False) for _ in range(3)],
     ))
 
-    assert len(list(encoder.iter_n_src_n_tgt())) == 4
+    assert len(list(encoder._n_matrix_map[NodeExistence()].keys())) == 4
     assert encoder.matrix_gen.count_all_matrices() == 8
 
     assert len(encoder.design_vars) == 2
@@ -77,8 +76,8 @@ def test_total_amount_encoder():
     encoder = LazyAmountFirstEncoder(LazyConstraintViolationImputer(), TotalLazyAmountEncoder(), FlatLazyConnectionEncoder())
     encoder.set_settings(MatrixGenSettings(src=[Node([0, 1, 2]), Node(min_conn=0)], tgt=[Node([0, 1]), Node(min_conn=1)]))
 
-    n_tgt_n_src = list(encoder.iter_n_src_n_tgt())
-    assert len(n_tgt_n_src) == 19
+    n_tgt_n_src = list(encoder._n_matrix_map[NodeExistence()].keys())
+    assert len(n_tgt_n_src) == 17
     assert len(encoder.design_vars) == 3
     assert encoder.design_vars[0].n_opts == 5
     assert encoder.design_vars[1].n_opts == 6
@@ -87,7 +86,7 @@ def test_total_amount_encoder():
     assert np.all(dv == [0, 5, 0])
     assert np.all(matrix == -1)
 
-    dv, matrix = encoder.get_matrix([3, 3, 0])
+    dv, matrix = encoder.get_matrix([3, 2, 0])
     assert np.all(matrix == np.array([[1, 1], [0, 2]]))
 
 
@@ -109,8 +108,8 @@ def test_source_amount_encoder():
         ]),
     ))
 
-    n_tgt_n_src = list(encoder.iter_n_src_n_tgt())
-    assert len(n_tgt_n_src) == 22
+    n_tgt_n_src = list(encoder._n_matrix_map[NodeExistence()].keys())
+    assert len(n_tgt_n_src) == 17
     assert len(encoder.design_vars) == 4
     assert encoder.design_vars[0].n_opts == 3
     assert encoder.design_vars[1].n_opts == 4
@@ -139,8 +138,8 @@ def test_source_target_amount_encoder():
     encoder = LazyAmountFirstEncoder(LazyConstraintViolationImputer(), SourceTargetLazyAmountEncoder(), FlatLazyConnectionEncoder())
     encoder.set_settings(MatrixGenSettings(src=[Node([0, 1, 2]), Node(min_conn=0)], tgt=[Node([0, 1]), Node(min_conn=1)]))
 
-    n_tgt_n_src = list(encoder.iter_n_src_n_tgt())
-    assert len(n_tgt_n_src) == 19
+    n_tgt_n_src = list(encoder._n_matrix_map[NodeExistence()].keys())
+    assert len(n_tgt_n_src) == 17
     assert len(encoder.design_vars) == 4
     assert encoder.design_vars[0].n_opts == 3
     assert encoder.design_vars[1].n_opts == 4
@@ -152,7 +151,7 @@ def test_filter_dvs():
     encoder.set_settings(MatrixGenSettings(src=[Node([1], repeated_allowed=False), Node([1], repeated_allowed=False)],
                                            tgt=[Node([1], repeated_allowed=False), Node([1], repeated_allowed=False)]))
 
-    n_tgt_n_src = list(encoder.iter_n_src_n_tgt())
+    n_tgt_n_src = list(encoder._n_matrix_map[NodeExistence()].keys())
     assert len(n_tgt_n_src) == 1
 
     assert len(encoder.design_vars) == 1
@@ -177,7 +176,8 @@ def test_covering_partitioning():
     ]))
     encoder.set_settings(settings)
 
-    assert len(list(encoder.iter_n_src_n_tgt())) == 48
+    n_tgt_n_src = list(encoder._n_matrix_map[NodeExistence()].keys())
+    assert len(n_tgt_n_src) == 48
     assert encoder.matrix_gen.count_all_matrices() == 81
     assert encoder.get_n_design_points() >= 81
 
