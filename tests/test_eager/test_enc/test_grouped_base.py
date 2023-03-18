@@ -76,8 +76,13 @@ def test_no_group_normalize():
     assert len(encoder.design_vars) == 4
     assert [dv.n_opts for dv in encoder.design_vars] == [2, 2, 4, 6]
 
+
+def test_convert_base():
+    matrix = np.random.randint(0, 3, (11, 4, 3))
+    encoder = ProductEncoder(FirstImputer(), matrix, normalize_within_group=False)
+    dvs = list(encoder._design_vectors.values())[0]
     dvs_base2 = GroupedEncoder.convert_to_base(dvs, base=2)
-    assert np.all(dvs_base2 == np.array([
+    dvs_base2_ref = np.array([
         # 0 1  2  2  3  3  3
         [0, 0, 0, 0, 0, 0, 0],
         [0, 0, 0, 0, 0, 0, 1],
@@ -90,7 +95,10 @@ def test_no_group_normalize():
         [1, -1, 1, 0, 0, 1, 0],
         [1, -1, 1, 0, 0, 1, 1],
         [1, -1, 1, 1, -1, -1, -1],
-    ]))
+    ])
+    assert np.all(dvs_base2 == dvs_base2_ref)
+
+    assert np.all(GroupedEncoder.convert_to_base(dvs[::-1, :], base=2) == dvs_base2_ref[::-1, :])
 
 
 class EvenNonUniqueGrouper(GroupedEncoder):

@@ -163,19 +163,20 @@ class GroupedEncoder(EagerEncoder):
 
         columns = []
         for i_col in range(values.shape[1]):
-            col_values = values[:, i_col]
-            active_mask = col_values != X_INACTIVE_VALUE
-
             # Get unique (active) values
+            inactive_idx = []
             value_dict = defaultdict(list)
-            for value_idx, value in enumerate(col_values[active_mask]):
+            for value_idx, value in enumerate(values[:, i_col]):
+                if value == X_INACTIVE_VALUE:
+                    inactive_idx.append(value_idx)
+                    continue
                 value_dict[value].append(value_idx)
             unique = sorted(list(value_dict.keys()))
 
             # Determine how many columns we need (i.e. how many digits does the largest number have)
             n_converted = len(np.base_repr(len(value_dict)-1))
             col_converted = np.zeros((values.shape[0], n_converted), dtype=int)
-            col_converted[~active_mask, :] = X_INACTIVE_VALUE
+            col_converted[inactive_idx, :] = X_INACTIVE_VALUE
 
             # Convert and set values
             for i_value, value in enumerate(unique):
