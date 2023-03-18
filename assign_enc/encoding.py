@@ -1,6 +1,7 @@
 import copy
 import numba
 import warnings
+import contextlib
 import numpy as np
 from typing import *
 from assign_enc.matrix import *
@@ -10,7 +11,7 @@ from scipy.stats import pearsonr, ConstantInputWarning
 
 __all__ = ['DiscreteDV', 'DesignVector', 'PartialDesignVector', 'MatrixSelectMask', 'X_INACTIVE_VALUE',
            'IsActiveVector', 'EagerImputer', 'Encoder', 'EagerEncoder', 'filter_design_vectors', 'flatten_matrix',
-           'NodeExistence']
+           'NodeExistence', 'DetectedHighImpRatio']
 
 
 @dataclass
@@ -93,7 +94,39 @@ class EagerImputer:
         raise NotImplementedError
 
 
+class DetectedHighImpRatio(RuntimeError):
+    """Exception thrown when an encoder detects a high imputation ratio during the encoding process"""
+
+    def __init__(self, encoder: Type['Encoder'], imp_ratio: float, msg: str = None):
+        self.encoder = encoder
+        self.imp_ratio = imp_ratio
+        self.msg = msg
+        super().__init__()
+
+    def __str__(self):
+        msg_str = f': {self.msg}' if self.msg is not None else ''
+        return f'{self.__class__.__name__} when encoding "{self.encoder!s}" ({self.imp_ratio}){msg_str}'
+
+    def __repr__(self):
+        return f'{self.__class__.__name__}({self.encoder!r}, imp_ratio={self.imp_ratio}, msg={self.msg})'
+
+
 class Encoder:
+
+    # Set the imputation ratio limit for early detection (only if the encoder supports it)
+    # If detected, a DetectedHighImpRatio exception is thrown
+    # Use `with_early_detect_high_imp_ratio` as a context manager
+    _early_detect_high_imp_ratio = None
+
+    @classmethod
+    @contextlib.contextmanager
+    def with_early_detect_high_imp_ratio(cls, high_imp_ratio):
+        initial_value = cls._early_detect_high_imp_ratio
+        cls._early_detect_high_imp_ratio = high_imp_ratio
+        try:
+            yield high_imp_ratio
+        finally:
+            cls._early_detect_high_imp_ratio = initial_value
 
     @property
     def design_vars(self) -> List[DiscreteDV]:
@@ -106,9 +139,13 @@ class Encoder:
         return [dv.get_random() for dv in self.design_vars]
 
     def get_n_design_points(self) -> int:
-        if len(self.design_vars) == 0:
+        return self.calc_n_declared_design_points(self.design_vars)
+
+    @staticmethod
+    def calc_n_declared_design_points(design_vars: List[DiscreteDV]) -> int:
+        if len(design_vars) == 0:
             return 1
-        return int(np.prod([dv.n_opts for dv in self.design_vars], dtype=np.float))
+        return int(np.prod([dv.n_opts for dv in design_vars], dtype=np.float))
 
     def get_information_index(self) -> float:
         return self.calc_information_index([dv.n_opts for dv in self.design_vars])

@@ -2,6 +2,7 @@ import itertools
 import numpy as np
 from typing import Optional
 from assign_enc.encoding import *
+from collections import defaultdict
 
 __all__ = ['GroupedEncoder', 'GroupByIndexEncoder']
 
@@ -29,7 +30,7 @@ class GroupedEncoder(EagerEncoder):
 
     @classmethod
     def group_by_values(cls, group_by_values: np.ndarray, normalize_within_group=True,
-                        ordinal_base: int = None) -> np.ndarray:
+                        ordinal_base: int = None, n_declared_start=None) -> np.ndarray:
         """
         Get design vectors that uniquely map to different value combinations. Example:
         [[1 2],      [[0 0],
@@ -41,44 +42,85 @@ class GroupedEncoder(EagerEncoder):
         Optionally convert the grouped design vector values to some other base,
         e.g. for base 2: [[1, 2, 3, 4]].T --> [[0, 0], [0, 1], [1, 0], [1, 1]]"""
         design_vectors = np.empty(group_by_values.shape, dtype=int)
-        row_mask_list = [np.ones((group_by_values.shape[0],), dtype=bool)]
+        row_mask_list = [np.arange(group_by_values.shape[0])]
+
+        detect_imp_ratio = cls._early_detect_high_imp_ratio
+        n_valid = group_by_values.shape[0]
+        if n_valid == 0:
+            return np.zeros((0, 0), dtype=int)
+
+        n_declared_total = n_declared_start if n_declared_start is not None else 1
+        if detect_imp_ratio is not None and (n_declared_total/n_valid) >= detect_imp_ratio:
+            raise DetectedHighImpRatio(cls, n_declared_total/n_valid)
 
         # Loop over columns
+        col_is_active = np.ones((group_by_values.shape[1],), dtype=bool)
         for i_col in range(group_by_values.shape[1]):
 
             # Loop over current sub-divisions
             next_row_masks = []
             grouping_needed = False
+            all_inactive = True
+            col_values = set()
             for row_mask in row_mask_list:
 
-                # Check if there are multiple design vectors in this sub-division
+                # Check if there are multiple design vectors in this subdivision
                 group_by_values_sub = group_by_values[row_mask, i_col]
                 if len(group_by_values_sub) == 1:
-                    next_row_masks.append(row_mask)
-                    design_vectors[row_mask, i_col] = X_INACTIVE_VALUE
+                    # All subsequent columns of this design vector will also be inactive
+                    design_vectors[row_mask, i_col:] = X_INACTIVE_VALUE
                     continue
 
                 # Check if there are multiple unique values in this sub-division
-                unique_values = sorted(list(set(group_by_values_sub)))
+                value_dict = defaultdict(list)
+                for value_idx, value in enumerate(group_by_values_sub):
+                    value_dict[value].append(value_idx)
+                unique_values = sorted(list(value_dict.keys()))
+
+                if unique_values[0] < 0:
+                    raise ValueError('Values to group by should not contain negative values!')
+
                 if len(unique_values) == 1:
                     next_row_masks.append(row_mask)
                     design_vectors[row_mask, i_col] = X_INACTIVE_VALUE
                     grouping_needed = True
                     continue
+                all_inactive = False
 
-                # Loop over unique values in sub-divisions
+                # Set design vector values and get next indices for the subset of the different values
                 for value_idx, value in enumerate(unique_values):
-                    if value < 0:
-                        raise ValueError('Values to group by should not contain negative values!')
+                    next_row_mask = row_mask[value_dict[value]]
 
-                    # Assign indices for each unique value
-                    next_row_mask = row_mask.copy()
-                    next_row_mask[row_mask] = next_row_sub_mask = group_by_values_sub == value
-                    design_vectors[next_row_mask, i_col] = value_idx if normalize_within_group else value
-                    next_row_masks.append(next_row_mask)
+                    assigned_value = value_idx if normalize_within_group else value
+                    design_vectors[next_row_mask, i_col] = assigned_value
+                    col_values.add(assigned_value)
 
-                    if np.count_nonzero(next_row_sub_mask) > 1:
+                    if len(next_row_mask) == 1:
+                        design_vectors[next_row_mask, i_col+1:] = X_INACTIVE_VALUE
+                    else:
                         grouping_needed = True
+                        next_row_masks.append(next_row_mask)
+
+            # Detect high imputation ratios early
+            if detect_imp_ratio is not None:
+                # Extend the total declared values (which will correspond to the nr of options for the design vars)
+                n_declared_total *= max(1, len(col_values))
+
+                # Calculate minimum imputation ratio that can be expected: the imputation ratio can only become higher
+                # by adding additional columns, so it is indeed possible to calculate the lower bound
+                min_imp_ratio = n_declared_total/n_valid
+
+                # If grouping is still needed, at least one additional design variable with minimum 2 options will be
+                # added, so the lower bound can be multiplied by 2
+                if grouping_needed:
+                    min_imp_ratio *= 2
+
+                if min_imp_ratio >= detect_imp_ratio:
+                    raise DetectedHighImpRatio(cls, min_imp_ratio)
+
+            # Set inactive flag
+            if all_inactive:
+                col_is_active[i_col] = False
 
             # Stop grouping if not needed anymore
             if not grouping_needed:
@@ -92,8 +134,7 @@ class GroupedEncoder(EagerEncoder):
             design_vectors = cls.normalize_design_vectors(design_vectors)
 
         # Remove columns where there are no alternatives
-        has_alternatives = np.any(design_vectors > 0, axis=0)
-        design_vectors = design_vectors[:, has_alternatives]
+        design_vectors = design_vectors[:, col_is_active[:design_vectors.shape[1]]]
 
         # Convert to other base
         if ordinal_base is not None:
@@ -103,31 +144,54 @@ class GroupedEncoder(EagerEncoder):
 
         return design_vectors
 
-    @staticmethod
-    def convert_to_base(values: np.ndarray, base: int = 2) -> np.ndarray:
+    @classmethod
+    def convert_to_base(cls, values: np.ndarray, base: int = 2, n_declared_start=None) -> np.ndarray:
         """Convert the ordinal-encoded values to another base"""
         if base < 2 or base > 9:
             raise ValueError('Base should be between 2 and 9')
         if values.shape[1] == 0:
             return values
 
+        detect_imp_ratio = cls._early_detect_high_imp_ratio
+        n_valid = values.shape[0]
+        if n_valid == 0:
+            return np.zeros((0, 0), dtype=int)
+
+        n_declared_total = n_declared_start if n_declared_start is not None else 1
+        if detect_imp_ratio is not None and (n_declared_total/n_valid) >= detect_imp_ratio:
+            raise DetectedHighImpRatio(cls, n_declared_total/n_valid)
+
         columns = []
         for i_col in range(values.shape[1]):
             col_values = values[:, i_col]
             active_mask = col_values != X_INACTIVE_VALUE
 
-            unique, unique_idx_active = np.unique(col_values[active_mask], return_inverse=True)
-            unique_idx = np.ones((len(col_values),))*X_INACTIVE_VALUE
-            unique_idx[active_mask] = unique_idx_active
+            # Get unique (active) values
+            value_dict = defaultdict(list)
+            for value_idx, value in enumerate(col_values[active_mask]):
+                value_dict[value].append(value_idx)
+            unique = sorted(list(value_dict.keys()))
 
-            n_converted = len(np.base_repr(len(unique)-1))
+            # Determine how many columns we need (i.e. how many digits does the largest number have)
+            n_converted = len(np.base_repr(len(value_dict)-1))
             col_converted = np.zeros((values.shape[0], n_converted), dtype=int)
             col_converted[~active_mask, :] = X_INACTIVE_VALUE
 
-            for i_value in range(len(unique)):
+            # Convert and set values
+            for i_value, value in enumerate(unique):
                 base_converted = [
                     int(char) for char in (np.base_repr(i_value, base=base) if base != 2 else np.binary_repr(i_value))]
-                col_converted[unique_idx == i_value, -len(base_converted):] = base_converted
+                col_converted[value_dict[value], -len(base_converted):] = base_converted
+
+            # Early detect high imputation ratio
+            if detect_imp_ratio is not None:
+                n_declared_total *= np.prod(np.max(col_converted, axis=0)+1, dtype=float)
+                min_imp_ratio = n_declared_total/n_valid
+                if i_col < values.shape[1]-1:
+                    min_imp_ratio *= 2
+
+                if min_imp_ratio >= detect_imp_ratio:
+                    raise DetectedHighImpRatio(cls, min_imp_ratio)
 
             columns.append(col_converted)
         return np.column_stack(columns)

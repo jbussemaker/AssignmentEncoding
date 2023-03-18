@@ -19,7 +19,7 @@ class ConnCombsEncoder:
     def encode_prepare(self):
         self._registry = {}
 
-    def encode(self, key, matrix: np.ndarray) -> List[DiscreteDV]:
+    def encode(self, key, matrix: np.ndarray, n_declared_other_dvs=None) -> List[DiscreteDV]:
         if matrix.shape[0] == 0:
             self._registry[key] = ({}, matrix)
             return []
@@ -29,7 +29,8 @@ class ConnCombsEncoder:
             self._registry[key] = ({}, matrix)
             return []
 
-        dv_values = GroupedEncoder.group_by_values(dv_grouping_values, ordinal_base=2 if self.binary else None)
+        dv_values = GroupedEncoder.group_by_values(
+            dv_grouping_values, ordinal_base=2 if self.binary else None, n_declared_start=n_declared_other_dvs)
         self._registry[key] = (self.get_dv_map_for_lookup(dv_values), matrix)
         return [DiscreteDV(n_opts=n+1) for n in np.max(dv_values, axis=0)]
 
@@ -187,17 +188,20 @@ class LazyConnIdxMatrixEncoder(LazyEncoder):
             if self._amount_first:
                 if len(matrix_combs_by_n) > 1:
                     dvs.append(DiscreteDV(n_opts=len(matrix_combs_by_n)))
+
+                n_declared_dvs = self.calc_n_declared_design_points(dvs)
                 conn_dvs = []
                 for k, matrix in enumerate(matrix_combs_by_n):
                     key = (existence, i, k)
-                    conn_dv = self._conn_enc.encode(key, matrix)
+                    conn_dv = self._conn_enc.encode(key, matrix, n_declared_other_dvs=n_declared_dvs)
                     conn_dvs.append(conn_dv)
                     keys_n_dv.append((key, len(conn_dv)))
                 dvs += LazyEncoder._merge_design_vars(conn_dvs)
 
             else:
                 key = (existence, i)
-                conn_dv = self._conn_enc.encode(key, np.row_stack(matrix_combs_by_n))
+                conn_dv = self._conn_enc.encode(
+                    key, np.row_stack(matrix_combs_by_n), n_declared_other_dvs=self.calc_n_declared_design_points(dvs))
                 keys_n_dv.append((key, len(conn_dv)))
                 dvs += conn_dv
 

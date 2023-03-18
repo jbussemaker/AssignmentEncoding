@@ -5,6 +5,7 @@ import numpy as np
 import pandas as pd
 from typing import *
 from assign_enc.matrix import *
+from assign_enc.encoding import *
 from assign_enc.time_limiter import *
 from assign_enc.lazy_encoding import *
 from assign_enc.encoder_registry import *
@@ -91,6 +92,7 @@ class EncoderSelector:
 
         dist_corr_lazy_limit = self.imputation_ratio_limits[0]
         dist_corr_eager_limit = self.imputation_ratio_limits[-1]
+        high_imp_ratio_detect_limit = self.imputation_ratio_limits[-1]
 
         def _instantiate_manager(encoder):
             cls = LazyAssignmentManager if isinstance(encoder, LazyEncoder) else AssignmentManager
@@ -99,41 +101,49 @@ class EncoderSelector:
         def _create_managers(encoders, imputer_factory, dist_corr_limit):
             assignment_mgr = []
             scoring = {'n_des_pts': [], 'imp_ratio': [], 'inf_idx': [], 'dist_corr': []}
-            for encoder_factory in encoders:
-                # Create encoder
-                encoder = encoder_factory(imputer_factory())
+            with Encoder.with_early_detect_high_imp_ratio(high_imp_ratio=high_imp_ratio_detect_limit):
+                for encoder_factory in encoders:
+                    # Create encoder
+                    encoder = encoder_factory(imputer_factory())
 
-                # Create assignment manager
-                log.debug(f'Encoding {encoder!s}')
-                try:
-                    with time_limiter(self.encoding_timeout):
-                        assignment_manager = _instantiate_manager(encoder)
-                except (TimeoutError, MemoryError):
-                    log.debug('Encoding timeout!')
-                    continue
+                    # Create assignment manager
+                    log.debug(f'Encoding {encoder!s}')
+                    try:
+                        with time_limiter(self.encoding_timeout):
+                            assignment_manager = _instantiate_manager(encoder)
+                    except DetectedHighImpRatio:
+                        log.debug('Excessively high imputation ratio detected!')
+                        continue
+                    except (TimeoutError, MemoryError):
+                        log.debug('Encoding timeout!')
+                        continue
 
-                # Get metrics
-                n_design_points = assignment_manager.encoder.get_n_design_points()
-                imputation_ratio = self._get_imp_ratio(
-                    n_design_points, n_mat, n_exist, assignment_manager=assignment_manager)
-                information_index = assignment_manager.encoder.get_information_index()
+                    # Get metrics
+                    n_design_points = assignment_manager.encoder.get_n_design_points()
+                    imputation_ratio = self._get_imp_ratio(
+                        n_design_points, n_mat, n_exist, assignment_manager=assignment_manager)
+                    information_index = assignment_manager.encoder.get_information_index()
 
-                distance_correlation = np.nan
-                if imputation_ratio <= dist_corr_limit:
-                    if self.limit_dist_corr_time:
-                        try:
-                            with time_limiter(self.encoding_timeout):
-                                distance_correlation = self._get_dist_corr(assignment_manager)
-                        except (TimeoutError, MemoryError):
-                            pass
-                    else:
-                        distance_correlation = self._get_dist_corr(assignment_manager)
+                    distance_correlation = np.nan
+                    if imputation_ratio <= dist_corr_limit:
+                        if self.limit_dist_corr_time:
+                            try:
+                                with time_limiter(self.encoding_timeout):
+                                    distance_correlation = self._get_dist_corr(assignment_manager)
+                            except (TimeoutError, MemoryError):
+                                pass
+                        else:
+                            distance_correlation = self._get_dist_corr(assignment_manager)
 
-                assignment_mgr.append(assignment_manager)
-                scoring['n_des_pts'].append(n_design_points)
-                scoring['imp_ratio'].append(imputation_ratio)
-                scoring['inf_idx'].append(information_index)
-                scoring['dist_corr'].append(distance_correlation)
+                    assignment_mgr.append(assignment_manager)
+                    scoring['n_des_pts'].append(n_design_points)
+                    scoring['imp_ratio'].append(imputation_ratio)
+                    scoring['inf_idx'].append(information_index)
+                    scoring['dist_corr'].append(distance_correlation)
+
+                    # Stop if we found a perfect encoder
+                    if imputation_ratio == 1. and distance_correlation >= .95:
+                        break
 
             # Equalize distance correlations
             df = pd.DataFrame(data=scoring)

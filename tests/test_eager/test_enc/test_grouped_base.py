@@ -1,6 +1,7 @@
 import pytest
 import itertools
 import numpy as np
+from assign_enc.encoding import *
 from assign_enc.eager.imputation.first import *
 from assign_enc.eager.encodings.grouped_base import *
 
@@ -26,12 +27,47 @@ def test_half_grouped_encoder():
     ]).T)
     assert len(encoder.design_vars) == 4
     assert all([dv.n_opts == 2 for dv in encoder.design_vars])
+    assert encoder.get_imputation_ratio() == (2**4)/11
+
+
+def test_early_detect_high_imp_ratio():
+    matrix = np.random.randint(0, 3, (2**10+1, 4, 3))
+    encoder = ProductEncoder(FirstImputer(), matrix)
+    assert len(encoder.design_vars) == 11
+    assert encoder.get_imputation_ratio() == (2**11)/(2**10+1)
+
+    with Encoder.with_early_detect_high_imp_ratio(1.9):
+        assert Encoder._early_detect_high_imp_ratio == 1.9
+        with pytest.raises(DetectedHighImpRatio):
+            ProductEncoder(FirstImputer(), matrix)
+    assert Encoder._early_detect_high_imp_ratio is None
+
+    values = np.array([np.arange(4**4+1)]).T
+    values_base4 = ProductEncoder.convert_to_base(values, base=4)
+    assert np.prod(np.max(values_base4, axis=0)+1)/values.shape[0] == (4**4*2)/(4**4+1)
+    with Encoder.with_early_detect_high_imp_ratio(1.9):
+        with pytest.raises(DetectedHighImpRatio):
+            ProductEncoder.convert_to_base(values, base=4)
+
+    with Encoder.with_early_detect_high_imp_ratio(100):
+        with pytest.raises(DetectedHighImpRatio):
+            ProductEncoder.convert_to_base(values, base=4, n_declared_start=1e6)
+
+    try:
+        assert Encoder._early_detect_high_imp_ratio is None
+        with Encoder.with_early_detect_high_imp_ratio(100):
+            assert Encoder._early_detect_high_imp_ratio == 100
+            raise RuntimeError
+    except RuntimeError:
+        pass
+    assert Encoder._early_detect_high_imp_ratio is None
 
 
 def test_no_group_normalize():
     matrix = np.random.randint(0, 3, (11, 4, 3))
     encoder = ProductEncoder(FirstImputer(), matrix, normalize_within_group=False)
-    assert np.all(list(encoder._design_vectors.values())[0] == np.array([
+    dvs = list(encoder._design_vectors.values())[0]
+    assert np.all(dvs == np.array([
         [0, 0, 0, 0, 0, 0, 0, 0,  1,  1,  1],
         [0, 0, 0, 0, 1, 1, 1, 1, -1, -1, -1],
         [0, 0, 1, 1, 2, 2, 3, 3,  2,  2,  3],
@@ -39,6 +75,22 @@ def test_no_group_normalize():
     ]).T)
     assert len(encoder.design_vars) == 4
     assert [dv.n_opts for dv in encoder.design_vars] == [2, 2, 4, 6]
+
+    dvs_base2 = GroupedEncoder.convert_to_base(dvs, base=2)
+    assert np.all(dvs_base2 == np.array([
+        # 0 1  2  2  3  3  3
+        [0, 0, 0, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0, 0, 1],
+        [0, 0, 0, 1, 0, 1, 0],
+        [0, 0, 0, 1, 0, 1, 1],
+        [0, 1, 1, 0, 0, 1, 0],
+        [0, 1, 1, 0, 0, 1, 1],
+        [0, 1, 1, 1, 1, 0, 0],
+        [0, 1, 1, 1, 1, 0, 1],
+        [1, -1, 1, 0, 0, 1, 0],
+        [1, -1, 1, 0, 0, 1, 1],
+        [1, -1, 1, 1, -1, -1, -1],
+    ]))
 
 
 class EvenNonUniqueGrouper(GroupedEncoder):

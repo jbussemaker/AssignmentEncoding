@@ -6,7 +6,7 @@ from assign_enc.matrix import *
 from assign_enc.encoding import *
 
 __all__ = ['LazyImputer', 'LazyEncoder', 'DesignVector', 'DiscreteDV', 'NodeExistence', 'X_INACTIVE_VALUE',
-           'QuasiLazyEncoder']
+           'QuasiLazyEncoder', 'DetectedHighImpRatio']
 
 
 class LazyImputer:

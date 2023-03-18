@@ -50,9 +50,9 @@ class EnumRecursiveEncoder(QuasiLazyEncoder):
 
         i_mat = np.sum((self.n_divide**np.arange(len(vector)))*vector[::-1])
         if i_mat >= matrix.shape[0]:
-            vector = self._dv_last
+            return self._dv_last, matrix[-1, :, :]
 
-        elif self._dv_inactive_key is not None:
+        if self._dv_inactive_key is not None:
             i_inactive, left_side_values = self._dv_inactive_key
             if np.all(vector[:len(left_side_values)] == left_side_values):
                 vector = np.array(vector)

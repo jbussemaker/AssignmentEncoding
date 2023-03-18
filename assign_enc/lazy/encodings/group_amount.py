@@ -22,7 +22,8 @@ class LazyAmountEncoder:
     def encode_prepare(self):
         pass
 
-    def encode(self, n_src, n_tgt, n_src_n_tgt: NList, existence: NodeExistence) -> List[DiscreteDV]:
+    def encode(self, n_src, n_tgt, n_src_n_tgt: NList, existence: NodeExistence, n_declared_start=None) \
+            -> List[DiscreteDV]:
         raise NotImplementedError
 
     def decode(self, vector: DesignVector, existence: NodeExistence) \
@@ -127,8 +128,8 @@ class LazyAmountFirstEncoder(OnDemandLazyEncoder):
         return imp_vector, matrix
 
     @staticmethod
-    def group_by_values(values: np.ndarray) -> np.ndarray:
-        return GroupedEncoder.group_by_values(values)
+    def group_by_values(values: np.ndarray, n_declared_start=None) -> np.ndarray:
+        return GroupedEncoder.group_by_values(values, n_declared_start=n_declared_start)
 
     def __repr__(self):
         return f'{self.__class__.__name__}({self._imputer!r}, {self.amount_encoder!r}, {self.conn_encoder!r})'
@@ -145,7 +146,8 @@ class FlatLazyAmountEncoder(LazyAmountEncoder):
     def encode_prepare(self):
         self._n_src_n_tgt = {}
 
-    def encode(self, n_src, n_tgt, n_src_n_tgt: NList, existence: NodeExistence) -> List[DiscreteDV]:
+    def encode(self, n_src, n_tgt, n_src_n_tgt: NList, existence: NodeExistence, n_declared_start=None) \
+            -> List[DiscreteDV]:
         self._n_src_n_tgt[existence] = n_src_n_tgt
         return [DiscreteDV(n_opts=len(n_src_n_tgt))]
 
@@ -178,13 +180,14 @@ class GroupedLazyAmountEncoder(LazyAmountEncoder):
     def encode_prepare(self):
         self._dv_val_map = {}
 
-    def encode(self, n_src, n_tgt, n_src_n_tgt: NList, existence: NodeExistence) -> List[DiscreteDV]:
+    def encode(self, n_src, n_tgt, n_src_n_tgt: NList, existence: NodeExistence, n_declared_start=None) \
+            -> List[DiscreteDV]:
         n_src_tgt_arr = self._get_n_src_tgt_array(n_src_n_tgt)
         if len(n_src_n_tgt) == 0:
             return []
 
         dv_group_values = self._get_dv_group_values(n_src, n_tgt, n_src_tgt_arr)
-        dv_values = LazyAmountFirstEncoder.group_by_values(dv_group_values)
+        dv_values = LazyAmountFirstEncoder.group_by_values(dv_group_values, n_declared_start=n_declared_start)
         self._dv_val_map[existence] = (ConnCombsEncoder.get_dv_map_for_lookup(dv_values), n_src_n_tgt)
         return [DiscreteDV(n_opts=n) for n in np.max(dv_values, axis=0)+1]
 

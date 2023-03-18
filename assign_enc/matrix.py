@@ -295,12 +295,15 @@ class MatrixGenSettings:
         return max_conns
 
     def get_cache_key(self):
+        cache_version = '1'  # Increment this if all existing caches should be invalidated
+
         src_cache_key = ';'.join([repr(s) for s in self.src])
         tgt_cache_key = ';'.join([repr(t) for t in self.tgt])
         excluded_cache_key = ';'.join([f'{tup[0]:d},{tup[1]:d}' for tup in sorted([ex for ex in self.get_excluded_indices()])]) \
             if self.excluded is not None else ''
         exist_cache_key = ';'.join([str(hash(p)) for p in self.existence.patterns]) if self.existence is not None else ''
-        cache_str = '||'.join([src_cache_key, tgt_cache_key, excluded_cache_key, exist_cache_key, str(self.max_conn_parallel)])
+        cache_str = '||'.join([src_cache_key, tgt_cache_key, excluded_cache_key, exist_cache_key,
+                               str(self.max_conn_parallel), cache_version])
         return hashlib.md5(cache_str.encode('utf-8')).hexdigest()
 
 
