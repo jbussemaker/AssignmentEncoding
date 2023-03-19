@@ -50,7 +50,7 @@ class LazyDirectMatrixEncoder(LazyEncoder):
         return dvs
 
     def _decode(self, vector: DesignVector, existence: NodeExistence) -> Optional[Tuple[DesignVector, np.ndarray]]:
-        matrix = np.zeros((self.n_src, self.n_tgt), dtype=int)
+        matrix = self.get_empty_matrix()
         dv_map = self._dv_idx_map.get(existence, [])
         for i_dv, (i, j) in enumerate(dv_map):
             matrix[i, j] = vector[i_dv]

@@ -9,6 +9,7 @@ from assign_enc.encoding import *
 from assign_enc.time_limiter import *
 from assign_enc.lazy_encoding import *
 from assign_enc.encoder_registry import *
+from assign_enc.patterns.encoder import *
 from assign_enc.assignment_manager import *
 from assign_enc.cache import get_cache_path
 
@@ -21,6 +22,7 @@ class EncoderSelector:
     """Algorithm for automatically selecting the best encoder for a given assignment problem."""
 
     _global_disable_cache = False  # For testing/experiments
+    _exclude_pattern_encoders = False
     _print_stats = False
     _numba_initialized = False
 
@@ -80,9 +82,12 @@ class EncoderSelector:
             src=[Node([0, 1]) for _ in range(2)], tgt=[Node([0, 1]) for _ in range(2)],
         )
         log.debug('Initializing numba...')
-        self._get_best_assignment_manager()
-
-        self.encoding_timeout, self.settings = enc_timeout, settings
+        try:
+            self._exclude_pattern_encoders = True
+            self._get_best_assignment_manager()
+        finally:
+            self.encoding_timeout, self.settings = enc_timeout, settings
+            self._exclude_pattern_encoders = False
 
     def _get_best_assignment_manager(self) -> AssignmentManager:
         log.debug('Counting matrices...')
@@ -111,9 +116,14 @@ class EncoderSelector:
                     try:
                         with time_limiter(self.encoding_timeout):
                             assignment_manager = _instantiate_manager(encoder)
+
+                    except InvalidPatternEncoder:
+                        continue
+
                     except DetectedHighImpRatio:
                         log.debug('Excessively high imputation ratio detected!')
                         continue
+
                     except (TimeoutError, MemoryError):
                         log.debug('Encoding timeout!')
                         continue
@@ -175,18 +185,33 @@ class EncoderSelector:
             pd.set_option('display.expand_frame_repr', False)
             print(df_score)
 
+        # Try pattern encoders
+        df_score, assignment_managers = None, []
+        if not self._exclude_pattern_encoders:
+            df_score, assignment_managers = _create_managers(PATTERN_ENCODERS, self.lazy_imputer, dist_corr_lazy_limit)
+            i_best = self._get_best(df_score, knows_n_mat=n_mat is not None, n_priority=4)
+            if i_best is not None:
+                self._last_selection_stage = '0_pattern'
+                _print_stats(i_best)
+                return assignment_managers[i_best]
+
         # If there are not too many matrices, encode all encoders except enumeration-based
         initially_all = False
         if n_mat is not None and n_mat <= self.n_mat_max_eager:
-            df_score, assignment_managers = _create_managers(EAGER_ENCODERS, self.eager_imputer, dist_corr_eager_limit)
-            df_other, other_assignment_mgr = _create_managers(LAZY_ENCODERS, self.lazy_imputer, dist_corr_lazy_limit)
-            df_score = pd.concat([df_score, df_other], ignore_index=True)
-            assignment_managers = assignment_managers+other_assignment_mgr
+            df_eager, eager_assignment_managers = \
+                _create_managers(EAGER_ENCODERS, self.eager_imputer, dist_corr_eager_limit)
+            df_score = pd.concat([df_score, df_eager], ignore_index=True) if df_score is not None else df_eager
+
+            df_lazy, lazy_assignment_mgr = _create_managers(LAZY_ENCODERS, self.lazy_imputer, dist_corr_lazy_limit)
+            df_score = pd.concat([df_score, df_lazy], ignore_index=True)
+            assignment_managers += eager_assignment_managers+lazy_assignment_mgr
             initially_all = True
 
         # Otherwise initially only try lazy encoders
         else:
-            df_score, assignment_managers = _create_managers(LAZY_ENCODERS, self.lazy_imputer, dist_corr_lazy_limit)
+            df_lazy, lazy_assignment_managers = _create_managers(LAZY_ENCODERS, self.lazy_imputer, dist_corr_lazy_limit)
+            df_score = pd.concat([df_score, df_lazy], ignore_index=True) if df_score is not None else df_lazy
+            assignment_managers += lazy_assignment_managers
 
         i_best = self._get_best(df_score, knows_n_mat=n_mat is not None, n_priority=4)
         if i_best is not None:

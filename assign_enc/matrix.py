@@ -142,6 +142,60 @@ class NodeExistence:
             self._none_exists = _none_exists()
         return self._none_exists
 
+    def get_effective_settings(self, settings: 'MatrixGenSettings') \
+            -> Tuple['MatrixGenSettings', Dict[int, int], Dict[int, int]]:
+        """Returns connection settings with all connection degree overrides of this existence pattern applied"""
+
+        def _get_effective_nodes(nodes: List[Node], n_conn_override: Dict[int, List[int]] = None,
+                                 max_conn_override: int = None) -> Tuple[List[Node], Dict[int, int]]:
+            effective_nodes = []
+            idx_map = {}
+            for i, node in enumerate(nodes):
+                # Get effective number of connections
+                n_conns, min_conn, max_conn = None, None, math.inf
+                if i in n_conn_override:
+                    n_conns = n_conn_override[i]
+
+                elif max_conn_override is not None:
+                    if node.max_inf:
+                        min_conn, max_conn = node.min_conns, max_conn_override
+                    else:
+                        n_conns = [n for n in node.conns if n <= max_conn_override]
+
+                else:
+                    n_conns, min_conn = node.conns, node.min_conns
+
+                # Create effective node and check if it is not inactive
+                effective_node = Node(n_conns, min_conn=min_conn, max_conn=max_conn, repeated_allowed=node.rep)
+                if not effective_node.max_inf and (len(effective_node.conns) == 0 or effective_node.conns == [0]):
+                    continue
+
+                idx_map[i] = len(effective_nodes)
+                effective_nodes.append(effective_node)
+
+            return effective_nodes, idx_map
+
+        src, src_idx_map = _get_effective_nodes(settings.src, self.src_n_conn_override, self.max_src_conn_override)
+        tgt, tgt_idx_map = _get_effective_nodes(settings.tgt, self.tgt_n_conn_override, self.max_tgt_conn_override)
+
+        # Modify excluded edges
+        excluded = []
+        for i_src, i_tgt in settings.get_excluded_indices():
+            # If source or target node are disabled, skip
+            if i_src not in src_idx_map or i_tgt not in tgt_idx_map:
+                continue
+
+            excluded.append((src_idx_map[i_src], tgt_idx_map[i_tgt]))
+
+        effective_settings = MatrixGenSettings(
+            src=src, tgt=tgt, excluded=excluded, max_conn_parallel=settings.max_conn_parallel)
+        return effective_settings, src_idx_map, tgt_idx_map
+
+    def get_transpose(self) -> 'NodeExistence':
+        return self.__class__(
+            src_n_conn_override=self.tgt_n_conn_override, tgt_n_conn_override=self.src_n_conn_override,
+            max_src_conn_override=self.max_tgt_conn_override, max_tgt_conn_override=self.max_src_conn_override)
+
     def __hash__(self):
         if self._hash is None:
             self._hash = hash((
@@ -293,6 +347,34 @@ class MatrixGenSettings:
             max_conns[i_src, i_tgt] = 0
 
         return max_conns
+
+    def get_effective_settings(self) -> Dict[NodeExistence, Tuple['MatrixGenSettings', Dict[int, int], Dict[int, int]]]:
+        """For each node existence pattern, get the effective node connection settings"""
+        patterns = self.existence.patterns if self.existence is not None else [NodeExistence()]
+        return {existence: existence.get_effective_settings(self) for existence in patterns}
+
+    def expand_effective_matrix(self, matrix: np.ndarray, src_map: Dict[int, int], tgt_map: Dict[int, int]) -> np.ndarray:
+        if len(src_map) == len(self.src) and len(tgt_map) == len(self.tgt):
+            return matrix
+
+        expanded_matrix = np.zeros((len(self.src), len(self.tgt)), dtype=int)
+        tgt_indices = list(tgt_map.keys())
+        for i_src in range(len(self.src)):
+            if i_src in src_map:
+                expanded_matrix[i_src, tgt_indices] = matrix[src_map[i_src], :]
+        return expanded_matrix
+
+    def get_transpose_settings(self) -> 'MatrixGenSettings':
+        tgt, src = self.src, self.tgt
+        excluded = [(j, i) for i, j in self.get_excluded_indices()] if self.excluded is not None else None
+
+        existence_patterns = None
+        if self.existence is not None:
+            existence_patterns = NodeExistencePatterns(patterns=[
+                existence.get_transpose() for existence in self.existence.patterns])
+
+        return MatrixGenSettings(src=src, tgt=tgt, excluded=excluded, existence=existence_patterns,
+                                 max_conn_parallel=self.max_conn_parallel)
 
     def get_cache_key(self):
         cache_version = '1'  # Increment this if all existing caches should be invalidated

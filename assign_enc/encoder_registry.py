@@ -1,3 +1,4 @@
+from assign_enc.patterns import *
 from assign_enc.enumerating import *
 from assign_enc.lazy.encodings import *
 from assign_enc.lazy.imputation import *
@@ -6,7 +7,7 @@ from assign_enc.eager.imputation import *
 
 
 EAGER_ENCODERS = [
-    # lambda imp: DirectMatrixEncoder(imp),  # Lazy direct matrix is as good
+    lambda imp: DirectMatrixEncoder(imp),
     # lambda imp: DirectMatrixEncoder(imp, remove_gaps=False),
     # lambda imp: ElementGroupedEncoder(imp),
     lambda imp: ElementGroupedEncoder(imp, normalize_within_group=False),
@@ -93,6 +94,17 @@ EAGER_ENUM_ENCODERS = [  # Encoders only based on counting the possibilities, ig
     lambda imp: EnumRecursiveEncoder(imp, n_divide=2),
     lambda imp: EnumRecursiveEncoder(imp, n_divide=3),
     lambda imp: EnumRecursiveEncoder(imp, n_divide=4),
+]
+
+PATTERN_ENCODERS = [  # Encoders for specific assignment patterns
+    lambda imp: CombiningPatternEncoder(imp),
+    lambda imp: AssigningPatternEncoder(imp),
+    lambda imp: PartitioningPatternEncoder(imp),
+    lambda imp: DownselectingPatternEncoder(imp),
+    lambda imp: ConnectingPatternEncoder(imp),
+    lambda imp: PermutingPatternEncoder(imp),
+    lambda imp: UnorderedNonReplacingCombiningPatternEncoder(imp),
+    lambda imp: UnorderedCombiningPatternEncoder(imp),
 ]
 
 LAZY_IMPUTERS = [

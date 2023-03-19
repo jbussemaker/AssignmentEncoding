@@ -152,6 +152,9 @@ class LazyEncoder(Encoder):
     def design_vars(self) -> List[DiscreteDV]:
         return self._design_vars
 
+    def get_empty_matrix(self) -> np.ndarray:
+        return np.zeros((self.n_src, self.n_tgt), dtype=int)
+
     def _iter_sampled_dv_mat(self, n: int, sampled_dvs: dict):
         n_sample = n*5
         for existence in self._matrix_gen.iter_existence():

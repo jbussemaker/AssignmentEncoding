@@ -283,6 +283,58 @@ def test_node_existence():
     assert NodeExistence() != NodeExistence(max_src_conn_override=1)
     assert NodeExistence(max_tgt_conn_override=1) != NodeExistence(max_src_conn_override=1)
 
+    assert NodeExistence().get_transpose() == NodeExistence()
+    assert NodeExistence(max_tgt_conn_override=1).get_transpose() == NodeExistence(max_src_conn_override=1)
+    assert NodeExistence(max_tgt_conn_override=1) == NodeExistence(max_src_conn_override=1).get_transpose()
+    assert NodeExistence(src_n_conn_override={0: [3]}, tgt_n_conn_override={0: [2]}).get_transpose() == \
+           NodeExistence(src_n_conn_override={0: [2]}, tgt_n_conn_override={0: [3]})
+
+
+def test_effective_settings():
+    settings = MatrixGenSettings(src=[Node([0, 1]), Node(min_conn=2), Node(min_conn=1, max_conn=5)],
+                                 tgt=[Node([0], repeated_allowed=False), Node([1], repeated_allowed=False)],
+                                 excluded=[(2, 0)])
+
+    eff_settings, src_map, tgt_map = NodeExistence().get_effective_settings(settings)
+    eff_settings0 = eff_settings
+    assert len(eff_settings.src) == 3
+    assert repr(eff_settings.src) == repr(settings.src)
+    assert len(eff_settings.tgt) == 1
+    assert tgt_map == {1: 0}
+    assert eff_settings.excluded == []
+
+    assert np.all(settings.expand_effective_matrix(
+        np.array([[1], [2], [3]]), src_map, tgt_map) == np.array([[0, 1], [0, 2], [0, 3]]))
+
+    eff_settings, src_map, tgt_map = NodeExistence(tgt_n_conn_override={0: [1]}).get_effective_settings(settings)
+    assert len(eff_settings.src) == 3
+    assert len(eff_settings.tgt) == 2
+    assert eff_settings.excluded == [(2, 0)]
+
+    eff_settings, src_map, tgt_map = \
+        NodeExistence(src_n_conn_override={1: [0]}, tgt_n_conn_override={0: [1]}).get_effective_settings(settings)
+    assert len(eff_settings.src) == 2
+    assert src_map == {0: 0, 2: 1}
+    assert len(eff_settings.tgt) == 2
+    assert eff_settings.excluded == [(1, 0)]
+
+    assert np.all(settings.expand_effective_matrix(
+        np.array([[1, 2], [3, 4]]), src_map, tgt_map) == np.array([[1, 2], [0, 0], [3, 4]]))
+
+    eff_settings, src_map, tgt_map = NodeExistence(max_src_conn_override=3).get_effective_settings(settings)
+    assert len(eff_settings.src) == 3
+    assert eff_settings.src[0].conns == [0, 1]
+    assert eff_settings.src[1].conns == [2, 3]
+    assert eff_settings.src[2].conns == [1, 2, 3]
+
+    eff_settings_map = settings.get_effective_settings()
+    assert eff_settings_map[NodeExistence()][0].get_cache_key() == eff_settings0.get_cache_key()
+
+    transpose_settings = settings.get_transpose_settings()
+    assert transpose_settings.src == settings.tgt
+    assert transpose_settings.tgt == settings.src
+    assert transpose_settings.excluded == [(0, 2)]
+
 
 def test_max_conn_mat():
     settings = MatrixGenSettings(

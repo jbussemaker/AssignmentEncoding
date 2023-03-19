@@ -79,6 +79,18 @@ def test_one_to_one(gen_one_per_existence: AggregateAssignmentMatrixGenerator):
     assert len(assignment_manager.design_vars) == 0
 
 
+def test_one_to_one_no_patterns(gen_one_per_existence: AggregateAssignmentMatrixGenerator):
+    EncoderSelector._exclude_pattern_encoders = True
+    g = gen_one_per_existence
+    selector = EncoderSelector(g.settings)
+
+    assignment_manager = selector._get_best_assignment_manager()
+    assert isinstance(assignment_manager, AssignmentManagerBase)
+
+    assert len(assignment_manager.design_vars) == 0
+    EncoderSelector._exclude_pattern_encoders = False
+
+
 def test_selector_no_exist():
     src = [Node([1], repeated_allowed=False)]
     tgt = [Node([2], repeated_allowed=False)]

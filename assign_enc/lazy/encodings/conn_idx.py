@@ -212,7 +212,7 @@ class LazyConnIdxMatrixEncoder(LazyEncoder):
     def _decode(self, vector: DesignVector, existence: NodeExistence) -> Optional[Tuple[DesignVector, np.ndarray]]:
         by_src, amount_first = self._by_src, self._amount_first
         dv_idx_map = self._dv_idx_map.get(existence, {})
-        matrix = np.zeros((self.n_src, self.n_tgt), dtype=int)
+        matrix = self.get_empty_matrix()
         if not by_src:
             matrix = matrix.T
 
