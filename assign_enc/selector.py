@@ -189,7 +189,7 @@ class EncoderSelector:
         df_score, assignment_managers = None, []
         if not self._exclude_pattern_encoders:
             df_score, assignment_managers = _create_managers(PATTERN_ENCODERS, self.lazy_imputer, dist_corr_lazy_limit)
-            i_best = self._get_best(df_score, knows_n_mat=n_mat is not None, n_priority=4)
+            i_best = self._get_best(df_score, knows_n_mat=n_mat is not None, n_priority=5)
             if i_best is not None:
                 self._last_selection_stage = '0_pattern'
                 _print_stats(i_best)

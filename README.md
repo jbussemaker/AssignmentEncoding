@@ -252,13 +252,9 @@ Conclusions:
   - Lazy encoders tend to be faster (~10x) in encoding due to not needing to generate matrices
   - However, lazy encoders tend to be slower (1 to 2 orders of magnitude) during sampling/decoding
     for higher imputation ratios due to slow imputers
-- Compared to automatic encoders, manually-encoded analytical problems had similar or worse performance, except for
-  - Large permutation problem (NSGA2): here the EA benefits from specific permutation operators and repair
-    - SBO does not rely on evolutionary operators (also not in its infill search) and thus does not enjoy this benefit
-  - Medium injective assignment problem (SBO):
-    - There is a high imputation ratio for direct-matrix encoders which prevents them from being selected
-    - Other encoders only achieve a low distance correlation, that however does correlate with performance
-    - Performance after the initial DOE was also ~40% worse, indicating ineffective imputation
+- Pattern-specific encoders have similar performance to the best automatic encoders
+  - They are much faster to encode than eager encoders (similar to lazy encoders)
+  - For the permutation problems, further improvements might be obtained by using permutation-specific operators
 - Encoders are preselected according to the following procedure (separately for lazy and eager (non-enum) encoders):
   - Using results of experiment 4 (NSGA2), only consider problem-encoder pairs with imp ratio < 10 and that have a dist corr value
   - Repeat the following until no encoders are eliminated:
@@ -289,11 +285,15 @@ Conclusions:
     - Main time cost comes from design variable grouping (`GroupedEncoder.group_by_values`)
 - The selector algorithm consists of the following steps:
   - Pre-generate the matrix (and cache it)
+  - First try to match any pattern-specific encoder
+    - Calculate imputation ratio, information index, and distance correlation (according to the same rules as below)
+    - Select pattern-specific encoder if it falls in priority areas 1 to 5
   - If `n_mat <= n_mat_eager_max`, encode both eager and lazy encoders, otherwise only encode lazy encoders
     - For each, calculate the imputation ratio, information index, and distance correlation
     - Do no calculate distance correlation if imputation ratio is higher than
       the last (eager) or first (lazy) band of imputation ratios; and limit dist corr calculation time
       - Not limiting the dist corr calculation time actually leads to more enum-based selections (i.e worse results)
+    - If at any time a perfect encoder is found (imp ratio = 1, dist corr >= .95), then stop and select this one
     - Several imputation ratios can be used, with different existence-wise aggregations:
       the **min imputation** ratio is most effective at selecting suitable encoders, because imputers apply for each
       existence scheme separately, and the min imputation ratio applies to the largest matrix that needs to be imputed
@@ -320,7 +320,7 @@ Conclusions:
       - imputation ratio < 10, distance correlation .7-1
       - imputation ratio = 1,  distance correlation .35-.7
       - imputation ratio < 10, distance correlation .35-.7
-      - imputation ratio < 10, distance correlation < .35, information index > 0
+      - (removed) imputation ratio < 10, distance correlation < .35, information index > 0
       - imputation ratio < 10, distance correlation < .35
     - After that, priority is selected in descending distance correlation order per imputation ratio band
   - The best encoder is selected from the division with the highest priority that contains 1 or more encoders:

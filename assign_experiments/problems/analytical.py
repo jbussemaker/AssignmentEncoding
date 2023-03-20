@@ -385,7 +385,7 @@ if __name__ == '__main__':
     # p = AnalyticalCombinationProblem(DEFAULT_EAGER_ENCODER())
     # p = AnalyticalAssignmentProblem(DEFAULT_EAGER_ENCODER())
     # p = AnalyticalAssignmentProblem(EnumRecursiveEncoder(DEFAULT_LAZY_IMPUTER(), n_divide=2), n_src=3, n_tgt=4)
-    p = AnalyticalAssignmentProblem(DEFAULT_LAZY_ENCODER(DEFAULT_LAZY_IMPUTER()), n_src=5, n_tgt=5, injective=True)
+    # p = AnalyticalAssignmentProblem(DEFAULT_LAZY_ENCODER(), n_src=5, n_tgt=5, injective=True)
     # p = AnalyticalAssignmentProblem(DEFAULT_EAGER_ENCODER(), n_src=3, n_tg=4)
     # p = AnalyticalAssignmentProblem(DEFAULT_EAGER_ENCODER(), injective=True, n_src=2, n_tgt=4)
     # p = AnalyticalAssignmentProblem(DEFAULT_EAGER_ENCODER(), injective=True)
@@ -400,15 +400,15 @@ if __name__ == '__main__':
     # p = AnalyticalConnectingProblem(DEFAULT_EAGER_ENCODER())
     # p = AnalyticalPermutingProblem(DEFAULT_EAGER_ENCODER())
     # p = AnalyticalUnorderedNonReplaceCombiningProblem(DEFAULT_EAGER_ENCODER(), n_take=5, n_tgt=9)
-    # p = AnalyticalIterCombinationsReplacementProblem(DEFAULT_EAGER_ENCODER(), n_take=3, n_tgt=3)
+    p = AnalyticalUnorderedCombiningProblem(DEFAULT_EAGER_ENCODER(), n_take=3, n_tgt=5)
 
     try:
-        # p = p.get_for_encoder(DirectMatrixEncoder(DEFAULT_EAGER_IMPUTER()))
-        p = p.get_for_encoder(p.get_manual_best_encoder(DEFAULT_LAZY_IMPUTER()))
-        # p = p.get_for_encoder(ElementGroupedEncoder(DEFAULT_EAGER_IMPUTER()))
-        # with Encoder.with_early_detect_high_imp_ratio(100):
-        #     # p = p.get_for_encoder(EAGER_ENCODERS[1](DEFAULT_EAGER_IMPUTER()))
-        #     p = p.get_for_encoder(LazyAmountFirstEncoder(DEFAULT_LAZY_IMPUTER(), TotalLazyAmountEncoder(), FlatLazyConnectionEncoder()))
+        # p = p.get_for_encoder(p.get_manual_best_encoder(DEFAULT_LAZY_IMPUTER()))
+        p = p.get_for_encoder(ConnIdxGroupedEncoder(DEFAULT_EAGER_IMPUTER()))
+        # print([dv.n_opts for dv in p.assignment_manager.encoder.design_vars])
+        # from assign_pymoo.sampling import RepairedExhaustiveSampling
+        # print(RepairedExhaustiveSampling(p.get_repair()).do(p, 0).get('X'))
+
     except DetectedHighImpRatio:
         exit()
     print(p.get_imputation_ratio())
