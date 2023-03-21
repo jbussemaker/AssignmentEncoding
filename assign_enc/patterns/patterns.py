@@ -153,7 +153,7 @@ class AssigningPatternEncoder(PatternEncoderBase):
                 conns[conns > n_max] = n_max
 
         # The matrix is simply the reshaped design vector
-        matrix = np.array(vector, dtype=int).reshape((self.n_src, self.n_tgt))
+        matrix = np.array(vector, dtype=int).reshape((n_src, n_tgt))
         return vector, matrix
 
     def _pattern_name(self) -> str:

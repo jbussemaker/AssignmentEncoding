@@ -235,10 +235,15 @@ class LazyEncoder(Encoder):
             return min([n_tot/n_valid[i] if n_valid[i] > 0 else np.inf for i, n_tot in enumerate(n_total)])
         return sum(n_total)/sum(n_valid) if sum(n_valid) > 0 else np.inf
 
-    def _correct_vector_size(self, vector: DesignVector) -> Tuple[DesignVector, int, int]:
-        n_dv = len(self.design_vars)
+    def _correct_vector_size(self, vector: DesignVector, existence: NodeExistence = None) \
+            -> Tuple[DesignVector, int, int, List[DiscreteDV], NodeExistence]:
+        if existence is None:
+            existence = NodeExistence()
+
+        des_vars = self._existence_design_vars.get(existence, self.design_vars)
+        n_dv = len(des_vars)
         vector, n_extra = EagerEncoder.correct_vector_size(n_dv, vector)
-        return vector, n_dv, n_extra
+        return vector, n_dv, n_extra, des_vars, existence
 
     def get_matrix(self, vector: DesignVector, existence: NodeExistence = None) -> Tuple[DesignVector, np.ndarray]:
         """Select a connection matrix (n_src x n_tgt) and impute the design vector if needed.
@@ -255,9 +260,9 @@ class LazyEncoder(Encoder):
 
     def _get_validate_matrix(self, vector: DesignVector, existence: NodeExistence = None) \
             -> Tuple[List[int], List[int], NodeExistence, np.ndarray, bool]:
-        vector, n_dv, n_extra = self._correct_vector_size(vector)
+        vector, n_dv, n_extra, dvs, existence = self._correct_vector_size(vector, existence)
         extra_vector = [X_INACTIVE_VALUE]*n_extra
-        vector, _ = EagerEncoder.correct_vector_bounds(vector, self.design_vars)
+        vector, _ = EagerEncoder.correct_vector_bounds(vector, dvs)
 
         # Decode matrix
         vector, matrix, existence = self._decode_vector(vector, existence)
@@ -269,8 +274,8 @@ class LazyEncoder(Encoder):
     def is_valid_vector(self, vector: DesignVector, existence: NodeExistence = None):
 
         original_vector = vector
-        vector, n_dv, n_extra = self._correct_vector_size(vector)
-        vector, is_corrected = EagerEncoder.correct_vector_bounds(vector, self.design_vars)
+        vector, n_dv, n_extra, dvs, existence = self._correct_vector_size(vector, existence)
+        vector, is_corrected = EagerEncoder.correct_vector_bounds(vector, dvs)
         if is_corrected:
             return False
 

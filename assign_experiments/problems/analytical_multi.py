@@ -18,16 +18,17 @@ class MultiAnalyticalProblemBase(AnalyticalProblemBase):
     def get_aux_des_vars(self) -> Optional[List[DiscreteDV]]:
         return self._aux_des_vars
 
-    def correct_x_aux(self, x_aux: DesignVector) -> Tuple[DesignVector, Optional[NodeExistence], bool]:
+    def correct_x_aux(self, x_aux: DesignVector) -> Tuple[DesignVector, IsActiveVector, Optional[NodeExistence], bool]:
+        is_active = np.ones((len(x_aux),), dtype=bool)
         if tuple(x_aux) in self._exist_pattern_map:
-            return x_aux, self._exist_pattern_map[tuple(x_aux)], False
+            return x_aux, is_active, self._exist_pattern_map[tuple(x_aux)], False
 
         # Correct the aux vector: use the closest imputation method
         elements, target = self._aux_dvs, np.array(x_aux)
         dist = np.sqrt(np.sum((elements-target)**2, axis=1))
         i_min_dist = np.argmin(dist)
         x_aux_corr = list(self._aux_dvs[i_min_dist, :])
-        return x_aux_corr, self._exist_pattern_map[tuple(x_aux_corr)], False
+        return x_aux_corr, is_active, self._exist_pattern_map[tuple(x_aux_corr)], False
 
     def get_existence_patterns(self) -> Optional[NodeExistencePatterns]:
         return NodeExistencePatterns(patterns=list(self._exist_pattern_map.values()))

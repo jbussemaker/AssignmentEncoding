@@ -54,11 +54,7 @@ class LazyDirectMatrixEncoder(LazyEncoder):
         dv_map = self._dv_idx_map.get(existence, [])
         for i_dv, (i, j) in enumerate(dv_map):
             matrix[i, j] = vector[i_dv]
-
-        # Ensure that all other design variables are inactive
-        imputed_vector = np.array(vector)
-        imputed_vector[len(dv_map):] = X_INACTIVE_VALUE
-        return imputed_vector, matrix
+        return vector, matrix
 
     def __repr__(self):
         return f'{self.__class__.__name__}({self._imputer!r})'

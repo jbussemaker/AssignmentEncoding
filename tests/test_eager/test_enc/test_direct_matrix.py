@@ -1,3 +1,4 @@
+import itertools
 import numpy as np
 from assign_enc.matrix import *
 from assign_enc.eager.imputation.first import *
@@ -115,3 +116,27 @@ def test_one_to_one(gen_one_per_existence: AggregateAssignmentMatrixGenerator):
         dv, mat = encoder.get_matrix([], existence=existence)
         assert dv == []
         assert mat.shape[0] == (len(gen_one_per_existence.src) if i not in [3, 7] else 0)
+
+
+def test_different_sizes_bounds():
+    patterns = [
+        NodeExistence(),
+        NodeExistence(src_exists=[True, False], tgt_exists=[True, False]),
+    ]
+    settings = MatrixGenSettings(src=[Node(min_conn=0) for _ in range(2)], tgt=[Node([0, 1]), Node(min_conn=0)],
+                                 existence=NodeExistencePatterns(patterns=patterns))
+    encoder = DirectMatrixEncoder(FirstImputer())
+    encoder.matrix = AggregateAssignmentMatrixGenerator(settings).get_agg_matrix()
+    assert len(encoder.design_vars) == 4
+    assert [dv.n_opts for dv in encoder.design_vars] == [2, 3, 2, 3]
+
+    assert np.all(encoder._design_vectors[patterns[1]] == np.array([[0], [1]]))
+
+    for existence in patterns:
+        dv_seen = set()
+        matrix_seen = set()
+        for dv in itertools.product(*[list(range(dv.n_opts)) for dv in encoder.design_vars]):
+            dv_imp, matrix = encoder.get_matrix(list(dv), existence=existence)
+            dv_seen.add(tuple(dv_imp))
+            matrix_seen.add(tuple(matrix.ravel()))
+        assert len(dv_seen) == len(matrix_seen)
