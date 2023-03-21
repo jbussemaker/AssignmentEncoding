@@ -31,6 +31,9 @@ class LazyImputer:
     def _decode(self, vector: DesignVector, existence: NodeExistence) -> Optional[Tuple[DesignVector, np.ndarray]]:
         return self._decode_func(vector, existence)
 
+    def _get_des_vars(self, existence: NodeExistence) -> List[DiscreteDV]:
+        return self._existence_des_vars.get(existence, self._des_vars)
+
     def impute(self, vector: DesignVector, matrix: Optional[np.ndarray], existence: NodeExistence,
                tried_vectors: set = None) -> Tuple[DesignVector, np.ndarray]:
         """Returns the imputed design vector and associated connection matrix"""

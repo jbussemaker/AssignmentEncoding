@@ -27,7 +27,8 @@ class LazyDeltaImputer(LazyImputer):
             i_sorted = np.argsort(np.abs(des_var_delta))
             return des_var_delta[i_sorted]
 
-        delta_values = [_sort_by_dist(np.arange(dv.n_opts)-vector[i]) for i, dv in enumerate(self._des_vars)]
+        delta_values = [_sort_by_dist(np.arange(dv.n_opts)-vector[i])
+                        for i, dv in enumerate(self._get_des_vars(existence))]
 
         # Loop over all delta values
         n_tries, n_tries_max = 0, self.n_max_tries

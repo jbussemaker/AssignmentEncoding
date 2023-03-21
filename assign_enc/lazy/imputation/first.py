@@ -21,7 +21,7 @@ class LazyFirstImputer(LazyImputer):
             return self._impute_cache[cache_key]
 
         # Loop through possible design vectors until one is found that has not been tried yet
-        for dv in itertools.product(*[list(range(dv.n_opts)) for dv in self._des_vars[::-1]]):
+        for dv in itertools.product(*[list(range(dv.n_opts)) for dv in self._get_des_vars(existence)[::-1]]):
             # Validate this design vector and associated matrix
             vector = np.array(dv[::-1])
             vector, matrix = self._decode(vector, existence)
