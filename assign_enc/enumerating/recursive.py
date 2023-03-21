@@ -14,13 +14,13 @@ class EnumRecursiveEncoder(QuasiLazyEncoder):
     def __init__(self, *args, n_divide=2, **kwargs):
         self.n_divide = max(2, n_divide)
         super().__init__(*args, **kwargs)
-        self._dv_last = None
-        self._dv_inactive_key = None
+        self._dv_last = {}
+        self._dv_inactive_key = {}
 
     def _encode_prepare(self):
         super()._encode_prepare()
-        self._dv_last = None
-        self._dv_inactive_key = None
+        self._dv_last = {}
+        self._dv_inactive_key = {}
 
     def _encode_matrix(self, matrix: np.ndarray, existence: NodeExistence) -> List[DiscreteDV]:
         n_mat = matrix.shape[0]
@@ -28,9 +28,6 @@ class EnumRecursiveEncoder(QuasiLazyEncoder):
             return []
 
         n = self.n_divide
-        if n_mat < n:
-            return [DiscreteDV(n_opts=n_mat)]
-
         n_var = int(np.ceil(np.log(n_mat)/np.log(n)))
 
         # Get design vector values that lead to inactive variables (due to nr cutoff)
@@ -38,11 +35,13 @@ class EnumRecursiveEncoder(QuasiLazyEncoder):
         i_inactive = np.where(dv_last == 0)[0]
         if len(i_inactive) > 0:
             left_side_values = dv_last[:i_inactive[-1]+1]
-            self._dv_inactive_key = (i_inactive, left_side_values)
+            self._dv_inactive_key[existence] = (i_inactive, left_side_values)
             dv_last[i_inactive] = X_INACTIVE_VALUE
-        self._dv_last = dv_last
+        self._dv_last[existence] = dv_last
 
-        return [DiscreteDV(n_opts=n) for _ in range(n_var)]
+        n_opts = np.ones((n_var,), dtype=int)*n
+        n_opts[0] = dv_last[0]+1
+        return [DiscreteDV(n_opts=n_opt) for n_opt in n_opts]
 
     def _decode_matrix(self, vector: DesignVector, matrix: np.ndarray, existence: NodeExistence) \
             -> Optional[Tuple[DesignVector, np.ndarray]]:
@@ -51,10 +50,11 @@ class EnumRecursiveEncoder(QuasiLazyEncoder):
 
         i_mat = np.sum((self.n_divide**np.arange(len(vector)))*vector[::-1])
         if i_mat >= matrix.shape[0]:
-            return self._dv_last, matrix[-1, :, :]
+            return self._dv_last[existence], matrix[-1, :, :]
 
-        if self._dv_inactive_key is not None:
-            i_inactive, left_side_values = self._dv_inactive_key
+        dv_inactive_key = self._dv_inactive_key.get(existence)
+        if dv_inactive_key is not None:
+            i_inactive, left_side_values = dv_inactive_key
             if np.all(vector[:len(left_side_values)] == left_side_values):
                 vector = np.array(vector)
                 vector[i_inactive] = X_INACTIVE_VALUE

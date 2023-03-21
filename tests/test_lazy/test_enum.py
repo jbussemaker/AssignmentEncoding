@@ -64,6 +64,9 @@ def test_recursive_encoding():
                 assert len(enc.design_vars) == int(np.ceil(log_ratio))
                 assert max([dv.n_opts for dv in enc.design_vars]) == n_div
 
+                dv_last = enc._dv_last[NodeExistence()]
+                assert enc.design_vars[0].n_opts == dv_last[0]+1
+
                 assert enc.get_imputation_ratio() >= 1
                 assert enc.get_information_index() > 0
 
