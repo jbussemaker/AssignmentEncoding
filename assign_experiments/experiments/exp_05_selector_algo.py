@@ -126,6 +126,7 @@ def plot_pareto_fronts(reset_pf=False):
 
 def exp_selector_imp_ratio_type(i_prob: int, n_repeat=4):
     EncoderSelector._global_disable_cache = True
+    EncoderSelector._exclude_pattern_encoders = True
     Experimenter.capture_log()
     EncoderSelector.encoding_timeout = .5
     EncoderSelector.n_mat_max_eager = 1e3
@@ -297,6 +298,7 @@ class SelCompEffort(enum.Enum):
 def run_experiment(i_prob: int, effort: SelCompEffort, sbo=False, n_repeat=8, n_repeat_opt=8, do_run=True,
                    force_stats=False, force_plot=False):
     EncoderSelector._global_disable_cache = True
+    EncoderSelector._exclude_pattern_encoders = True
     Experimenter.capture_log()
     pop_size = 30 if sbo else 50
     n_gen = 6

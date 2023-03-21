@@ -484,7 +484,7 @@ def run_experiment(size: Size, sbo=False, n_repeat=8, i_prob=None, do_run=True, 
 
             has_encoding_error = False
             stats_key = (str(problem), str(encoder))
-            is_manual_best = 'Manual Best' in str(encoder)
+            is_manual_best = 'Pattern' in str(encoder)
             if df_init_exists is not None and stats_key in df_init_exists.index:
                 log.info(f'Results exist for {problem!s} (encoder: {encoder!s})')
                 stats_row = df_init_exists.loc[stats_key]
@@ -538,18 +538,19 @@ def run_experiment(size: Size, sbo=False, n_repeat=8, i_prob=None, do_run=True, 
 
             else:
                 enc_times = []
-                for i_test in range(n_repeat_timing):
-                    try:
-                        with time_limiter(20.):
-                            s = timeit.default_timer()
-                            enc_prob = problem.get_for_encoder(encoder)
-                    except (TimeoutError, MemoryError) as e:
-                        log.info(f'Could not encode: {e.__class__.__name__}')
-                        has_encoding_error = True
+                with Encoder.with_early_detect_high_imp_ratio(imp_ratio_sample_limit):
+                    for i_test in range(n_repeat_timing):
+                        try:
+                            with time_limiter(20.):
+                                s = timeit.default_timer()
+                                enc_prob = problem.get_for_encoder(encoder)
+                        except (TimeoutError, MemoryError, DetectedHighImpRatio) as e:
+                            log.info(f'Could not encode: {e.__class__.__name__}')
+                            has_encoding_error = True
+                            enc_times.append(timeit.default_timer()-s)
+                            break
                         enc_times.append(timeit.default_timer()-s)
-                        break
-                    enc_times.append(timeit.default_timer()-s)
-                    log.info(f'Encoded in {enc_times[-1]:.2g} sec ({i_test+1}/{n_repeat_timing})')
+                        log.info(f'Encoded in {enc_times[-1]:.2g} sec ({i_test+1}/{n_repeat_timing})')
 
                 stats['prob'].append(str(problem))
                 stats['enc'].append(str(encoder))
@@ -608,11 +609,11 @@ def run_experiment(size: Size, sbo=False, n_repeat=8, i_prob=None, do_run=True, 
                 algorithms.append(get_sbo_algo(enc_prob, init_size=pop_size))
             else:
                 used_manual = False
-                if isinstance(encoder, ManualBestEncoder):
-                    manual_nsga2 = encoder.get_nsga2(pop_size=pop_size)
-                    if manual_nsga2 is not None:
-                        algorithms.append(manual_nsga2)
-                        used_manual = True
+                # if isinstance(encoder, ManualBestEncoder):
+                #     manual_nsga2 = encoder.get_nsga2(pop_size=pop_size)
+                #     if manual_nsga2 is not None:
+                #         algorithms.append(manual_nsga2)
+                #         used_manual = True
                 if not used_manual:
                     algorithms.append(get_ga_algo(enc_prob, pop_size=pop_size))
             i_map[i_exp] = len(stats['prob'])-1
@@ -703,12 +704,12 @@ def check_manual_encoding():
         has_result = ~np.isnan(df['hv_end'])
         low_imp_ratio = df.imp_ratio <= 10
         has_dist_corr = ~np.isnan(df.dist_corr)
-        enc_is_mbe = np.array([enc.startswith('Manual Best') for enc in df.enc.values], dtype=bool)
+        enc_is_pat = np.array(['Pattern' in enc for enc in df.enc.values], dtype=bool)
         enc_is_preselected = df.enc.isin(preselected_encoders)
 
         stats = {'prob': [], 'dc_corr': [], 'dc_low_imp_ratio_corr': []}
         stats_cols = ['enc', 'imp_ratio', 'inf_idx', 'dist_corr', 'hv_end', 'hv_end_std']
-        for enc_type in ['mbe', 'best', 'sim_best', 'sel_best']:  # mbe = manual best encoder
+        for enc_type in ['pat', 'best', 'sim_best', 'sel_best']:  # pat = pattern encoder
             for col in stats_cols:
                 stats[f'{enc_type}_{col}'] = []
 
@@ -723,19 +724,19 @@ def check_manual_encoding():
             dc_corr_low_ir = pearsonr(dist_corr_values_low_ir, df.hv_end[prob_mask & has_dist_corr & low_imp_ratio].values).statistic
             stats['dc_low_imp_ratio_corr'].append(dc_corr_low_ir)
 
-            i_mbe = np.where(prob_mask & enc_is_mbe)[0]
-            similar_mask = ((df.imp_ratio.values == df.imp_ratio.values[i_mbe[0]]) & (df.inf_idx.values == df.inf_idx.values[i_mbe[0]])
-                            & (np.abs(df.dist_corr.values-df.dist_corr.values[i_mbe[0]]) < 1e-2)) if len(i_mbe) > 0 else []
+            i_pat = np.where(prob_mask & enc_is_pat)[0]
+            similar_mask = ((df.imp_ratio.values == df.imp_ratio.values[i_pat[0]]) & (df.inf_idx.values == df.inf_idx.values[i_pat[0]])
+                            & (np.abs(df.dist_corr.values-df.dist_corr.values[i_pat[0]]) < 1e-2)) if len(i_pat) > 0 else []
 
-            i_best = np.where(prob_mask & low_imp_ratio & (~enc_is_mbe))[0]
+            i_best = np.where(prob_mask & low_imp_ratio & (~enc_is_pat))[0]
             i_best = [i_best[np.argmin(df.hv_end.values[i_best])]] if len(i_best) > 0 else []
-            i_sim_best = np.where(prob_mask & low_imp_ratio & (~enc_is_mbe) & similar_mask)[0]
+            i_sim_best = np.where(prob_mask & low_imp_ratio & (~enc_is_pat) & similar_mask)[0]
             i_sim_best = [i_sim_best[np.argmin(df.hv_end.values[i_sim_best])]] if len(i_sim_best) > 0 else []
-            i_sel_best = np.where(prob_mask & low_imp_ratio & (~enc_is_mbe) & enc_is_preselected)[0]
+            i_sel_best = np.where(prob_mask & low_imp_ratio & (~enc_is_pat) & enc_is_preselected)[0]
             i_sel_best = [i_sel_best[np.argmin(df.hv_end.values[i_sel_best])]] if len(i_sel_best) > 0 else []
 
             stats['prob'].append(prob)
-            for i_row, enc_type in [(i_mbe, 'mbe'), (i_best, 'best'), (i_sim_best, 'sim_best'), (i_sel_best, 'sel_best')]:
+            for i_row, enc_type in [(i_pat, 'pat'), (i_best, 'best'), (i_sim_best, 'sim_best'), (i_sel_best, 'sel_best')]:
                 if len(i_row) == 0:
                     for col in stats_cols:
                         stats[f'{enc_type}_{col}'].append(np.nan)
@@ -755,8 +756,7 @@ def preselect_encoders(imp_ratio_limit=10):
     # df = pd.concat([df, df_sbo], ignore_index=True)
 
     lazy_encoders = df.enc[df.enc.str.startswith('Lazy')].unique()
-    is_eager = (~df.enc.str.startswith('One Var')) & (~df.enc.str.startswith('Recursive')) & \
-               (~df.enc.str.startswith('Manual Best')) & (~df.enc.str.startswith('Lazy'))
+    is_eager = (~df.enc.str.startswith('Enum')) & (~df.enc.str.contains('Pattern')) & (~df.enc.str.startswith('Lazy'))
     eager_encoders = df.enc[is_eager].unique()
 
     df = df[df.imp_ratio < imp_ratio_limit]
@@ -780,9 +780,12 @@ def preselect_encoders(imp_ratio_limit=10):
                     for j_enc in range(len(encoders)):
                         if j_enc == i_enc:
                             continue
-                        if imp_ratio[j_enc] <= imp_ratio[i_enc]+d_ir and dist_corr[j_enc] >= dist_corr[i_enc]-d_dc:
-                            found_better = True
-                            break
+                        is_better = imp_ratio[j_enc] <= imp_ratio[i_enc]-d_ir and dist_corr[j_enc] >= dist_corr[i_enc]+d_dc
+                        is_similar_or_better = imp_ratio[j_enc] <= imp_ratio[i_enc]+d_ir and dist_corr[j_enc] >= dist_corr[i_enc]-d_dc
+                        if is_similar_or_better:
+                            if is_better or (not is_better and i_enc > j_enc):
+                                found_better = True
+                                break
                     if not found_better:
                         nr_is_best[enc] += 1
 
@@ -827,7 +830,7 @@ def plot_stats(df: pd.DataFrame, folder, show=False):
     df['has_timing'] = has_timing = ~np.isnan(df['sampling_time_sec'])
     df['enc_type'] = np.array([enc.startswith('Lazy') for enc in df.enc.values], dtype=float)
     df.enc_type[np.array([enc.startswith('Recursive') or enc.startswith('One Var') for enc in df.enc.values])] = .4
-    df.enc_type[np.array([enc.startswith('Manual Best') for enc in df.enc.values])] = .75
+    df.enc_type[np.array(['Pattern' in enc for enc in df.enc.values])] = .75
 
     col_names = {
         'n': 'Nr of valid points',
@@ -947,6 +950,16 @@ def plot_stats(df: pd.DataFrame, folder, show=False):
     plt.close('all')
 
 
+def run_manual_best_encoders():
+    for problem in get_problems(Size.SM):
+        if isinstance(problem, AnalyticalProblemBase):
+            encoder = problem.get_manual_best_encoder(DEFAULT_LAZY_IMPUTER())
+            if encoder is not None:
+                print(f'{problem!s}: {encoder!s}')
+                problem = problem.get_for_encoder(encoder)
+                RepairedRandomSampling(repair=problem.get_repair()).do(problem, 1000)
+
+
 if __name__ == '__main__':
     # show_problem_sizes(Size.SM, reset_pf=True)
     # show_problem_sizes(Size.MD, reset_pf=True)
@@ -957,6 +970,7 @@ if __name__ == '__main__':
 
     # exp_dist_corr_convergence(), exit()
     # exp_dist_corr_perm(), exit()
+    # run_manual_best_encoders(), exit()
 
     # for ipr in list(range(len(get_problems(Size.SM)))):
     #     exp_sbo_convergence(Size.SM, n_repeat=4, i_prob=ipr)
@@ -979,5 +993,5 @@ if __name__ == '__main__':
 
     # _do_plot()
     # _do_plot(sbo=True)
-    # preselect_encoders()
-    check_manual_encoding()
+    preselect_encoders()
+    # check_manual_encoding()
