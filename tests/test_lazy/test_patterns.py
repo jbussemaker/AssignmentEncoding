@@ -88,6 +88,7 @@ def _do_test_encoders(encoder_cls: Type[PatternEncoderBase], settings_map, match
                 seen_dvs = set()
                 for des_vector in itertools.product(*[list(range(dv.n_opts+1)) for dv in encoder.design_vars]):
                     imp_dv, matrix = encoder.get_matrix(list(des_vector)+[0])
+                    assert len(imp_dv) == len(encoder.design_vars)+1
                     assert tuple(matrix.ravel()) in agg_matrix_set
                     seen_dvs.add(tuple(imp_dv))
 
@@ -148,11 +149,6 @@ def test_permuting_encoder(settings):
     assert encoders[0].get_distance_correlation()
 
 
-def test_unordered_non_repl_combinations_encoder(settings):
+def test_unordered_combining_encoder(settings):
     _do_test_encoders(
-        UnorderedNonReplacingCombiningPatternEncoder, settings, ['unordered_norepl_combining'])
-
-
-def test_unordered_combinations_encoder(settings):
-    _do_test_encoders(
-        UnorderedCombiningPatternEncoder, settings, ['unordered_combining'])
+        UnorderedCombiningPatternEncoder, settings, ['unordered_norepl_combining', 'unordered_combining'])

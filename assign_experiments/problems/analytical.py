@@ -301,7 +301,7 @@ class AnalyticalUnorderedNonReplaceCombiningProblem(AnalyticalProblemBase):
         return f'An Unord Norepl Comb Prob {self._n_take} from {self._n_tgt}'
 
     def get_manual_best_encoder(self, imputer: LazyImputer) -> Optional[PatternEncoderBase]:
-        return UnorderedNonReplacingCombiningPatternEncoder(imputer)
+        return UnorderedCombiningPatternEncoder(imputer)
 
 
 class AnalyticalUnorderedCombiningProblem(AnalyticalUnorderedNonReplaceCombiningProblem):
@@ -400,11 +400,11 @@ if __name__ == '__main__':
     # p = AnalyticalConnectingProblem(DEFAULT_EAGER_ENCODER())
     # p = AnalyticalPermutingProblem(DEFAULT_EAGER_ENCODER())
     # p = AnalyticalUnorderedNonReplaceCombiningProblem(DEFAULT_EAGER_ENCODER(), n_take=5, n_tgt=9)
-    p = AnalyticalUnorderedCombiningProblem(DEFAULT_EAGER_ENCODER(), n_take=3, n_tgt=5)
+    p = AnalyticalUnorderedCombiningProblem(DEFAULT_EAGER_ENCODER(), n_take=5, n_tgt=10)
 
     try:
-        # p = p.get_for_encoder(p.get_manual_best_encoder(DEFAULT_LAZY_IMPUTER()))
-        p = p.get_for_encoder(ConnIdxGroupedEncoder(DEFAULT_EAGER_IMPUTER()))
+        p = p.get_for_encoder(p.get_manual_best_encoder(DEFAULT_LAZY_IMPUTER()))
+        # p = p.get_for_encoder(ConnIdxGroupedEncoder(DEFAULT_EAGER_IMPUTER()))
         # print([dv.n_opts for dv in p.assignment_manager.encoder.design_vars])
         # from assign_pymoo.sampling import RepairedExhaustiveSampling
         # print(RepairedExhaustiveSampling(p.get_repair()).do(p, 0).get('X'))

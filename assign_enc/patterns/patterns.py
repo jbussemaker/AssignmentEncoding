@@ -6,7 +6,7 @@ from assign_enc.patterns.encoder import *
 
 __all__ = ['CombiningPatternEncoder', 'AssigningPatternEncoder', 'PartitioningPatternEncoder',
            'DownselectingPatternEncoder', 'ConnectingPatternEncoder', 'PermutingPatternEncoder',
-           'UnorderedNonReplacingCombiningPatternEncoder', 'UnorderedCombiningPatternEncoder']
+           'UnorderedCombiningPatternEncoder']
 
 
 class CombiningPatternEncoder(PatternEncoderBase):
@@ -395,14 +395,18 @@ class PermutingPatternEncoder(PatternEncoderBase):
         return 'Permuting'
 
 
-class UnorderedNonReplacingCombiningPatternEncoder(PatternEncoderBase):
+class UnorderedCombiningPatternEncoder(PatternEncoderBase):
     """
-    Encodes the unordered combining pattern: take M from N elements, no replacement
+    Encodes the unordered combining pattern: take M from N elements, optionally with replacement
 
     Source nodes: 1 node with M connections
-    Target nodes: N nodes with 0 or 1 connection
-    Encoded as:   N-1 binary design variables
+    Target nodes: N nodes with 0 or 1 connection (or any nr of connections if with replacement)
+    Encoded as:   N-1 binary design variables (N+M-2 if with replacement)
     """
+
+    def __init__(self, imputer):
+        self.with_replacement = False
+        super().__init__(imputer)
 
     def _matches_pattern(self, effective_settings: MatrixGenSettings, initialize: bool) -> bool:
         src, tgt = effective_settings.src, effective_settings.tgt
@@ -417,13 +421,34 @@ class UnorderedNonReplacingCombiningPatternEncoder(PatternEncoderBase):
 
         # Check if all target nodes have 0 or 1 connection
         if all(n.conns == [0, 1] for n in tgt):
-            return True
+            if initialize:
+                self.with_replacement = False
+            return not self.with_replacement
+
+        # Check if all target nodes have any nr of connections
+        if all(n.min_conns == 0 for n in tgt):
+
+            # Check if all connections are repeated
+            if all(n.rep for nodes in (src, tgt) for n in nodes):
+                if initialize:
+                    self.with_replacement = True
+                return self.with_replacement
 
         return False
 
     def _encode_effective(self, effective_settings: MatrixGenSettings) -> List[DiscreteDV]:
         n_tgt = len(effective_settings.tgt)
-        return [DiscreteDV(n_opts=2) for _ in range(n_tgt-1)]
+        n_dv = n_tgt-1
+
+        # If we select with replacement, it is the same as if we could select n_take-1 non-replacing positions
+        # You can verify:
+        # len(list(itertools.combinations_with_replacement(list(range(n_tgt)), n_take)))
+        # == len(list(itertools.combinations(list(range(n_tgt+n_take-1)), n_take)))
+        if self.with_replacement:
+            n_take = effective_settings.src[0].conns[0]
+            n_dv += n_take-1
+
+        return [DiscreteDV(n_opts=2) for _ in range(n_dv)]
 
     def _decode_effective(self, vector: DesignVector, effective_settings: MatrixGenSettings) \
             -> Tuple[DesignVector, np.ndarray]:
@@ -447,98 +472,25 @@ class UnorderedNonReplacingCombiningPatternEncoder(PatternEncoderBase):
             target = (n_take-1) if np.random.random() > .5 else n_take
             vector[np.random.choice(i_selected, n_taken-target, replace=False)] = 0
 
-        # Set matrix connections in the first row
-        matrix = np.zeros((1, n_tgt), dtype=int)
-        matrix[0, :len(vector)] = vector
-
         # Select last element if nr of taken elements is n_take-1
+        input_vector = vector
+        vector = np.concatenate([vector, [0]])
         if np.sum(vector) == n_take-1:
-            matrix[0, -1] = 1
+            vector[-1] = 1
 
-        return vector, matrix
+        # If with replacement, we have now selected the non-replacing version, so we have to compress
+        # For example: [0 0 1 1 0 1] --> [0 0 2 1]
+        if self.with_replacement:
+            i_selected = np.where(vector == 1)[0]
+            i_selected -= np.arange(len(i_selected))
 
-    def _pattern_name(self) -> str:
-        return 'Unordered Non-replacing Combining'
-
-
-class UnorderedCombiningPatternEncoder(PatternEncoderBase):
-    """
-    Encodes the unordered combining pattern: take M from N elements, with replacement
-
-    Source nodes: 1 node with M connections, repeatable
-    Target nodes: N nodes with any nr of connections, repeatable
-    Encoded as:   M design variables with N options each
-    """
-
-    def _matches_pattern(self, effective_settings: MatrixGenSettings, initialize: bool) -> bool:
-        src, tgt = effective_settings.src, effective_settings.tgt
-
-        # There may be no excluded edges
-        if effective_settings.get_excluded_indices():
-            return False
-
-        # Check if there is one node with 1 specific amount of connections (other than 1)
-        if len(src) != 1 or not src[0].conns or len(src[0].conns) != 1 or src[0].conns == [1]:
-            return False
-
-        # Check if all target nodes have any nr of connections
-        if all(n.min_conns == 0 for n in tgt):
-
-            # Check if all connections are repeated
-            if all(n.rep for nodes in (src, tgt) for n in nodes):
-                return True
-
-        return False
-
-    def _encode_effective(self, effective_settings: MatrixGenSettings) -> List[DiscreteDV]:
-        n_take = effective_settings.src[0].conns[0]
-        n_tgt = len(effective_settings.tgt)
-        return [DiscreteDV(n_opts=n_tgt) for _ in range(n_take)]
-
-    def _decode_effective(self, vector: DesignVector, effective_settings: MatrixGenSettings) \
-            -> Tuple[DesignVector, np.ndarray]:
-        n_take = effective_settings.src[0].conns[0]
-        n_tgt = len(effective_settings.tgt)
-
-        """
-        Correct the vector by ensuring that each subsequent value is equal or higher
-        This also works if we don't have replacement, as there the design vectors are encoded with an offset anyway
-        
-        We correct the vector starting in the center in order to be closer to the true distribution of vectors if design
-        variables are generated randomly.
-        For example, take 2 from 3, with replacement:
-        000 001 002 011 012 022 111 112 122 222
-        The amounts each value at each position occurs:
-         DV: 0 1 2
-        0    6 3 1
-        1    3 4 3
-        2    1 3 6
-        As you can see, for the center design variable, the distribution of selected values is closest to uniform.
-        Therefore when all design variables are randomly selected, it makes sense to start there for correcting the
-        other design variables. This result can be reproduced for every take x from y.
-        """
-
-        vector = np.array(vector)
-        n_max = n_tgt
-
-        # Correct variables before the center variable
-        i_center = int(np.floor(.5*(n_take-1)))
-        for i in reversed(range(0, i_center)):
-            if vector[i] > vector[i+1]:
-                # Move to any of the positions that are equal or lower
-                vector[i] = np.random.choice(np.arange(0, vector[i+1]+1))
-
-        # Correct variables after the center variable
-        for i in range(i_center+1, n_take):
-            if vector[i] < vector[i-1]:
-                # Move to any of the random positions that are equal or higher
-                vector[i] = np.random.choice(np.arange(vector[i-1], n_max))
+            vector = np.zeros((n_tgt,), dtype=int)
+            for i in i_selected:
+                vector[i] += 1
 
         # Set matrix connections in the first row
-        matrix = np.zeros((1, n_tgt), dtype=int)
-        for i_dv, i in enumerate(vector):
-            matrix[0, i] += 1
-        return vector, matrix
+        matrix = np.array([vector], dtype=int)
+        return input_vector, matrix
 
     def _pattern_name(self) -> str:
         return 'Unordered Combining'
