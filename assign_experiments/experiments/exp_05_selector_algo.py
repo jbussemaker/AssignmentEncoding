@@ -97,12 +97,13 @@ def show_multi_comb_problem_sizes(reset_pf=False, plot=False):
         print('')
 
 
-def get_problem_factories() -> List[Callable[[Optional[Encoder]], AssignmentProblemBase]]:
+def get_problem_factories() -> List[Tuple[Callable[[Optional[Encoder]], AssignmentProblemBase], bool]]:
     factories = []
-    for size in Size:
-        factories += get_problems(size, return_factories=True)
-    factories += get_gnc_problem_factories()
-    factories += get_multi_comb_problem_factories()
+    for incl_pattern_encoders in [False, True]:
+        for size in Size:
+            factories += [(factory, incl_pattern_encoders) for factory in get_problems(size, return_factories=True)]
+    factories += [(factory, True) for factory in get_gnc_problem_factories()]
+    factories += [(factory, True) for factory in get_multi_comb_problem_factories()]
     return factories
 
 
@@ -112,12 +113,12 @@ def plot_pareto_fronts(reset_pf=False):
     res_folder = Experimenter.results_folder
     factories = get_problem_factories()
     if reset_pf:
-        for i, problem_factory in enumerate(factories):
+        for i, (problem_factory, _) in enumerate(factories):
             problem = problem_factory(EnumOrdinalEncoder(DEFAULT_LAZY_IMPUTER()))
             log.info(f'PF of problem {i+1}/{len(factories)}: {problem!s}')
             problem.reset_pf_cache()
             problem.pareto_front()
-    for i, problem_factory in enumerate(factories):
+    for i, (problem_factory, _) in enumerate(factories):
         problem = problem_factory(EnumOrdinalEncoder(DEFAULT_LAZY_IMPUTER()))
         log.info(f'Plotting problem {i+1}/{len(factories)}: {problem!s}')
         problem.plot_pf(show_approx_f_range=True, n_sample=1000, show=False,
@@ -338,7 +339,7 @@ def run_experiment(i_prob: int, effort: SelCompEffort, sbo=False, n_repeat=8, n_
         df_init_exists = pd.read_csv(stats_init_file).set_index('prob')
 
     # Lazy dist corr for numba jit
-    get_problem_factories()[0](DEFAULT_LAZY_ENCODER()).assignment_manager.encoder.get_distance_correlation()
+    get_problem_factories()[0][0](DEFAULT_LAZY_ENCODER()).assignment_manager.encoder.get_distance_correlation()
 
     problems, algorithms, plot_names = [], [], []
     stats = {'prob': [], 'config': [], 'enc': [], 'sel_stage': [],
@@ -352,20 +353,32 @@ def run_experiment(i_prob: int, effort: SelCompEffort, sbo=False, n_repeat=8, n_
     i_exp = 0
     found = False
     problem_factories = get_problem_factories()
-    for j, problem_factory in enumerate(problem_factories):
+    for j, (problem_factory, incl_pat_enc) in enumerate(problem_factories):
         if j != i_prob:
             continue
         found = True
+        EncoderSelector._exclude_pattern_encoders = not incl_pat_enc
 
         sel_times = []
         sel_times_no_cache = []
         base_problem = problem_factory(DEFAULT_LAZY_ENCODER())
+        problem_name = str(base_problem)
+        if not incl_pat_enc:
+            problem_name += ' (no pat enc)'
+
         problem: Optional[AssignmentProblemBase] = None
-        log.info(f'Encoding problem {j+1}/{len(problem_factories)} ({effort.name} effort)')
+        log.info(f'Encoding problem {j+1}/{len(problem_factories)} ({effort.name} effort): {problem_name}')
         failed = False
         results_exist = False
         for no_cache in [True, False]:
-            for i in range(n_repeat):
+            for i in range(n_repeat+1):
+                # Run once more if the first timing was off by a lot
+                if i == n_repeat:
+                    times = sel_times_no_cache if no_cache else sel_times
+                    if times[0]/np.mean(times[1:]) < 1.5:
+                        break
+                    times.pop(0)
+
                 if no_cache:
                     if isinstance(base_problem, MultiAssignmentProblem):
                         base_problem.reset_agg_matrix_cache()
@@ -375,20 +388,17 @@ def run_experiment(i_prob: int, effort: SelCompEffort, sbo=False, n_repeat=8, n_
                     s = timeit.default_timer()
                     problem = problem_factory(None)
                     sel_time = timeit.default_timer()-s
-                    if no_cache:
-                        sel_times_no_cache.append(sel_time)
-                    else:
-                        sel_times.append(sel_time)
-                    log.info(f'Selected best for {problem!s} in {sel_time:.2f} s ({i+1}/{n_repeat}'
+                    (sel_times_no_cache if no_cache else sel_times).append(sel_time)
+                    log.info(f'Selected best for {problem_name} in {sel_time:.2f} s ({i+1}/{n_repeat}'
                              f'{", no cache" if no_cache else ""}): {problem.assignment_manager.encoder!s}')
                 except RuntimeError:
                     problem = problem_factory(DEFAULT_LAZY_ENCODER())
                     raise RuntimeError(f'Failed to select any encoder for {problem!s}!')
 
-                if i == 0 and df_init_exists is not None and str(problem) in df_init_exists.index and \
-                        df_init_exists.loc[str(problem)]['enc'] == str(problem.assignment_manager.encoder):
+                if i == 0 and df_init_exists is not None and problem_name in df_init_exists.index and \
+                        df_init_exists.loc[problem_name]['enc'] == str(problem.assignment_manager.encoder):
                     results_exist = True
-                    log.info(f'Results exist for {problem!s} (encoder: {problem.assignment_manager.encoder!s})')
+                    log.info(f'Results exist for {problem_name} (encoder: {problem.assignment_manager.encoder!s})')
                     break
             if results_exist:
                 break
@@ -399,10 +409,10 @@ def run_experiment(i_prob: int, effort: SelCompEffort, sbo=False, n_repeat=8, n_
         encoder = problem.assignment_manager.encoder
 
         if results_exist:
-            df_init_row = df_init_exists.loc[str(problem)]
+            df_init_row = df_init_exists.loc[problem_name]
             for col in stats:
                 if col == 'prob':
-                    stats['prob'].append(str(problem))
+                    stats['prob'].append(problem_name)
                 else:
                     stats[col].append(df_init_row[col])
             imp_ratio_tot = stats['imp_ratio_tot'][-1]
@@ -412,7 +422,7 @@ def run_experiment(i_prob: int, effort: SelCompEffort, sbo=False, n_repeat=8, n_
             stats['sel_time_no_cache'].append(np.mean(sel_times_no_cache) if not failed else np.nan)
             stats['sel_time_no_cache_std'].append(np.std(sel_times_no_cache) if not failed else np.nan)
             stats['prob'].append(problem.get_problem_name())
-            stats['config'].append(str(problem))
+            stats['config'].append(problem_name)
             stats['enc'].append(str(encoder))
             stats['sel_stage'].append(str(problem._selector_stage))
             stats['n'].append(problem.assignment_manager.matrix_gen.count_all_matrices(max_by_existence=False))
@@ -440,7 +450,7 @@ def run_experiment(i_prob: int, effort: SelCompEffort, sbo=False, n_repeat=8, n_
 
             checked_sampling_time = False
             if not failed:
-                log.info(f'Best encoder for {problem!s} (imp ratio = {imp_ratio_tot:.2g}, inf idx = {inf_idx:.2f}, '
+                log.info(f'Best encoder for {problem_name} (imp ratio = {imp_ratio_tot:.2g}, inf idx = {inf_idx:.2f}, '
                          f'dist corr = {dist_corr:.2f}, stage = {stats["sel_stage"][-1]}) = {encoder!s}')
 
                 if imp_ratio <= imp_ratio_sample_limit:
@@ -467,7 +477,7 @@ def run_experiment(i_prob: int, effort: SelCompEffort, sbo=False, n_repeat=8, n_
             continue
 
         problems.append(problem)
-        plot_names.append(str(problem))
+        plot_names.append(problem_name)
         if sbo:
             algorithms.append(get_sbo_algo(problem, init_size=pop_size))
         else:
@@ -779,10 +789,10 @@ if __name__ == '__main__':
     # _do_plot(SelCompEffort.LOW), exit()
     # EncoderSelector._print_stats = True
     for eft in list(SelCompEffort):
-        for ip in list(range(90)):
+        for ip in list(range(120)):
             if not run_experiment(ip, eft, n_repeat=4, n_repeat_opt=24):
                 break
     # for eft in list(SelCompEffort)[:4]:
-    #     for ip in list(range(90)):
+    #     for ip in list(range(120)):
     #         if not run_experiment(ip, eft, sbo=True, n_repeat=4, n_repeat_opt=8):
     #             break

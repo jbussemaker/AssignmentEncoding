@@ -141,6 +141,9 @@ class CachedParetoFrontMixin(Problem):
 
 class AssignmentProblemBase(CachedParetoFrontMixin, Problem):
 
+    # Setting this to false might lead to better encoders (result is cached)
+    quick_encoder_selector = True
+
     def get_repair(self):
         return AssignmentRepair()
 
@@ -237,7 +240,7 @@ class AssignmentProblem(AssignmentProblemBase):
         self._selector_stage = None
         if encoder is None:
             selector = EncoderSelector(settings)
-            assignment_manager = selector.get_best_assignment_manager()
+            assignment_manager = selector.get_best_assignment_manager(limit_time=self.quick_encoder_selector)
             self._selector_stage = selector._last_selection_stage
         elif isinstance(encoder, (LazyEncoder, EagerEncoder)):
             cls = LazyAssignmentManager if isinstance(encoder, LazyEncoder) else AssignmentManager
@@ -412,7 +415,7 @@ class MultiAssignmentProblem(AssignmentProblemBase):
         for settings in self.get_matrix_gen_settings():
             if encoder is None:
                 selector = EncoderSelector(settings)
-                assignment_manager = selector.get_best_assignment_manager()
+                assignment_manager = selector.get_best_assignment_manager(limit_time=self.quick_encoder_selector)
                 selector_stage_ = selector._last_selection_stage
                 if selector_stage_ is not None and (selector_stage is None or selector_stage_ > selector_stage):
                     selector_stage = selector_stage_
