@@ -15,8 +15,18 @@ class CombiningPatternEncoder(PatternEncoderBase):
 
     Source nodes: 1 node with 1 connection
     Target nodes: N nodes with 0 or 1 connection
-    Encoded as:   1 design variable with n_tgt options
+
+    OR ("collapsed mode")
+    Source nodes: 1 node with any connection settings
+    Target nodes: 1 node with any connection settings
+
+    Encoded as:   1 design variable with n_tgt options (or n_possibilities options)
     """
+
+    def __init__(self, imputer):
+        self.is_collapsed = False
+        self._min_max_map = {}
+        super().__init__(imputer)
 
     def _matches_pattern(self, effective_settings: MatrixGenSettings, initialize: bool) -> bool:
         src, tgt = effective_settings.src, effective_settings.tgt
@@ -25,24 +35,59 @@ class CombiningPatternEncoder(PatternEncoderBase):
         if effective_settings.get_excluded_indices():
             return False
 
-        # Check 1 source node with 1 connection
-        if len(src) != 1 or src[0].conns != [1]:
+        # Check 1 source node
+        if len(src) != 1:
+            return False
+
+        # Check if the source node has 1 connection
+        if src[0].conns != [1]:
+            # Check if there is only 1 target node and if repeated connections are allowed
+            if len(tgt) == 1 and tgt[0].rep and src[0].rep:
+                if initialize:
+                    self.is_collapsed = True
+                return self.is_collapsed
+
             return False
 
         # Check all target nodes have 0 or 1 connections
         if any(n.conns != [0, 1] for n in tgt):
             return False
 
-        return True
+        if initialize:
+            self.is_collapsed = False
+        return not self.is_collapsed
 
-    def _encode_effective(self, effective_settings: MatrixGenSettings) -> List[DiscreteDV]:
+    def _encode_effective(self, effective_settings: MatrixGenSettings, existence: NodeExistence) -> List[DiscreteDV]:
+        if self.is_collapsed:
+            src, tgt = effective_settings.src[0], effective_settings.tgt[0]
+            min_n_conn = max(src.min_conns if src.max_inf else src.conns[0],
+                             tgt.min_conns if tgt.max_inf else tgt.conns[0])
+            max_n_conn = effective_settings.get_max_conn_matrix()[0, 0]
+            n_opts = max_n_conn-min_n_conn+1
+            self._min_max_map[existence] = (min_n_conn, max_n_conn)
+        else:
+            n_opts = len(effective_settings.tgt)
+
         # One design variable with n_tgt options
-        if len(effective_settings.tgt) < 2:
+        if n_opts < 2:
             return []
-        return [DiscreteDV(n_opts=len(effective_settings.tgt))]
+        return [DiscreteDV(n_opts=n_opts)]
 
-    def _decode_effective(self, vector: DesignVector, effective_settings: MatrixGenSettings) \
+    def _decode_effective(self, vector: DesignVector, effective_settings: MatrixGenSettings, existence: NodeExistence) \
             -> Tuple[DesignVector, np.ndarray]:
+        # If we are in collapsed mode, there is only one target
+        if self.is_collapsed:
+            if existence not in self._min_max_map:
+                raise RuntimeError(f'Unexpected existence pattern: {existence}')
+            min_n_conn, max_n_conn = self._min_max_map[existence]
+            n_conns = min_n_conn+vector[0]
+            if n_conns > max_n_conn:
+                n_conns = max_n_conn
+                vector = [max_n_conn-min_n_conn]
+
+            matrix = np.array([[n_conns]], dtype=int)
+            return vector, matrix
+
         # Determine which target is selected
         n_tgt = len(effective_settings.tgt)
         if len(vector) == 0:
@@ -128,11 +173,11 @@ class AssigningPatternEncoder(PatternEncoderBase):
 
         return False
 
-    def _encode_effective(self, effective_settings: MatrixGenSettings) -> List[DiscreteDV]:
+    def _encode_effective(self, effective_settings: MatrixGenSettings, existence: NodeExistence) -> List[DiscreteDV]:
         n_max = self._n_max
         return [DiscreteDV(n_opts=n_max+1) for _ in range(len(effective_settings.src)*len(effective_settings.tgt))]
 
-    def _decode_effective(self, vector: DesignVector, effective_settings: MatrixGenSettings) \
+    def _decode_effective(self, vector: DesignVector, effective_settings: MatrixGenSettings, existence: NodeExistence) \
             -> Tuple[DesignVector, np.ndarray]:
         surjective, repeatable = self.surjective, self.repeatable
         n_src, n_tgt, n_max = len(effective_settings.src), len(effective_settings.tgt), self._n_max
@@ -186,10 +231,10 @@ class PartitioningPatternEncoder(PatternEncoderBase):
 
         return True
 
-    def _encode_effective(self, effective_settings: MatrixGenSettings) -> List[DiscreteDV]:
+    def _encode_effective(self, effective_settings: MatrixGenSettings, existence: NodeExistence) -> List[DiscreteDV]:
         return [DiscreteDV(n_opts=len(effective_settings.src)) for _ in range(len(effective_settings.tgt))]
 
-    def _decode_effective(self, vector: DesignVector, effective_settings: MatrixGenSettings) \
+    def _decode_effective(self, vector: DesignVector, effective_settings: MatrixGenSettings, existence: NodeExistence) \
             -> Tuple[DesignVector, np.ndarray]:
 
         # Set connections to source nodes
@@ -231,11 +276,11 @@ class DownselectingPatternEncoder(PatternEncoderBase):
 
         return True
 
-    def _encode_effective(self, effective_settings: MatrixGenSettings) -> List[DiscreteDV]:
+    def _encode_effective(self, effective_settings: MatrixGenSettings, existence: NodeExistence) -> List[DiscreteDV]:
         n_opts = len(effective_settings.src)+1
         return [DiscreteDV(n_opts=n_opts) for _ in range(len(effective_settings.tgt))]
 
-    def _decode_effective(self, vector: DesignVector, effective_settings: MatrixGenSettings) \
+    def _decode_effective(self, vector: DesignVector, effective_settings: MatrixGenSettings, existence: NodeExistence) \
             -> Tuple[DesignVector, np.ndarray]:
 
         # Each variable in the vector corresponds to a target, where 0 means no connection and >0 means a connection to
@@ -270,7 +315,7 @@ class ConnectingPatternEncoder(PatternEncoderBase):
         src, tgt = effective_settings.src, effective_settings.tgt
 
         # Check if there are the same nr of src and tgt nodes
-        if len(src) == 1 or len(src) != len(tgt):
+        if len(src) != len(tgt):
             return False
 
         # Check if all nodes have any nr of connections
@@ -296,10 +341,11 @@ class ConnectingPatternEncoder(PatternEncoderBase):
 
         # Check if also the lower triangle is excluded
         lower_tri_excluded = np.array([(i, j) in excluded for i in range(len(src)) for j in range(len(tgt)) if i > j])
-        if np.all(lower_tri_excluded):
+        no_triangle = len(lower_tri_excluded) == 0
+        if no_triangle or (len(lower_tri_excluded) > 0 and np.all(lower_tri_excluded)):
             if initialize:
                 self.directed = False
-            return not self.directed
+            return (not self.directed) or no_triangle
 
         # Check if the lower triangle is included
         if np.all(~lower_tri_excluded):
@@ -309,7 +355,7 @@ class ConnectingPatternEncoder(PatternEncoderBase):
 
         return False
 
-    def _encode_effective(self, effective_settings: MatrixGenSettings) -> List[DiscreteDV]:
+    def _encode_effective(self, effective_settings: MatrixGenSettings, existence: NodeExistence) -> List[DiscreteDV]:
         # Number of design variables if n*n minus n diagonal connections --> n*(n-1)
         n_src = len(effective_settings.src)
         n_dv = n_src*(n_src-1)
@@ -320,7 +366,7 @@ class ConnectingPatternEncoder(PatternEncoderBase):
 
         return [DiscreteDV(n_opts=2) for _ in range(n_dv)]
 
-    def _decode_effective(self, vector: DesignVector, effective_settings: MatrixGenSettings) \
+    def _decode_effective(self, vector: DesignVector, effective_settings: MatrixGenSettings, existence: NodeExistence) \
             -> Tuple[DesignVector, np.ndarray]:
 
         # Fill the upper triangle of the matrix
@@ -369,11 +415,12 @@ class PermutingPatternEncoder(PatternEncoderBase):
 
         return True
 
-    def _encode_effective(self, effective_settings: MatrixGenSettings) -> List[DiscreteDV]:
+    def _encode_effective(self, effective_settings: MatrixGenSettings, existence: NodeExistence) -> List[DiscreteDV]:
         n = len(effective_settings.src)
         return [DiscreteDV(n_opts=n-i) for i in range(n-1)]
 
-    def _decode_effective(self, vector: DesignVector, effective_settings: MatrixGenSettings) -> Tuple[DesignVector, np.ndarray]:
+    def _decode_effective(self, vector: DesignVector, effective_settings: MatrixGenSettings, existence: NodeExistence) \
+            -> Tuple[DesignVector, np.ndarray]:
         n = len(effective_settings.src)
         matrix = np.zeros((n, n), dtype=int)
 
@@ -415,12 +462,16 @@ class UnorderedCombiningPatternEncoder(PatternEncoderBase):
         if effective_settings.get_excluded_indices():
             return False
 
-        # Check if there is one node with 1 specific amount of connections (other than 1)
-        if len(src) != 1 or not src[0].conns or len(src[0].conns) != 1 or src[0].conns == [1]:
+        # Check if there is one node with 1 specific amount of connections
+        if len(src) != 1 or not src[0].conns or len(src[0].conns) != 1:
             return False
 
         # Check if all target nodes have 0 or 1 connection
         if all(n.conns == [0, 1] for n in tgt):
+            # Check if there are not more connections requested than available
+            if src[0].conns[0] > len(tgt):
+                return False
+
             if initialize:
                 self.with_replacement = False
             return not self.with_replacement
@@ -436,9 +487,15 @@ class UnorderedCombiningPatternEncoder(PatternEncoderBase):
 
         return False
 
-    def _encode_effective(self, effective_settings: MatrixGenSettings) -> List[DiscreteDV]:
+    def _encode_effective(self, effective_settings: MatrixGenSettings, existence: NodeExistence) -> List[DiscreteDV]:
+        n_take = effective_settings.src[0].conns[0]
         n_tgt = len(effective_settings.tgt)
         n_dv = n_tgt-1
+
+        # Special case: if we do not allow replacement and n_tgt is the same as n_take, there is only 1 possibility
+        # (namely: take all), and therefore there is no need to choose
+        if not self.with_replacement and n_tgt == n_take:
+            return []
 
         # If we select with replacement, it is the same as if we could select n_take-1 non-replacing positions
         # You can verify:
@@ -450,10 +507,14 @@ class UnorderedCombiningPatternEncoder(PatternEncoderBase):
 
         return [DiscreteDV(n_opts=2) for _ in range(n_dv)]
 
-    def _decode_effective(self, vector: DesignVector, effective_settings: MatrixGenSettings) \
+    def _decode_effective(self, vector: DesignVector, effective_settings: MatrixGenSettings, existence: NodeExistence) \
             -> Tuple[DesignVector, np.ndarray]:
         n_take = effective_settings.src[0].conns[0]
         n_tgt = len(effective_settings.tgt)
+
+        # Special case
+        if not self.with_replacement and n_take == n_tgt:
+            return vector, np.ones((1, n_tgt), dtype=int)
 
         # Ensure we have selected the correct number of elements
         # Note that we have one design variable less than the number of elements that can be selected: the last element
