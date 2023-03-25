@@ -327,20 +327,17 @@ if __name__ == '__main__':
     # p = GNCProblem(DEFAULT_LAZY_ENCODER(), choose_nr=True, n_max=nm, choose_type=False)
     # p = GNCProblem(DEFAULT_LAZY_ENCODER(), choose_nr=True, n_max=nm, choose_type=True)
 
+    p.reset_encoders()
+    p = p.get_for_encoder(None)
+    p.report_assignment_manager_stats()
+
     print(f'Design space size: {p.get_n_design_points()}')
     print(f'Valid designs: {p.get_n_valid_design_points()}')
     print(f'Imputation ratio: {p.get_imputation_ratio():.2f}')
     # p.get_n_valid_design_points = lambda **_: None
     # print(f'Imputation ratio: {p.get_imputation_ratio():.2f}')
-    # exit()
+    exit()
     # p.plot_points(n=5000), exit()
-
-    # from pymoo.core.evaluator import Evaluator
-    # from assign_pymoo.sampling import RepairedRandomSampling
-    # RepairedRandomSampling(repair=p.get_repair()).do(p, 1)
-    # def _wrapped():
-    #     Evaluator().eval(p, RepairedRandomSampling(repair=p.get_repair()).do(p, 100))
-    # _wrapped(), exit()
 
     # p.reset_pf_cache()
     p.plot_pf(show_approx_f_range=True, n_sample=1000), exit()

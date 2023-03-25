@@ -409,6 +409,22 @@ class MultiAssignmentProblem(AssignmentProblemBase):
     def get_n_con(self) -> int:
         return 0
 
+    def get_for_encoder(self, encoder: Encoder = None):
+        return self.__class__(encoder, **self.get_init_kwargs())
+
+    @property
+    def assignment_managers(self):
+        return self._assignment_managers
+
+    def reset_encoders(self):
+        for settings in self.get_matrix_gen_settings():
+            EncoderSelector(settings).reset_cache()
+
+    def report_assignment_manager_stats(self):
+        for i, am in enumerate(self.assignment_managers):
+            print(f'AM {i}: {am.encoder!s} (imp ratio = {am.encoder.get_imputation_ratio():.2f}, '
+                  f'dist corr = {am.encoder.get_distance_correlation() * 100:.0f}%)')
+
     def _get_assignment_managers(self, encoder: Encoder = None) -> List[AssignmentManagerBase]:
         assignment_managers = []
         selector_stage = None
@@ -489,6 +505,9 @@ class MultiAssignmentProblem(AssignmentProblemBase):
             is_active_parts.append(np.ones(x_parts[-1].shape, dtype=bool))
             i += n_dv
         return x_parts, is_active_parts
+
+    def get_init_kwargs(self) -> dict:
+        raise NotImplementedError
 
     def get_matrix_gen_settings(self) -> List[MatrixGenSettings]:
         """The list of matrix generator settings that defines this problem, already correctly configured existence patterns,
