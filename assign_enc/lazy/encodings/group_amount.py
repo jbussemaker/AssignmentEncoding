@@ -1,4 +1,3 @@
-import functools
 import numpy as np
 from typing import *
 from collections import defaultdict
@@ -112,21 +111,19 @@ class LazyAmountFirstEncoder(QuasiLazyEncoder):
         n_dv_amt = self._n_dv_amount[existence]
 
         # Decode connection amounts
-        amount_vector = vector[:n_dv_amt]
-        amount_vector_expanded, _ = \
-            self._unfilter_dvs(amount_vector, self._i_dv_amount[existence], self._n_dv_amount_expand[existence])
+        amount_vector_expanded = \
+            self._unfilter_dvs(vector[:n_dv_amt], self._i_dv_amount[existence], self._n_dv_amount_expand[existence])
 
         n_src_tgt_conn = self.amount_encoder.decode(amount_vector_expanded, existence)
         if n_src_tgt_conn is None:
             return
         imp_amt_vector_expanded, n_src_conn, n_tgt_conn = n_src_tgt_conn
-        imp_amount_vector_sel = np.array(imp_amt_vector_expanded)[self._i_dv_amount[existence]]
-        imp_amount_vector = np.ones((len(amount_vector),), dtype=int)*X_INACTIVE_VALUE
-        imp_amount_vector[:len(imp_amount_vector_sel)] = imp_amount_vector_sel
+        imp_amount_vector_sel = imp_amt_vector_expanded[self._i_dv_amount[existence]]
+        imp_amount_vector = list(imp_amount_vector_sel)+[X_INACTIVE_VALUE]*(n_dv_amt-len(imp_amount_vector_sel))
 
-        conn_vector = vector[n_dv_amt:]
-        conn_vector_expanded, _ = self._unfilter_dvs(
-            conn_vector, self._i_dv_conn[existence], self._n_dv_conn_expand[existence])
+        n_dv_conn = len(vector)-n_dv_amt
+        conn_vector_expanded = self._unfilter_dvs(
+            vector[n_dv_amt:], self._i_dv_conn[existence], self._n_dv_conn_expand[existence])
 
         # Decode connections matrix
         n_conn_key = (tuple(n_src_conn), tuple(n_tgt_conn))
@@ -138,11 +135,10 @@ class LazyAmountFirstEncoder(QuasiLazyEncoder):
         if matrix_data is None:
             return
         imp_conn_vector_expanded, matrix = matrix_data
-        imp_conn_vector_sel = np.array(imp_conn_vector_expanded)[self._i_dv_conn[existence]]
-        imp_conn_vector = np.ones((len(conn_vector),), dtype=int)*X_INACTIVE_VALUE
-        imp_conn_vector[:len(imp_conn_vector_sel)] = imp_conn_vector_sel
+        imp_conn_vector_sel = imp_conn_vector_expanded[self._i_dv_conn[existence]]
+        imp_conn_vector = list(imp_conn_vector_sel)+[X_INACTIVE_VALUE]*(n_dv_conn-len(imp_conn_vector_sel))
 
-        imp_vector = list(imp_amount_vector)+list(imp_conn_vector)
+        imp_vector = imp_amount_vector+imp_conn_vector
         return imp_vector, matrix
 
     @staticmethod
@@ -178,7 +174,7 @@ class FlatLazyAmountEncoder(LazyAmountEncoder):
         idx = vector[0]
         if idx >= len(n_existence):
             idx = len(n_existence)-1
-            vector = [idx]
+            vector = np.array([idx])
 
         n_src, n_tgt = n_existence[idx]
         return vector, n_src, n_tgt
@@ -299,7 +295,7 @@ class FlatLazyConnectionEncoder(LazyConnectionEncoder):
         i_conn = vector[0]
         if i_conn >= matrices.shape[0]:
             i_conn = matrices.shape[0]-1
-            vector = [i_conn]
+            vector = np.array([i_conn])
 
         return vector, matrices[i_conn, :, :]
 

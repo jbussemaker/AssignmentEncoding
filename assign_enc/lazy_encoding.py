@@ -99,6 +99,7 @@ class LazyEncoder(Encoder):
         self._existence_design_vars: Optional[Dict[NodeExistence, List[DiscreteDV]]] = None
         self._design_vars: Optional[List[DiscreteDV]] = None
         self._imputer = imputer
+        self._empty_matrix = None
 
     def set_settings(self, settings: MatrixGenSettings):
         self._matrix_gen = gen = AggregateAssignmentMatrixGenerator(settings)
@@ -112,6 +113,7 @@ class LazyEncoder(Encoder):
                 raise RuntimeError(f'All design variables must have at least 2 options: {i} has {dv.n_opts} opts')
 
         self._imputer.initialize(self._matrix_gen, self._existence_design_vars, self._design_vars, self._decode)
+        self._empty_matrix = None
 
     def set_imputer(self, imputer: LazyImputer):
         self._imputer = imputer
@@ -156,7 +158,9 @@ class LazyEncoder(Encoder):
         return self._design_vars
 
     def get_empty_matrix(self) -> np.ndarray:
-        return np.zeros((self.n_src, self.n_tgt), dtype=int)
+        if self._empty_matrix is None:
+            self._empty_matrix = np.zeros((self.n_src, self.n_tgt), dtype=int)
+        return self._empty_matrix.copy()
 
     def _iter_sampled_dv_mat(self, n: int, sampled_dvs: dict):
         n_sample = n*5
@@ -166,8 +170,9 @@ class LazyEncoder(Encoder):
             sampled = sampled_dvs[existence]
             sampled = sampled.copy()
 
-            random_dvs = np.empty((n_sample, len(self._design_vars)), dtype=int)
-            for i_dv, dv in enumerate(self._design_vars):
+            des_vars, n_dv, _, extra_dv = self._get_des_vars_n_extra(existence)
+            random_dvs = np.empty((n_sample, n_dv), dtype=int)
+            for i_dv, dv in enumerate(des_vars):
                 random_dvs[:, i_dv] = dv.n_opts*np.random.random((n_sample,))
 
             matrix, des_vectors = [], []
@@ -179,7 +184,9 @@ class LazyEncoder(Encoder):
                     continue
 
                 # Get matrix without imputation to save time
-                dv, extra_dv, _, mat, valid = self._get_validate_matrix(dv_, existence=existence)
+                dv, mat, _ = self._decode_vector(dv_, existence=existence)
+                valid = mat is not None and self._matrix_gen.validate_matrix(mat, existence=existence)
+
                 dv = list(dv)+extra_dv
                 if not valid:
                     sampled.add(dv_init_hash)
@@ -247,6 +254,13 @@ class LazyEncoder(Encoder):
         n_dv = len(des_vars)
         vector, n_extra = EagerEncoder.correct_vector_size(n_dv, vector)
         return vector, n_dv, n_extra, des_vars, existence
+
+    def _get_des_vars_n_extra(self, existence: NodeExistence):
+        des_vars = self._existence_design_vars.get(existence, self.design_vars)
+        n_dv = len(des_vars)
+        n_extra = len(self._design_vars)-n_dv
+        extra_dv = [X_INACTIVE_VALUE]*n_extra
+        return des_vars, n_dv, n_extra, extra_dv
 
     def get_matrix(self, vector: DesignVector, existence: NodeExistence = None) -> Tuple[DesignVector, np.ndarray]:
         """Select a connection matrix (n_src x n_tgt) and impute the design vector if needed.
@@ -326,26 +340,20 @@ class LazyEncoder(Encoder):
     @staticmethod
     def _filter_dvs(dvs: List[DiscreteDV]) -> Tuple[List[DiscreteDV], np.ndarray, int]:
         """Return design variables that have at least 2 options"""
-        i_valid_dv = []
+        valid_dv_mask = np.zeros((len(dvs),), dtype=bool)
         valid_dv = []
         for i, dv in enumerate(dvs):
             if dv.n_opts >= 2:
-                i_valid_dv.append(i)
+                valid_dv_mask[i] = True
                 valid_dv.append(dv)
 
-        i_valid_dv = np.array(i_valid_dv, dtype=int)
-        return valid_dv, i_valid_dv, len(dvs)
+        return valid_dv, valid_dv_mask, len(dvs)
 
     @staticmethod
-    def _unfilter_dvs(vector: DesignVector, i_valid_dv: np.ndarray, n: int) -> Tuple[DesignVector, DesignVector]:
+    def _unfilter_dvs(vector: DesignVector, i_valid_dv: np.ndarray, n: int) -> DesignVector:
         all_vector = np.zeros((n,), dtype=int)
         all_vector[i_valid_dv] = vector[:n]
-
-        # Ensure that all further design variables are inactive
-        imputed_vector = np.array(vector)
-        imputed_vector[n:] = X_INACTIVE_VALUE
-
-        return all_vector, imputed_vector
+        return all_vector
 
     @staticmethod
     def _merge_design_vars(design_vars_list: List[List[DiscreteDV]]) -> List[DiscreteDV]:
