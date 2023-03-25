@@ -9,6 +9,8 @@ from dataclasses import dataclass
 from scipy.spatial import distance
 from scipy.stats import pearsonr, ConstantInputWarning
 
+warnings.filterwarnings('ignore', category=ConstantInputWarning)
+
 __all__ = ['DiscreteDV', 'DesignVector', 'PartialDesignVector', 'MatrixSelectMask', 'X_INACTIVE_VALUE',
            'IsActiveVector', 'EagerImputer', 'Encoder', 'EagerEncoder', 'filter_design_vectors', 'flatten_matrix',
            'NodeExistence', 'DetectedHighImpRatio']
@@ -244,7 +246,6 @@ class Encoder:
         if len(dist1) < 2:
             return 1.
 
-        warnings.filterwarnings('ignore', category=ConstantInputWarning)
         corr = pearsonr(dist1, dist2).statistic
         return 1. if np.isnan(corr) else corr
 
