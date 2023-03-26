@@ -103,7 +103,7 @@ class EncoderSelector:
             cls = LazyAssignmentManager if isinstance(encoder, LazyEncoder) else AssignmentManager
             return cls(self.settings, encoder)
 
-        def _create_managers(encoders, imputer_factory, dist_corr_limit):
+        def _create_managers(encoders, imputer_factory, dist_corr_limit, limit_dist_corr_time=None):
             assignment_mgr = []
             scoring = {'n_des_pts': [], 'imp_ratio': [], 'inf_idx': [], 'dist_corr': []}
             with Encoder.with_early_detect_high_imp_ratio(high_imp_ratio=high_imp_ratio_detect_limit):
@@ -136,7 +136,9 @@ class EncoderSelector:
 
                     distance_correlation = np.nan
                     if imputation_ratio <= dist_corr_limit:
-                        if self.limit_dist_corr_time:
+                        if limit_dist_corr_time:
+                            limit_dist_corr_time = self.limit_dist_corr_time
+                        if limit_dist_corr_time:
                             try:
                                 with time_limiter(self.encoding_timeout):
                                     distance_correlation = self._get_dist_corr(assignment_manager)
@@ -188,7 +190,8 @@ class EncoderSelector:
         # Try pattern encoders
         df_score, assignment_managers = None, []
         if not self._exclude_pattern_encoders:
-            df_score, assignment_managers = _create_managers(PATTERN_ENCODERS, self.lazy_imputer, dist_corr_lazy_limit)
+            df_score, assignment_managers = _create_managers(
+                PATTERN_ENCODERS, self.lazy_imputer, dist_corr_lazy_limit, limit_dist_corr_time=False)
             i_best = self._get_best(df_score, knows_n_mat=n_mat is not None, n_priority=5)
             if i_best is not None:
                 self._last_selection_stage = '0_pattern'

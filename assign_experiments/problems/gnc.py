@@ -328,7 +328,7 @@ if __name__ == '__main__':
     # p = GNCProblem(DEFAULT_LAZY_ENCODER(), choose_nr=True, n_max=nm, choose_type=True)
 
     from assign_enc.selector import EncoderSelector
-    EncoderSelector.limit_dist_corr_time = False
+    # EncoderSelector.limit_dist_corr_time = False
     EncoderSelector._print_stats = True
 
     p.reset_encoders()
