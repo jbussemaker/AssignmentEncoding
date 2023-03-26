@@ -320,6 +320,9 @@ def test_effective_settings():
 
     assert np.all(settings.expand_effective_matrix(
         np.array([[1, 2], [3, 4]]), src_map, tgt_map) == np.array([[1, 2], [0, 0], [3, 4]]))
+    assert np.all(settings.expand_effective_matrix(
+        np.array([[[1, 2], [3, 4]], [[5, 6], [4, 3]]]), src_map, tgt_map) ==
+                  np.array([[[1, 2], [0, 0], [3, 4]], [[5, 6], [0, 0], [4, 3]]]))
 
     eff_settings, src_map, tgt_map = NodeExistence(max_src_conn_override=3).get_effective_settings(settings)
     assert len(eff_settings.src) == 3

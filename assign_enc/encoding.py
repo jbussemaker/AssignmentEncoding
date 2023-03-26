@@ -172,9 +172,10 @@ class Encoder:
         sampled_dvs = {}
         n_iter_max = int(np.ceil(n_max / n))
         metric_values, i_iter = None, 0
+        n_has_zero = 0
         for i_iter in range(n_iter_max):
             # Extend current samples
-            dv_dist, mat_dist = self._get_distance_correlation(n=n, sampled_dvs=sampled_dvs)
+            dv_dist, mat_dist, all_zero = self._get_distance_correlation(n=n, sampled_dvs=sampled_dvs)
             if dv_dist_all is None:
                 dv_dist_all = dv_dist
                 mat_dist_all = mat_dist
@@ -189,6 +190,12 @@ class Encoder:
                     metric_values[i_iter, i_mat] = self._calc_distance_corr(dv_dists, mat_dist_all[i_mat])
             else:
                 metric_values[i_iter, 0] = self._calc_distance_corr(dv_dist_all, mat_dist_all)
+
+            # Track the nr of times we have no new design vectors sampled
+            if all_zero:
+                n_has_zero += 1
+                if n_has_zero >= 2:
+                    break
 
             # Check convergence
             if i_iter+1 >= n_check:
@@ -206,24 +213,24 @@ class Encoder:
         metrics_mean = np.mean(metric_values[:i_iter+1, :][-n_check:, :], axis=0)
         return float(np.min(metrics_mean) if minimum else metrics_mean[0])
 
-    def _get_distance_correlation(self, n: int, sampled_dvs=None) -> Tuple[List[List[float]], List[List[float]]]:
+    def _get_distance_correlation(self, n: int, sampled_dvs=None) -> Tuple[List[List[float]], List[List[float]], bool]:
         if sampled_dvs is None:
             sampled_dvs = {}
         dv_dist_all = []
         mat_dist_all = []
+        all_zero = True
         for matrix, des_vectors in self._iter_sampled_dv_mat(n, sampled_dvs):
             if len(des_vectors) <= 1 or len(matrix) <= 1:
                 dv_dist_all.append([])
                 mat_dist_all.append([])
                 continue
 
-            matrix = matrix[:n]
-            des_vectors = des_vectors[:n]
+            all_zero = False
             des_vectors[des_vectors == X_INACTIVE_VALUE] = 0
             dv_dist_all.append(list(self._calc_internal_dv_distance(des_vectors)[np.triu_indices(des_vectors.shape[0], k=1)]))
             mat_dist_all.append(list(self._calc_internal_distance(matrix)[np.triu_indices(matrix.shape[0], k=1)]))
 
-        return dv_dist_all, mat_dist_all
+        return dv_dist_all, mat_dist_all, all_zero
 
     def _iter_sampled_dv_mat(self, n: int, sampled_dvs: dict):
         raise NotImplementedError

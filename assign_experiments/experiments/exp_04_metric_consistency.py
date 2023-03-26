@@ -139,6 +139,7 @@ def exp_dist_corr_convergence(n_repeat=8):
         (_get_problem_factory(AnalyticalAssignmentProblem, **{'n_src': 2, 'n_tgt': 4, 'injective': True}), False),
         (_get_problem_factory(AnalyticalAssignmentProblem, **{'n_src': 5, 'n_tgt': 5, 'injective': True}), False),
         (_get_problem_factory(AnalyticalAssignmentProblem, **{'n_src': 2, 'n_tgt': 4, 'repeatable': True}), False),
+        (_get_problem_factory(AnalyticalUnorderedCombiningProblem, **{'n_take': 3, 'n_tgt': 7}), False),
         (_get_problem_factory(MultiPermIterCombProblem, n_take=3, n=5), True),
         (_get_problem_factory(MultiPermIterCombProblem, n_take=3, n=7), True),
     ]
@@ -159,7 +160,14 @@ def exp_dist_corr_convergence(n_repeat=8):
     stats = {'prob': [], 'enc': [], 'type': [], 'n': [], 'imp_ratio': [], 'n_dist_corr': [], 'dist_corr': [], 'dist_corr_std': [],
              'time_dist_corr': [], 'time_dist_corr_std': []}
     for i_prob, (prob_factory, min_relevant) in enumerate(problems):
-        for i_enc, encoder in enumerate(encoders):
+        prob_encoders = list(encoders)
+        problem = prob_factory(encoders[0])
+        if isinstance(problem, AnalyticalProblemBase):
+            pattern_encoder = problem.get_manual_best_encoder(lazy_imputer())
+            if pattern_encoder is not None:
+                prob_encoders.append(pattern_encoder)
+
+        for i_enc, encoder in enumerate(prob_encoders):
             problem = prob_factory(encoder)
             prob_enc = problem.assignment_manager.encoder
             for use_min in ([False, True] if min_relevant else [False]):
@@ -171,7 +179,8 @@ def exp_dist_corr_convergence(n_repeat=8):
                     stats['n'].append(problem.get_n_valid_design_points())
                     imp_ratio = problem.get_imputation_ratio()
                     stats['imp_ratio'].append(imp_ratio)
-                    log.info(f'{i_prob+1}/{len(problems)}; {i_enc+1}/{len(encoders)}; @ {n}{min_str}: {problem!s} w/ {encoder!s} (imp ratio = {imp_ratio:.1f})')
+                    log.info(f'{i_prob+1}/{len(problems)}; {i_enc+1}/{len(prob_encoders)}; @ {n}{min_str}: '
+                             f'{problem!s} w/ {encoder!s} (imp ratio = {imp_ratio:.1f})')
 
                     dist_corr = []
                     time_dist_corr = []
@@ -180,7 +189,7 @@ def exp_dist_corr_convergence(n_repeat=8):
                         if n == -1:
                             dist_corr_sample = prob_enc.get_distance_correlation(minimum=use_min)
                         else:
-                            dv_dist, mat_dist = prob_enc._get_distance_correlation(n=n)
+                            dv_dist, mat_dist, _ = prob_enc._get_distance_correlation(n=n)
                             if use_min:
                                 dist_corr_sample = min([prob_enc._calc_distance_corr(dvd, mat_dist[idv]) for idv, dvd in enumerate(dv_dist)])
                             else:
@@ -957,7 +966,8 @@ def run_manual_best_encoders():
             if encoder is not None:
                 print(f'{problem!s}: {encoder!s}')
                 problem = problem.get_for_encoder(encoder)
-                RepairedRandomSampling(repair=problem.get_repair()).do(problem, 1000)
+                print(f'{problem.assignment_manager.encoder.get_distance_correlation()*100:.1f}')
+                # RepairedRandomSampling(repair=problem.get_repair()).do(problem, 1000)
 
 
 if __name__ == '__main__':

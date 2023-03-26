@@ -166,7 +166,7 @@ class EncoderSelector:
                     values = values[~np.isnan(values)]
                     if len(values) > 0:
                         dist_corr_values[unique_indices] = np.mean(values)
-            df.dist_corr = pd.Series(index=df.dist_corr.index, data=dist_corr_values)
+            df.dist_corr = pd.Series(index=df.dist_corr.index, data=np.round(dist_corr_values/.01)*.01)
 
             return df, assignment_mgr
 

@@ -123,9 +123,17 @@ def _do_test_encoders(encoder_cls: Type[PatternEncoderBase], settings_map, match
 
                     assert len(seen_dvs) == len(agg_matrix_set)
 
+                    dvs, mat = encoder._generate_random_dv_mat(100, existence)
+                    for i, dv in enumerate(dvs):
+                        imp_dv, matrix = encoder.get_matrix(dv, existence=existence)
+                        assert np.all(imp_dv == dv)
+                        assert np.all(matrix == mat[i, :, :])
+
                 except:
-                    print(repr(encoder), key, existence)
+                    print(repr(encoder), key, existence, include_empty)
                     raise
+
+            assert encoder.get_distance_correlation() is not None
 
     return encoders
 

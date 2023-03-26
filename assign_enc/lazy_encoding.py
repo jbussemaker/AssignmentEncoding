@@ -170,43 +170,75 @@ class LazyEncoder(Encoder):
             sampled = sampled_dvs[existence]
             sampled = sampled.copy()
 
-            des_vars, n_dv, _, extra_dv = self._get_des_vars_n_extra(existence)
-            random_dvs = np.empty((n_sample, n_dv), dtype=int)
-            for i_dv, dv in enumerate(des_vars):
-                random_dvs[:, i_dv] = dv.n_opts*np.random.random((n_sample,))
-
-            matrix, des_vectors = [], []
+            # Try if there is an encoder-specific way to generate random design vectors and matrices
+            random_dv_mat = self._generate_random_dv_mat(n, existence)
             n_sampled = 0
-            for i in range(n*5):
-                dv_ = random_dvs[i, :]
-                dv_init_hash = hash(tuple(dv_))
-                if dv_init_hash in sampled:
-                    continue
+            matrix, des_vectors = [], []
+            if random_dv_mat is not None:
+                for i_try in range(3):
+                    if i_try > 0:
+                        random_dv_mat = self._generate_random_dv_mat(n, existence)
+                    dv_random, mat_random = random_dv_mat
+                    for i, dv in enumerate(dv_random):
+                        dv_hash = hash(tuple(dv))
+                        if dv_hash in sampled:
+                            continue
+                        sampled.add(dv_hash)
 
-                # Get matrix without imputation to save time
-                dv, mat, _ = self._decode_vector(dv_, existence=existence)
-                valid = mat is not None and self._matrix_gen.validate_matrix(mat, existence=existence)
+                        valid = self._matrix_gen.validate_matrix(mat_random[i], existence=existence)
+                        if not valid:
+                            raise RuntimeError(f'Generated a non-valid matrix (random_dv_mat): {self!r}')
 
-                dv = list(dv)+extra_dv
-                if not valid:
+                        matrix.append(mat_random[i].ravel())
+                        des_vectors.append(dv)
+                        n_sampled += 1
+                        if n_sampled >= n:
+                            break
+
+                    if n_sampled >= n or dv_random.shape[0] < n:
+                        break
+
+            else:
+                # Otherwise, generate random design vectors and decode
+                des_vars, n_dv, _, extra_dv = self._get_des_vars_n_extra(existence)
+                random_dvs = np.empty((n_sample, n_dv), dtype=int)
+                for i_dv, dv in enumerate(des_vars):
+                    random_dvs[:, i_dv] = dv.n_opts*np.random.random((n_sample,))
+
+                for i in range(n*5):
+                    dv_ = random_dvs[i, :]
+                    dv_init_hash = hash(tuple(dv_))
+                    if dv_init_hash in sampled:
+                        continue
+
+                    # Get matrix without imputation to save time
+                    dv, mat, _ = self._decode_vector(dv_, existence=existence)
+                    valid = mat is not None and self._matrix_gen.validate_matrix(mat, existence=existence)
+
+                    dv = list(dv)+extra_dv
+                    if not valid:
+                        sampled.add(dv_init_hash)
+                        continue
+
+                    dv_hash = hash(tuple(dv))
+                    if dv_hash in sampled:
+                        continue
                     sampled.add(dv_init_hash)
-                    continue
+                    sampled.add(dv_hash)
 
-                dv_hash = hash(tuple(dv))
-                if dv_hash in sampled:
-                    continue
-                sampled.add(dv_init_hash)
-                sampled.add(dv_hash)
-
-                matrix.append(mat.ravel())
-                des_vectors.append(dv)
-                n_sampled += 1
-                if n_sampled >= n:
-                    break
+                    matrix.append(mat.ravel())
+                    des_vectors.append(dv)
+                    n_sampled += 1
+                    if n_sampled >= n:
+                        break
 
             matrix = np.array(matrix, dtype=int)
             des_vectors = np.array(des_vectors, dtype=int)
             yield matrix, des_vectors
+
+    def _generate_random_dv_mat(self, n: int, existence: NodeExistence) -> Optional[Tuple[np.ndarray, np.ndarray]]:
+        """Custom implementation for generating valid random design vectors (n x nx) and associated
+        matrices (n x n_src x n_tgt). Used for speeding up distance correlation calculations."""
 
     def get_imputation_ratio(self, per_existence=False, use_real_matrix=True) -> float:
         if use_real_matrix:

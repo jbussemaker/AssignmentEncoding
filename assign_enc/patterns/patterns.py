@@ -1,3 +1,4 @@
+import itertools
 import numpy as np
 from typing import *
 from assign_enc.matrix import *
@@ -103,6 +104,25 @@ class CombiningPatternEncoder(PatternEncoderBase):
         matrix[0, i_select] = 1
         return vector, matrix
 
+    def _do_generate_random_dv_mat(self, n: int, effective_settings: MatrixGenSettings, existence: NodeExistence) \
+            -> Tuple[np.ndarray, np.ndarray]:
+        if self.is_collapsed:
+            if existence not in self._min_max_map:
+                raise RuntimeError(f'Unexpected existence pattern: {existence}')
+            min_n_conn, max_n_conn = self._min_max_map[existence]
+
+            i_opts = np.arange(max_n_conn-min_n_conn+1)
+            design_vectors = np.array([i_opts]).T
+            matrices = np.zeros((len(i_opts), 1, 1), dtype=int)
+            matrices[:, 0, 0] = min_n_conn+i_opts
+            return design_vectors, matrices
+
+        n_tgt = len(effective_settings.tgt)
+        design_vectors = np.array([np.arange(n_tgt)]).T
+        matrices = np.zeros((n_tgt, 1, n_tgt), dtype=int)
+        matrices[:, 0, :] = np.eye(n_tgt, dtype=int)
+        return design_vectors, matrices
+
     def _pattern_name(self) -> str:
         return 'Combining'
 
@@ -182,20 +202,26 @@ class AssigningPatternEncoder(PatternEncoderBase):
 
     def _decode_effective(self, vector: DesignVector, effective_settings: MatrixGenSettings, existence: NodeExistence) \
             -> Tuple[DesignVector, np.ndarray]:
-        surjective, repeatable = self.surjective, self.repeatable
+        surjective = self.surjective
         n_src, n_tgt, n_max = len(effective_settings.src), len(effective_settings.tgt), self._n_max
         n_min_src = effective_settings.src[0].min_conns
 
         # Correct the specified number of connections
         vector = np.array(vector)
+        self._correct_vector(vector, n_src, n_tgt, surjective, n_min_src, n_max)
+
+        # The matrix is simply the reshaped design vector
+        matrix = np.array(vector, dtype=int).reshape((n_src, n_tgt))
+        return vector, matrix
+
+    def _correct_vector(self, vector: np.ndarray, n_src: int, n_tgt: int, surjective: bool, n_min_src: int, n_max: int):
         for i_tgt in range(n_tgt):
             # Get the connections for the given target node
             conns = vector[i_tgt::n_tgt]
-            n_conns = np.sum(conns)
 
-            if surjective and n_conns < 1:
+            if surjective and all(conns == 0):
                 # If surjective, there should be at least 1 connection per target: randomly set one connection
-                conns[np.random.choice(np.arange(n_src))] = 1
+                conns[np.random.randint(0, n_src)] = 1
 
         if n_min_src > 0:
             for i_src in range(n_src):
@@ -204,13 +230,23 @@ class AssigningPatternEncoder(PatternEncoderBase):
 
                 while n_conns < n_min_src:
                     i_available = np.where(conns < n_max)[0]
-                    i_assign = np.random.choice(i_available)
+                    i_assign = i_available[np.random.randint(0, len(i_available))]
                     conns[i_assign] += 1
                     n_conns += 1
 
-        # The matrix is simply the reshaped design vector
-        matrix = np.array(vector, dtype=int).reshape((n_src, n_tgt))
-        return vector, matrix
+    def _do_generate_random_dv_mat(self, n: int, effective_settings: MatrixGenSettings, existence: NodeExistence) \
+            -> Tuple[np.ndarray, np.ndarray]:
+        surjective = self.surjective
+        n_src, n_tgt, n_max = len(effective_settings.src), len(effective_settings.tgt), self._n_max
+        n_min_src = effective_settings.src[0].min_conns
+
+        design_vectors = np.random.randint(0, n_max+1, size=(n, n_src*n_tgt))
+        matrices = np.zeros((n, n_src, n_tgt), dtype=int)
+        for i in range(design_vectors.shape[0]):
+            self._correct_vector(design_vectors[i, :], n_src, n_tgt, surjective, n_min_src, n_max)
+            matrices[i, :, :] = design_vectors[i, :].reshape((n_src, n_tgt))
+
+        return design_vectors, matrices
 
     def _pattern_name(self) -> str:
         return 'Assigning'
@@ -320,6 +356,39 @@ class PartitioningPatternEncoder(PatternEncoderBase):
 
         return vector, matrix
 
+    def _do_generate_random_dv_mat(self, n: int, effective_settings: MatrixGenSettings, existence: NodeExistence) \
+            -> Tuple[np.ndarray, np.ndarray]:
+
+        n_src, n_tgt = len(effective_settings.src), len(effective_settings.tgt)
+        n_min_src = effective_settings.src[0].min_conns
+        tgt_optional = effective_settings.tgt[0].conns == [0, 1]
+        offset = 1 if tgt_optional else 0
+
+        design_vectors = np.zeros((n, n_tgt), dtype=int)
+        matrices = np.zeros((n, n_src, n_tgt), dtype=int)
+        for i in range(n):
+            i_tgt_available = np.arange(n_tgt)
+
+            # First ensure that the sources have enough connections
+            if n_min_src > 0:
+                i_tgt = np.random.permutation(n_tgt)[:n_min_src*n_src]
+                for i_src in range(n_src):
+                    i_tgt_src = i_tgt[i_src*n_min_src:(i_src+1)*n_min_src]
+                    matrices[i, i_src, i_tgt_src] = 1
+                    design_vectors[i, i_tgt_src] = i_src+offset
+                i_tgt_available = list(set(i_tgt_available)-set(i_tgt))
+
+            # Randomly assign targets to sources
+            i_src_conns = np.random.randint(0, n_src+offset, len(i_tgt_available))
+            for i_avail, i_tgt in enumerate(i_tgt_available):
+                i_src_conn = i_src_conns[i_avail]
+                if tgt_optional and i_src_conn == 0:
+                    continue
+                matrices[i, i_src_conn-offset, i_tgt] = 1
+                design_vectors[i, i_tgt] = i_src_conn
+
+        return design_vectors, matrices
+
     def _pattern_name(self) -> str:
         return 'Partitioning'
 
@@ -384,6 +453,9 @@ class ConnectingPatternEncoder(PatternEncoderBase):
         return False
 
     def _encode_effective(self, effective_settings: MatrixGenSettings, existence: NodeExistence) -> List[DiscreteDV]:
+        return [DiscreteDV(n_opts=2) for _ in range(self._get_n_dv(effective_settings))]
+
+    def _get_n_dv(self, effective_settings: MatrixGenSettings) -> int:
         # Number of design variables if n*n minus n diagonal connections --> n*(n-1)
         n_src = len(effective_settings.src)
         n_dv = n_src*(n_src-1)
@@ -391,8 +463,7 @@ class ConnectingPatternEncoder(PatternEncoderBase):
         # If not directed, also the lower triangle cannot be connected two, so we half the nr of design variables
         if not self.directed:
             n_dv = int(n_dv/2)
-
-        return [DiscreteDV(n_opts=2) for _ in range(n_dv)]
+        return n_dv
 
     def _decode_effective(self, vector: DesignVector, effective_settings: MatrixGenSettings, existence: NodeExistence) \
             -> Tuple[DesignVector, np.ndarray]:
@@ -408,6 +479,25 @@ class ConnectingPatternEncoder(PatternEncoderBase):
             matrix[np.tril_indices(n_src, k=-1)] = vector[n_upper:]
 
         return vector, matrix
+
+    def _do_generate_random_dv_mat(self, n: int, effective_settings: MatrixGenSettings, existence: NodeExistence) \
+            -> Tuple[np.ndarray, np.ndarray]:
+        n_dv = self._get_n_dv(effective_settings)
+        design_vectors = np.random.randint(0, 2, size=(n, n_dv))
+
+        n_src = len(effective_settings.src)
+        matrices = np.zeros((n, n_src, n_src), dtype=int)
+        n_upper = int(n_dv/2) if self.directed else n_dv
+        i_triu = np.triu_indices(n_src, k=1)
+        for i in range(n):
+            matrices[i, i_triu[0], i_triu[1]] = design_vectors[i, :n_upper]
+
+        if self.directed:
+            i_tril = np.tril_indices(n_src, k=-1)
+            for i in range(n):
+                matrices[i, i_tril[0], i_tril[1]] = design_vectors[i, n_upper:]
+
+        return design_vectors, matrices
 
     def _pattern_name(self) -> str:
         return 'Connecting'
@@ -453,18 +543,36 @@ class PermutingPatternEncoder(PatternEncoderBase):
         matrix = np.zeros((n, n), dtype=int)
 
         # Set positions: the position of an element depends on the previously selected elements
+        matrix[np.arange(n), self._get_abs_pos(vector, n)] = 1
+        return vector, matrix
+
+    def _get_abs_pos(self, vector: DesignVector, n: int):
+        # Set positions: the position of an element depends on the previously selected elements
         available = list(range(n))
+        abs_pos = []
         for i in range(n-1):
             relative_pos = vector[i]
             pos = available[relative_pos]
 
-            matrix[i, pos] = 1
+            abs_pos.append(pos)
             available.remove(pos)
 
         # Set remaining connection
-        matrix[-1, available[0]] = 1
+        abs_pos.append(available[0])
+        return abs_pos
 
-        return vector, matrix
+    def _do_generate_random_dv_mat(self, n: int, effective_settings: MatrixGenSettings, existence: NodeExistence) \
+            -> Tuple[np.ndarray, np.ndarray]:
+        n_pos = len(effective_settings.src)
+        design_vectors = np.zeros((n, n_pos-1), dtype=int)
+        for i_dv in range(design_vectors.shape[1]):
+            design_vectors[:, i_dv] = np.random.randint(0, n_pos-i_dv, n)
+
+        matrices = np.zeros((n, n_pos, n_pos), dtype=int)
+        i_src = np.arange(n_pos)
+        for i, dv in enumerate(design_vectors):
+            matrices[i, i_src, self._get_abs_pos(dv, n_pos)] = 1
+        return design_vectors, matrices
 
     def _pattern_name(self) -> str:
         return 'Permuting'
@@ -518,22 +626,24 @@ class UnorderedCombiningPatternEncoder(PatternEncoderBase):
     def _encode_effective(self, effective_settings: MatrixGenSettings, existence: NodeExistence) -> List[DiscreteDV]:
         n_take = effective_settings.src[0].conns[0]
         n_tgt = len(effective_settings.tgt)
+        n_dv = self._get_n_dv(n_take, n_tgt)
+        return [DiscreteDV(n_opts=2) for _ in range(n_dv)]
+
+    def _get_n_dv(self, n_take, n_tgt) -> int:
         n_dv = n_tgt-1
 
         # Special case: if we do not allow replacement and n_tgt is the same as n_take, there is only 1 possibility
         # (namely: take all), and therefore there is no need to choose
         if not self.with_replacement and n_tgt == n_take:
-            return []
+            return 0
 
         # If we select with replacement, it is the same as if we could select n_take-1 non-replacing positions
         # You can verify:
         # len(list(itertools.combinations_with_replacement(list(range(n_tgt)), n_take)))
         # == len(list(itertools.combinations(list(range(n_tgt+n_take-1)), n_take)))
         if self.with_replacement:
-            n_take = effective_settings.src[0].conns[0]
             n_dv += n_take-1
-
-        return [DiscreteDV(n_opts=2) for _ in range(n_dv)]
+        return n_dv
 
     def _decode_effective(self, vector: DesignVector, effective_settings: MatrixGenSettings, existence: NodeExistence) \
             -> Tuple[DesignVector, np.ndarray]:
@@ -580,6 +690,39 @@ class UnorderedCombiningPatternEncoder(PatternEncoderBase):
         # Set matrix connections in the first row
         matrix = np.array([vector], dtype=int)
         return input_vector, matrix
+
+    def _do_generate_random_dv_mat(self, n: int, effective_settings: MatrixGenSettings, existence: NodeExistence) \
+            -> Tuple[np.ndarray, np.ndarray]:
+        # Generate all combinations and randomly take from it
+        n_take = effective_settings.src[0].conns[0]
+        n_tgt = len(effective_settings.tgt)
+        val = list(range(n_tgt))
+        wr = self.with_replacement
+        combinations = list(itertools.combinations_with_replacement(val, n_take)
+                            if wr else itertools.combinations(val, n_take))
+
+        if len(combinations) > n:
+            i_select = np.random.choice(len(combinations), n, replace=False)
+            combinations = [combinations[i] for i in i_select]
+
+        # Encode as design vectors and matrices
+        n_dv = self._get_n_dv(n_take, n_tgt)
+        design_vectors = np.zeros((len(combinations), n_dv), dtype=int)
+        matrices = np.zeros((len(combinations), 1, n_tgt), dtype=int)
+        for i, i_selected in enumerate(combinations):
+            for i_sel in i_selected:
+                matrices[i, 0, i_sel] += 1
+
+            # If with replacement, we have to decompress the selected indices
+            if wr:
+                i_selected = np.array(i_selected) + np.arange(len(i_selected))
+
+            for i_sel in i_selected:
+                # Never select the last element
+                if i_sel < n_dv:
+                    design_vectors[i, i_sel] = 1
+
+        return design_vectors, matrices
 
     def _pattern_name(self) -> str:
         return 'Unordered Combining'

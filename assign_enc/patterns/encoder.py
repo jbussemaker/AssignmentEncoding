@@ -73,11 +73,8 @@ class PatternEncoderBase(LazyEncoder):
         raise NotImplementedError
 
     def _encode(self, existence: NodeExistence) -> List[DiscreteDV]:
-        if self._is_transpose:
-            if existence not in self._transpose_existence_map:
-                return []
-            existence = self._transpose_existence_map[existence]
-        if existence not in self._effective_settings:
+        existence = self._get_existence(existence)
+        if existence is None:
             return []
 
         effective_settings, _, _ = self._effective_settings[existence]
@@ -87,11 +84,8 @@ class PatternEncoderBase(LazyEncoder):
         return self._encode_effective(effective_settings, existence)
 
     def _decode(self, vector: DesignVector, existence: NodeExistence) -> Optional[Tuple[DesignVector, np.ndarray]]:
-        if self._is_transpose:
-            if existence not in self._transpose_existence_map:
-                return vector, self.get_empty_matrix()
-            existence = self._transpose_existence_map[existence]
-        if existence not in self._effective_settings:
+        existence = self._get_existence(existence)
+        if existence is None:
             return vector, self.get_empty_matrix()
 
         effective_settings, src_map, tgt_map = self._effective_settings[existence]
@@ -106,6 +100,34 @@ class PatternEncoderBase(LazyEncoder):
 
         return vector, expanded_matrix
 
+    def _generate_random_dv_mat(self, n: int, existence: NodeExistence) -> Optional[Tuple[np.ndarray, np.ndarray]]:
+        original_existence = existence
+        existence = self._get_existence(existence)
+        if existence is None:
+            return
+
+        effective_settings, src_map, tgt_map = self._effective_settings[existence]
+        if len(effective_settings.src) == 0 or len(effective_settings.tgt) == 0:
+            _, n_dv, _, _ = self._get_des_vars_n_extra(original_existence)
+            return np.zeros((0, n_dv), dtype=int), np.array([self.get_empty_matrix()])[:0, :, :]
+
+        design_vectors, matrices = self._do_generate_random_dv_mat(n, effective_settings, existence)
+        expanded_matrices = self._settings.expand_effective_matrix(matrices, src_map, tgt_map)
+
+        if self._is_transpose:
+            expanded_matrices = expanded_matrices.transpose((0, 2, 1))
+        return design_vectors, expanded_matrices
+
+    def _get_existence(self, existence: NodeExistence) -> Optional[NodeExistence]:
+        if self._is_transpose:
+            if existence not in self._transpose_existence_map:
+                return
+            existence = self._transpose_existence_map[existence]
+
+        if existence not in self._effective_settings:
+            return
+        return existence
+
     def _impute(self, vector, matrix, existence: NodeExistence) -> Tuple[DesignVector, np.ndarray]:
         raise RuntimeError('Pattern encoder should never (automatically) impute!')
 
@@ -116,6 +138,11 @@ class PatternEncoderBase(LazyEncoder):
     def _decode_effective(self, vector: DesignVector, effective_settings: MatrixGenSettings, existence: NodeExistence) \
             -> Tuple[DesignVector, np.ndarray]:
         """Decode and correct a design vector"""
+        raise NotImplementedError
+
+    def _do_generate_random_dv_mat(self, n: int, effective_settings: MatrixGenSettings, existence: NodeExistence) \
+            -> Tuple[np.ndarray, np.ndarray]:
+        """Generate (n x nx) random vectors and (n x n_src x n_tgt) associated random matrices"""
         raise NotImplementedError
 
     def _pattern_name(self) -> str:

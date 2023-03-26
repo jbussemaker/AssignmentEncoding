@@ -357,12 +357,16 @@ class MatrixGenSettings:
         if len(src_map) == len(self.src) and len(tgt_map) == len(self.tgt):
             return matrix
 
-        expanded_matrix = np.zeros((len(self.src), len(self.tgt)), dtype=int)
+        is_2d = len(matrix.shape) == 2
+        if is_2d:
+            matrix = np.array([matrix])
+        expanded_matrix = np.zeros((matrix.shape[0], len(self.src), len(self.tgt)), dtype=int)
         tgt_indices = list(tgt_map.keys())
         for i_src in range(len(self.src)):
             if i_src in src_map:
-                expanded_matrix[i_src, tgt_indices] = matrix[src_map[i_src], :]
-        return expanded_matrix
+                expanded_matrix[:, i_src, tgt_indices] = matrix[:, src_map[i_src], :]
+
+        return expanded_matrix[0, :, :] if is_2d else expanded_matrix
 
     def get_transpose_settings(self) -> 'MatrixGenSettings':
         tgt, src = self.src, self.tgt
