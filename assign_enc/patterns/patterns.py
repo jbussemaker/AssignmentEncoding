@@ -81,10 +81,13 @@ class CombiningPatternEncoder(PatternEncoderBase):
             if existence not in self._min_max_map:
                 raise RuntimeError(f'Unexpected existence pattern: {existence}')
             min_n_conn, max_n_conn = self._min_max_map[existence]
-            n_conns = min_n_conn+vector[0]
-            if n_conns > max_n_conn:
-                n_conns = max_n_conn
-                vector = [max_n_conn-min_n_conn]
+            if len(vector) == 0:
+                n_conns = min_n_conn
+            else:
+                n_conns = min_n_conn+vector[0]
+                if n_conns > max_n_conn:
+                    n_conns = max_n_conn
+                    vector = [max_n_conn-min_n_conn]
 
             matrix = np.array([[n_conns]], dtype=int)
             return vector, matrix
