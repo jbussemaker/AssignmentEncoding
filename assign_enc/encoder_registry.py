@@ -100,7 +100,6 @@ PATTERN_ENCODERS = [  # Encoders for specific assignment patterns
     lambda imp: CombiningPatternEncoder(imp),
     lambda imp: AssigningPatternEncoder(imp),
     lambda imp: PartitioningPatternEncoder(imp),
-    lambda imp: DownselectingPatternEncoder(imp),
     lambda imp: ConnectingPatternEncoder(imp),
     lambda imp: PermutingPatternEncoder(imp),
     lambda imp: UnorderedCombiningPatternEncoder(imp),

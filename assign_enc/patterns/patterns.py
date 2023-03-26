@@ -5,7 +5,7 @@ from assign_enc.lazy_encoding import *
 from assign_enc.patterns.encoder import *
 
 __all__ = ['CombiningPatternEncoder', 'AssigningPatternEncoder', 'PartitioningPatternEncoder',
-           'DownselectingPatternEncoder', 'ConnectingPatternEncoder', 'PermutingPatternEncoder',
+           'ConnectingPatternEncoder', 'PermutingPatternEncoder',
            'UnorderedCombiningPatternEncoder']
 
 
@@ -113,9 +113,8 @@ class AssigningPatternEncoder(PatternEncoderBase):
     Optionally surjective: each target node has min 1 connection.
     Optionally repeatable: connections between src and tgt nodes may be repeated.
 
-    Source nodes: n_src nodes with any nr of connections
-    Target nodes: n_tgt nodes with any nr of connections
-                  (1 or more if surjective, 1 if inject and surjective)
+    Source nodes: n_src nodes with K or more connections (K >= 0)
+    Target nodes: n_tgt nodes with any nr of connections (1 or more if surjective)
     Encoded as:   n_src x n_tgt design variables with 2 options each (max_conn_parallel if repeatable)
     """
 
@@ -148,8 +147,12 @@ class AssigningPatternEncoder(PatternEncoderBase):
         if not _set_check('repeatable', repeatable[0]):
             return False
 
-        # Check all source nodes have any nr of connections
-        if any(n.min_conns != 0 for n in src):
+        # Check if all source nodes have any nr of connections
+        if any(not n.max_inf for n in src):
+            return False
+
+        # Check if all source nodes have the same minimum nr of connections
+        if any(n.min_conns != src[0].min_conns for n in src):
             return False
 
         # Check if all max parallel connections are the same
@@ -181,6 +184,7 @@ class AssigningPatternEncoder(PatternEncoderBase):
             -> Tuple[DesignVector, np.ndarray]:
         surjective, repeatable = self.surjective, self.repeatable
         n_src, n_tgt, n_max = len(effective_settings.src), len(effective_settings.tgt), self._n_max
+        n_min_src = effective_settings.src[0].min_conns
 
         # Correct the specified number of connections
         vector = np.array(vector)
@@ -193,9 +197,16 @@ class AssigningPatternEncoder(PatternEncoderBase):
                 # If surjective, there should be at least 1 connection per target: randomly set one connection
                 conns[np.random.choice(np.arange(n_src))] = 1
 
-            elif repeatable:
-                # If repeatable, cap it to the max allowed parallel connections
-                conns[conns > n_max] = n_max
+        if n_min_src > 0:
+            for i_src in range(n_src):
+                conns = vector[i_src*n_tgt:(i_src+1)*n_tgt]
+                n_conns = np.sum(conns)
+
+                while n_conns < n_min_src:
+                    i_available = np.where(conns < n_max)[0]
+                    i_assign = np.random.choice(i_available)
+                    conns[i_assign] += 1
+                    n_conns += 1
 
         # The matrix is simply the reshaped design vector
         matrix = np.array(vector, dtype=int).reshape((n_src, n_tgt))
@@ -207,11 +218,13 @@ class AssigningPatternEncoder(PatternEncoderBase):
 
 class PartitioningPatternEncoder(PatternEncoderBase):
     """
-    Encodes the partitioning pattern: partition M nodes into max N sets.
+    Encodes the partitioning pattern: partition M nodes into max N sets (or N sets of at least size K).
+    Also encodes the downselecting pattern: select any from N nodes
+    Also encodes the injective assigning pattern: connect M src nodes to N target nodes that accept 0 or 1 connections
 
-    Source nodes: N nodes with any nr of connections
-    Target nodes: M nodes with 1 connection
-    Encoded as:   M design variables with N options each
+    Source nodes: N nodes with K or more connections (K >= 0)
+    Target nodes: M nodes with 1 connection (or 0 or 1 if downselecting)
+    Encoded as:   M design variables with N options each (or N+1 if downselecting)
     """
 
     def _matches_pattern(self, effective_settings: MatrixGenSettings, initialize: bool) -> bool:
@@ -222,78 +235,93 @@ class PartitioningPatternEncoder(PatternEncoderBase):
             return False
 
         # Check if all source nodes have any nr of connections
-        if any(n.min_conns != 0 for n in src):
+        if any(not n.max_inf for n in src):
             return False
 
-        # Check if all target nodes have 1 connection
-        if any(n.conns != [1] for n in tgt):
+        # Check if all source nodes have the same minimum nr of connections
+        if any(n.min_conns != src[0].min_conns for n in src):
+            return False
+
+        # Check if all target nodes have 1 connection or 0 or 1 connections
+        if any(n.conns != [1] and n.conns != [0, 1] for n in tgt):
+            return False
+
+        # Check if there are not too many connections asked for
+        n_min_total = src[0].min_conns*len(src)
+        if n_min_total > len(tgt):
             return False
 
         return True
 
     def _encode_effective(self, effective_settings: MatrixGenSettings, existence: NodeExistence) -> List[DiscreteDV]:
-        return [DiscreteDV(n_opts=len(effective_settings.src)) for _ in range(len(effective_settings.tgt))]
+        n_src, n_tgt = len(effective_settings.src), len(effective_settings.tgt)
+
+        # One extra option to also represent the possibility of not selecting any source for a given target
+        n_opts = n_src
+        if effective_settings.tgt[0].conns == [0, 1]:
+            n_opts += 1
+
+        return [DiscreteDV(n_opts=n_opts) for _ in range(n_tgt)]
 
     def _decode_effective(self, vector: DesignVector, effective_settings: MatrixGenSettings, existence: NodeExistence) \
             -> Tuple[DesignVector, np.ndarray]:
 
-        # Set connections to source nodes
+        # Ensure that each source node has enough connections
         n_src, n_tgt = len(effective_settings.src), len(effective_settings.tgt)
+        n_min_src = effective_settings.src[0].min_conns
+        tgt_optional = effective_settings.tgt[0].conns == [0, 1]
+
+        if n_min_src > 0:
+            # Count the number of connection for each source
+            # Note: if tgt connections are optional, the first element here represents "no connection")
+            n_conn_src = np.zeros((n_src+1 if tgt_optional else n_src,), dtype=int)
+            for i_src in vector:
+                n_conn_src[i_src] += 1
+
+            vector = np.array(vector)
+            n_conn_diff = n_conn_src-n_min_src
+            not_the_first = np.ones((len(n_conn_diff),), dtype=bool)
+            if tgt_optional:
+                # If target is optional, we don't need to select for the first element, and the number of available is
+                # the number of connections (as there is no minimum)
+                not_the_first[0] = False
+                n_conn_diff[0] = n_conn_src[0]
+
+            while np.any(n_conn_diff < 0):
+                # Select the first source with not enough connections
+                i_not_enough = np.where((n_conn_diff < 0) & not_the_first)[0][0]
+
+                # Select any of the sources with enough connections (might include the "no connection" element)
+                i_enough = np.where(n_conn_diff > 0)[0]
+                if len(i_enough) == 0:
+                    raise RuntimeError('Not enough to take from!')
+                i_take_from = np.random.choice(i_enough) if len(i_enough) > 1 else i_enough[0]
+
+                # Select any of the elements in the vector that selects the source we take from
+                i_tf_in_vector = np.where(vector == i_take_from)[0]
+                if len(i_enough) == 0:
+                    raise RuntimeError('Not enough values in vector!')
+                i_vector_take_from = np.random.choice(i_tf_in_vector) if len(i_tf_in_vector) > 1 else i_tf_in_vector[0]
+
+                # Modify the vector and update counts
+                vector[i_vector_take_from] = i_not_enough
+                n_conn_diff[i_not_enough] += 1
+                n_conn_diff[i_take_from] -= 1
+
+        # Set connections to source nodes
         matrix = np.zeros((n_src, n_tgt), dtype=int)
         for i in range(n_tgt):
-            matrix[vector[i], i] = 1
+            i_src = vector[i]
+            if tgt_optional:
+                if i_src > 0:
+                    matrix[i_src-1, i] = 1
+            else:
+                matrix[i_src, i] = 1
 
         return vector, matrix
 
     def _pattern_name(self) -> str:
         return 'Partitioning'
-
-
-class DownselectingPatternEncoder(PatternEncoderBase):
-    """
-    Encodes the downselecting pattern: select any from N nodes
-    Encodes the injective assigning pattern: connect M src nodes to N target nodes that accept 0 or 1 connections
-
-    Source nodes: M nodes (1 if downselecting) with any nr of connections
-    Target nodes: N nodes with 0 or 1 connections
-    Encoded as:   N design variables with M+1 options (i.e. binary if downselecting)
-    """
-
-    def _matches_pattern(self, effective_settings: MatrixGenSettings, initialize: bool) -> bool:
-        src, tgt = effective_settings.src, effective_settings.tgt
-
-        # There may be no excluded edges
-        if effective_settings.get_excluded_indices():
-            return False
-
-        # Check if there is all source nodes have any nr of connections
-        if any(n.min_conns != 0 for n in src):
-            return False
-
-        # Check if all target nodes have 0 or 1 connections
-        if any(n.conns != [0, 1] for n in tgt):
-            return False
-
-        return True
-
-    def _encode_effective(self, effective_settings: MatrixGenSettings, existence: NodeExistence) -> List[DiscreteDV]:
-        n_opts = len(effective_settings.src)+1
-        return [DiscreteDV(n_opts=n_opts) for _ in range(len(effective_settings.tgt))]
-
-    def _decode_effective(self, vector: DesignVector, effective_settings: MatrixGenSettings, existence: NodeExistence) \
-            -> Tuple[DesignVector, np.ndarray]:
-
-        # Each variable in the vector corresponds to a target, where 0 means no connection and >0 means a connection to
-        # the ith src
-        matrix = np.zeros((len(effective_settings.src), len(effective_settings.tgt)), dtype=int)
-        for i_tgt in range(matrix.shape[1]):
-            i_src = vector[i_tgt]
-            if i_src > 0:
-                matrix[i_src-1, i_tgt] = 1
-        return vector, matrix
-
-    def _pattern_name(self) -> str:
-        return 'Downselecting'
 
 
 class ConnectingPatternEncoder(PatternEncoderBase):

@@ -19,18 +19,28 @@ def settings():
                                        tgt=[Node(min_conn=0, repeated_allowed=False) for _ in range(2)]),
         'assigning_sur': MatrixGenSettings(src=[Node(min_conn=0, repeated_allowed=False) for _ in range(2)],
                                            tgt=[Node(min_conn=1, repeated_allowed=False) for _ in range(2)]),
+        'assigning_sur_1': MatrixGenSettings(src=[Node(min_conn=1, repeated_allowed=False) for _ in range(2)],
+                                             tgt=[Node(min_conn=1, repeated_allowed=False) for _ in range(2)]),
         'assigning_inj': MatrixGenSettings(src=[Node(min_conn=0, repeated_allowed=False) for _ in range(2)],
                                            tgt=[Node([0, 1], repeated_allowed=False) for _ in range(2)]),
+        'assigning_inj_1': MatrixGenSettings(src=[Node(min_conn=1, repeated_allowed=False) for _ in range(2)],
+                                             tgt=[Node([0, 1], repeated_allowed=False) for _ in range(2)]),
         'assigning_rep': MatrixGenSettings(src=[Node(min_conn=0) for _ in range(2)],
                                            tgt=[Node(min_conn=0) for _ in range(2)]),
         'assigning_sur_rep': MatrixGenSettings(src=[Node(min_conn=0) for _ in range(2)],
                                                tgt=[Node(min_conn=1) for _ in range(2)]),
+        'assigning_sur_rep_1': MatrixGenSettings(src=[Node(min_conn=1) for _ in range(2)],
+                                                 tgt=[Node(min_conn=1) for _ in range(2)]),
         'assigning_inj_rep': MatrixGenSettings(src=[Node(min_conn=0) for _ in range(2)],
                                                tgt=[Node([0, 1]) for _ in range(2)]),
+        'assigning_inj_rep_1': MatrixGenSettings(src=[Node(min_conn=1) for _ in range(2)],
+                                                 tgt=[Node([0, 1]) for _ in range(2)]),
         'partitioning': MatrixGenSettings(src=[Node(min_conn=0, repeated_allowed=False) for _ in range(3)],
                                           tgt=[Node([1], repeated_allowed=False) for _ in range(3)]),
         'downselecting': MatrixGenSettings(src=[Node(min_conn=0, repeated_allowed=False)],
                                            tgt=[Node([0, 1], repeated_allowed=False) for _ in range(3)]),
+        'downselecting_1': MatrixGenSettings(src=[Node(min_conn=1, repeated_allowed=False)],
+                                             tgt=[Node([0, 1], repeated_allowed=False) for _ in range(3)]),
         'connecting': MatrixGenSettings(src=[Node(min_conn=0, repeated_allowed=False) for _ in range(2)],
                                         tgt=[Node(min_conn=0, repeated_allowed=False) for _ in range(2)],
                                         excluded=[(i, j) for i in range(2) for j in range(2) if i >= j]),
@@ -126,7 +136,8 @@ def test_combining_encoder(settings):
 
 def test_assigning_encoder(settings):
     encoders = _do_test_encoders(
-        AssigningPatternEncoder, settings, ['assigning', 'assigning_sur', 'assigning_rep', 'assigning_sur_rep'])
+        AssigningPatternEncoder, settings, ['assigning', 'assigning_sur', 'assigning_sur_1', 'assigning_rep',
+                                            'assigning_sur_rep', 'assigning_sur_rep_1'])
 
     def _check_settings(encoder: Any, surjective=False, repeatable=False):
         assert isinstance(encoder, AssigningPatternEncoder)
@@ -139,16 +150,16 @@ def test_assigning_encoder(settings):
 
     _check_settings(encoders[0])
     _check_settings(encoders[1], surjective=True)
-    _check_settings(encoders[2], repeatable=True)
-    _check_settings(encoders[3], surjective=True, repeatable=True)
+    _check_settings(encoders[2], surjective=True)
+    _check_settings(encoders[3], repeatable=True)
+    _check_settings(encoders[4], surjective=True, repeatable=True)
+    _check_settings(encoders[5], surjective=True, repeatable=True)
 
 
 def test_partitioning_encoder(settings):
-    _do_test_encoders(PartitioningPatternEncoder, settings, ['partitioning'])
-
-
-def test_downselecting_encoder(settings):
-    _do_test_encoders(DownselectingPatternEncoder, settings, ['assigning_inj', 'assigning_inj_rep', 'downselecting'])
+    _do_test_encoders(PartitioningPatternEncoder, settings, [
+        'assigning_inj', 'assigning_inj_1', 'assigning_inj_rep', 'assigning_inj_rep_1',
+        'downselecting', 'downselecting_1', 'partitioning'], include_asymmetric=False)
 
 
 def test_connecting_encoder(settings):
