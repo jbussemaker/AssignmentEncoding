@@ -163,7 +163,7 @@ class Encoder:
         n_dv_max = np.log2(n_combinations)
         return (n_dv-1.)/(n_dv_max-1.)
 
-    def get_distance_correlation(self, n=100, minimum=False, n_max=2000, n_samples_min=200, limit=.005) -> Optional[float]:
+    def get_distance_correlation(self, n=100, minimum=False, n_max=2000, n_samples_min=150, limit=.005) -> Optional[float]:
         """Correlation between distances between design vectors and associated matrices;
         optionally returning the minimum across all existence schemes"""
         dv_dist_all = None

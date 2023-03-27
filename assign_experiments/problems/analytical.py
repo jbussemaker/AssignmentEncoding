@@ -148,7 +148,7 @@ class AnalyticalAssignmentProblem(AnalyticalProblemBase):
         if self.injective and self.surjective and not self.repeatable:
             return PartitioningPatternEncoder(imputer)
         if self.injective:
-            return DownselectingPatternEncoder(imputer)
+            return PartitioningPatternEncoder(imputer)
         return AssigningPatternEncoder(imputer)
 
 
@@ -210,7 +210,7 @@ class AnalyticalDownselectingProblem(AnalyticalProblemBase):
         return f'An Down Prob {self._n_src} -> {self._n_tgt}'
 
     def get_manual_best_encoder(self, imputer: LazyImputer) -> Optional[PatternEncoderBase]:
-        return DownselectingPatternEncoder(imputer)
+        return PartitioningPatternEncoder(imputer)
 
 
 class AnalyticalConnectingProblem(AnalyticalProblemBase):

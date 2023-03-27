@@ -79,9 +79,11 @@ def test_iter_order():
 def _assert_matrix(gen: AggregateAssignmentMatrixGenerator, matrix_gen, assert_matrix: np.ndarray):
     if isinstance(matrix_gen, np.ndarray):
         matrix_gen = [matrix_gen]
-    agg_matrix = list(gen._agg_matrices(matrix_gen).values())[0]
-    assert agg_matrix.shape == assert_matrix.shape
-    assert np.all(agg_matrix == assert_matrix)
+    gen.reset_agg_matrix_cache()
+    for _ in range(2):
+        agg_matrix = list(gen._agg_matrices(matrix_gen).values())[0]
+        assert agg_matrix.shape == assert_matrix.shape
+        assert np.all(agg_matrix == assert_matrix)
 
 
 def test_iter_permuted_conns(nodes):

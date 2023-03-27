@@ -195,7 +195,28 @@ if __name__ == '__main__':
 
     # p = MultiCombinationProblem(DEFAULT_EAGER_ENCODER())
     # p = MultiAnalyticalAssignmentProblem(DEFAULT_EAGER_ENCODER())
-    p = MultiPermIterCombProblem(DEFAULT_EAGER_ENCODER())
+    # p = MultiAnalyticalAssignmentProblem(DEFAULT_EAGER_ENCODER(), n_act_src=3, n_act_tgt=4, n_src=5, n_tgt=5, injective=True)
+    p = MultiAnalyticalAssignmentProblem(DEFAULT_EAGER_ENCODER(), n_act_src=3, n_act_tgt=3, n_src=5, n_tgt=5)
+    # p = MultiPermIterCombProblem(DEFAULT_EAGER_ENCODER())
+
+    # p = p.get_for_encoder(PartitioningPatternEncoder(DEFAULT_LAZY_IMPUTER()))
+    p = p.get_for_encoder(AssigningPatternEncoder(DEFAULT_LAZY_IMPUTER()))
+    # p.assignment_manager.encoder.get_distance_correlation(), exit()
+    print(str(p))
+    from assign_enc.selector import EncoderSelector
+    # EncoderSelector.limit_dist_corr_time = False
+    EncoderSelector._print_stats = True
+
+    import timeit
+    for _ in range(2):
+        p.assignment_manager.matrix_gen.reset_agg_matrix_cache()
+        s = timeit.default_timer()
+        p.reset_encoder_selector_cache()
+        p = p.get_for_encoder(None)
+    enc = p.assignment_manager.encoder
+    print(f'Selected {enc!s} in {timeit.default_timer()-s:.2f} sec; imp ratio = {enc.get_imputation_ratio():.2f}, '
+          f'dist corr = {enc.get_distance_correlation():.2f}')
+    exit()
 
     p.reset_pf_cache(), p.plot_pf(show_approx_f_range=True, n_sample=1000), exit()
     enc = []

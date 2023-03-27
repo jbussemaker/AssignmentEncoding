@@ -838,7 +838,7 @@ def plot_stats(df: pd.DataFrame, folder, show=False):
     df['has_result'] = has_result = ~np.isnan(df['hv_end'])
     df['has_timing'] = has_timing = ~np.isnan(df['sampling_time_sec'])
     df['enc_type'] = np.array([enc.startswith('Lazy') for enc in df.enc.values], dtype=float)
-    df.enc_type[np.array([enc.startswith('Recursive') or enc.startswith('One Var') for enc in df.enc.values])] = .4
+    df.enc_type[np.array([enc.startswith('Enum') for enc in df.enc.values])] = .4
     df.enc_type[np.array(['Pattern' in enc for enc in df.enc.values])] = .75
 
     col_names = {

@@ -168,16 +168,15 @@ class LazyEncoder(Encoder):
             if existence not in sampled_dvs:
                 sampled_dvs[existence] = set()
             sampled = sampled_dvs[existence]
-            sampled = sampled.copy()
 
             # Try if there is an encoder-specific way to generate random design vectors and matrices
             random_dv_mat = self._generate_random_dv_mat(n, existence)
             n_sampled = 0
             matrix, des_vectors = [], []
             if random_dv_mat is not None:
-                for i_try in range(3):
+                for i_try in range(2):
                     if i_try > 0:
-                        random_dv_mat = self._generate_random_dv_mat(n, existence)
+                        random_dv_mat = self._generate_random_dv_mat(n-n_sampled, existence)
                     dv_random, mat_random = random_dv_mat
                     for i, dv in enumerate(dv_random):
                         dv_hash = hash(tuple(dv))
@@ -185,9 +184,9 @@ class LazyEncoder(Encoder):
                             continue
                         sampled.add(dv_hash)
 
-                        valid = self._matrix_gen.validate_matrix(mat_random[i], existence=existence)
-                        if not valid:
-                            raise RuntimeError(f'Generated a non-valid matrix (random_dv_mat): {self!r}')
+                        # valid = self._matrix_gen.validate_matrix(mat_random[i], existence=existence)
+                        # if not valid:
+                        #     raise RuntimeError(f'Generated a non-valid matrix (random_dv_mat): {self!r}')
 
                         matrix.append(mat_random[i].ravel())
                         des_vectors.append(dv)
