@@ -571,7 +571,8 @@ def plot_stats(df: pd.DataFrame, folder, effort, show=False):
     df.hv_end_std[no_opt_res] = 0
 
     df['enc_type'] = np.array([enc.startswith('Lazy') for enc in df.enc.values], dtype=float)
-    df.enc_type[np.array([enc.startswith('Recursive') or enc.startswith('One Var') for enc in df.enc.values])] = .5
+    df.enc_type[np.array([enc.startswith('Enum') for enc in df.enc.values])] = .4
+    df.enc_type[np.array(['Pattern' in enc for enc in df.enc.values])] = .75
 
     df['hv_ratio'] = df.hv_end/df.hv_doe
     df.hv_ratio[df.hv_doe == 0] = 0.
@@ -600,7 +601,7 @@ def plot_stats(df: pd.DataFrame, folder, effort, show=False):
         'hv_end': 'HV (end)',
         'hv_ratio': 'HV ratio = HV end/doe',
         'hv_diff': 'HV diff = HV end-doe',
-        'enc_type': 'Encoder Type (0 = eager, .5 = enum, 1 = lazy)',
+        'enc_type': 'EncType (0 eager, .4 enum, .75 manual, 1 lazy)',
     }
 
     def _plot(x_col, y_col, err_col=None, z_col=None, x_log=False, y_log=False, z_log=False, xy_line=False):

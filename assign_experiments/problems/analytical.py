@@ -393,7 +393,7 @@ if __name__ == '__main__':
     # p = AnalyticalAssignmentProblem(DEFAULT_EAGER_ENCODER(), surjective=True)
     # p = AnalyticalAssignmentProblem(DEFAULT_EAGER_ENCODER(), injective=True, surjective=True)
     # p = AnalyticalAssignmentProblem(DEFAULT_EAGER_ENCODER(), n_src=2, n_tgt=4, repeatable=True)
-    p = AnalyticalPartitioningProblem(DEFAULT_EAGER_ENCODER(), n_src=3, n_tgt=4)
+    p = AnalyticalPartitioningProblem(DEFAULT_EAGER_ENCODER(), n_src=3, n_tgt=4, covering=True)
     # p = AnalyticalPartitioningProblem(DEFAULT_EAGER_ENCODER(), covering=True, n_src=3, n_tgt=4)
     # p = AnalyticalPartitioningProblem(LazyAmountFirstEncoder(DEFAULT_LAZY_IMPUTER(), FlatLazyAmountEncoder(), FlatLazyConnectionEncoder()), n_src=2, n_tgt=4, covering=True)
     # p = AnalyticalDownselectingProblem(DEFAULT_EAGER_ENCODER())
@@ -402,7 +402,15 @@ if __name__ == '__main__':
     # p = AnalyticalUnorderedNonReplaceCombiningProblem(DEFAULT_EAGER_ENCODER(), n_take=5, n_tgt=9)
     # p = AnalyticalUnorderedCombiningProblem(DEFAULT_EAGER_ENCODER(), n_take=5, n_tgt=10)
 
-    p = p.get_for_encoder(None)
+    from assign_enc.selector import EncoderSelector
+    EncoderSelector(p.assignment_manager.matrix_gen.settings).initialize_numba()
+    EncoderSelector._global_disable_cache = True
+    EncoderSelector._exclude_pattern_encoders = True
+    import timeit
+    for _ in range(4):
+        s = timeit.default_timer()
+        p = p.get_for_encoder(None)
+        print(timeit.default_timer()-s)
     # try:
     #     p = p.get_for_encoder(p.get_manual_best_encoder(DEFAULT_LAZY_IMPUTER()))
     #     # p = p.get_for_encoder(ConnIdxGroupedEncoder(DEFAULT_EAGER_IMPUTER()))
