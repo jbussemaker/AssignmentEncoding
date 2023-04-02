@@ -121,6 +121,11 @@ def _do_test_encoders(encoder_cls: Type[PatternEncoderBase], settings_map, match
                         assert tuple(matrix.ravel()) in agg_matrix_set
                         seen_dvs.add(tuple(imp_dv))
 
+                        for _ in range(5):
+                            imp_dv2, mat2 = encoder.get_matrix(list(des_vector)+[0], existence=existence)
+                            assert np.all(imp_dv2 == imp_dv)
+                            assert np.all(mat2 == matrix)
+
                     assert len(seen_dvs) == len(agg_matrix_set)
 
                     dvs, mat = encoder._generate_random_dv_mat(100, existence)

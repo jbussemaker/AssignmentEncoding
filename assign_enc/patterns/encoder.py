@@ -19,6 +19,7 @@ class PatternEncoderBase(LazyEncoder):
     However, it only applies to a limited set of connection settings. When incompatible settings are provided to
     set_settings, an InvalidPatternEncoder exception is raised.
     """
+    _allow_random_imputation = False
 
     def __init__(self, imputer):
         super().__init__(imputer)

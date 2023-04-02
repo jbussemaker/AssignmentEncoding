@@ -211,20 +211,23 @@ class AssigningPatternEncoder(PatternEncoderBase):
 
         # Correct the specified number of connections
         vector = np.array(vector)
-        self._correct_vector(vector, n_src, n_tgt, surjective, n_min_src, n_max)
+        self._correct_vector(vector, n_src, n_tgt, surjective, n_min_src, n_max,
+                             impute_randomly=self._allow_random_imputation)
 
         # The matrix is simply the reshaped design vector
         matrix = np.array(vector, dtype=int).reshape((n_src, n_tgt))
         return vector, matrix
 
-    def _correct_vector(self, vector: np.ndarray, n_src: int, n_tgt: int, surjective: bool, n_min_src: int, n_max: int):
+    @staticmethod
+    def _correct_vector(vector: np.ndarray, n_src: int, n_tgt: int, surjective: bool, n_min_src: int, n_max: int,
+                        impute_randomly=True):
         for i_tgt in range(n_tgt):
             # Get the connections for the given target node
             conns = vector[i_tgt::n_tgt]
 
             if surjective and all(conns == 0):
-                # If surjective, there should be at least 1 connection per target: randomly set one connection
-                conns[np.random.randint(0, n_src)] = 1
+                # If surjective, there should be at least 1 connection per target
+                conns[np.random.randint(0, n_src) if impute_randomly else 0] = 1
 
         if n_min_src > 0:
             for i_src in range(n_src):
@@ -233,7 +236,7 @@ class AssigningPatternEncoder(PatternEncoderBase):
 
                 while n_conns < n_min_src:
                     i_available = np.where(conns < n_max)[0]
-                    i_assign = i_available[np.random.randint(0, len(i_available))]
+                    i_assign = i_available[np.random.randint(0, len(i_available)) if impute_randomly else 0]
                     conns[i_assign] += 1
                     n_conns += 1
 
@@ -304,6 +307,7 @@ class PartitioningPatternEncoder(PatternEncoderBase):
 
     def _decode_effective(self, vector: DesignVector, effective_settings: MatrixGenSettings, existence: NodeExistence) \
             -> Tuple[DesignVector, np.ndarray]:
+        impute_randomly = self._allow_random_imputation
 
         # Ensure that each source node has enough connections
         n_src, n_tgt = len(effective_settings.src), len(effective_settings.tgt)
@@ -334,13 +338,14 @@ class PartitioningPatternEncoder(PatternEncoderBase):
                 i_enough = np.where(n_conn_diff > 0)[0]
                 if len(i_enough) == 0:
                     raise RuntimeError('Not enough to take from!')
-                i_take_from = np.random.choice(i_enough) if len(i_enough) > 1 else i_enough[0]
+                i_take_from = np.random.choice(i_enough) if len(i_enough) > 1 and impute_randomly else i_enough[0]
 
                 # Select any of the elements in the vector that selects the source we take from
                 i_tf_in_vector = np.where(vector == i_take_from)[0]
                 if len(i_enough) == 0:
                     raise RuntimeError('Not enough values in vector!')
-                i_vector_take_from = np.random.choice(i_tf_in_vector) if len(i_tf_in_vector) > 1 else i_tf_in_vector[0]
+                i_vector_take_from = np.random.choice(i_tf_in_vector) \
+                    if len(i_tf_in_vector) > 1 and impute_randomly else i_tf_in_vector[0]
 
                 # Modify the vector and update counts
                 vector[i_vector_take_from] = i_not_enough
@@ -549,7 +554,8 @@ class PermutingPatternEncoder(PatternEncoderBase):
         matrix[np.arange(n), self._get_abs_pos(vector, n)] = 1
         return vector, matrix
 
-    def _get_abs_pos(self, vector: DesignVector, n: int):
+    @staticmethod
+    def _get_abs_pos(vector: DesignVector, n: int):
         # Set positions: the position of an element depends on the previously selected elements
         available = list(range(n))
         abs_pos = []
@@ -650,6 +656,7 @@ class UnorderedCombiningPatternEncoder(PatternEncoderBase):
 
     def _decode_effective(self, vector: DesignVector, effective_settings: MatrixGenSettings, existence: NodeExistence) \
             -> Tuple[DesignVector, np.ndarray]:
+        impute_randomly = self._allow_random_imputation
         n_take = effective_settings.src[0].conns[0]
         n_tgt = len(effective_settings.tgt)
 
@@ -665,14 +672,20 @@ class UnorderedCombiningPatternEncoder(PatternEncoderBase):
         if n_taken < n_take-1:
             # Randomly select elements
             i_not_selected = np.where(vector == 0)[0]
-            target = (n_take-1) if np.random.random() > .5 else n_take
-            vector[np.random.choice(i_not_selected, target-n_taken, replace=False)] = 1
+            if impute_randomly:
+                target = (n_take-1) if np.random.random() > .5 else n_take
+                vector[np.random.choice(i_not_selected, target-n_taken, replace=False)] = 1
+            else:
+                vector[i_not_selected[:n_take-n_taken]] = 1
 
         elif n_taken > n_take:
             # Randomly deselect elements
             i_selected = np.where(vector == 1)[0]
-            target = (n_take-1) if np.random.random() > .5 else n_take
-            vector[np.random.choice(i_selected, n_taken-target, replace=False)] = 0
+            if impute_randomly:
+                target = (n_take-1) if np.random.random() > .5 else n_take
+                vector[np.random.choice(i_selected, n_taken-target, replace=False)] = 0
+            else:
+                vector[i_selected[:n_taken-n_take]] = 0
 
         # Select last element if nr of taken elements is n_take-1
         input_vector = vector
