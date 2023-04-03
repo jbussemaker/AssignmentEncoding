@@ -128,6 +128,8 @@ class CombiningPatternEncoder(PatternEncoderBase):
 
     def _do_get_all_design_vectors(self, effective_settings: MatrixGenSettings, existence: NodeExistence,
                                    design_vars: List[DiscreteDV]) -> np.ndarray:
+        if len(design_vars) == 0:
+            return np.zeros((1, 0), dtype=int)
         if self.is_collapsed:
             if existence not in self._min_max_map:
                 raise RuntimeError(f'Unexpected existence pattern: {existence}')
@@ -817,7 +819,7 @@ class UnorderedCombiningPatternEncoder(PatternEncoderBase):
                 design_vectors.append(vector)
 
         if len(design_vectors) == 0:
-            return np.zeros((0, n_dv), dtype=int)
+            return -np.ones((1, n_dv), dtype=int)
         return np.array(design_vectors)
 
     def _pattern_name(self) -> str:

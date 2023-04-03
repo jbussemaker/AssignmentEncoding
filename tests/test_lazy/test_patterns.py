@@ -122,9 +122,6 @@ def _do_test_encoders(encoder_cls: Type[PatternEncoderBase], settings_map, match
                         x_imp, _ = encoder.get_matrix(x, existence=existence)
                         assert np.all(x_imp == x)
 
-                    if len(all_x_set) == 0:
-                        all_x_set.add(tuple([-1]*len(encoder.design_vars)+[-1]))
-
                     seen_dvs = set()
                     for des_vector in itertools.product(*[list(range(dv.n_opts+1)) for dv in encoder.design_vars]):
                         imp_dv, matrix = encoder.get_matrix(list(des_vector)+[0], existence=existence)

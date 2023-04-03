@@ -130,7 +130,7 @@ class PatternEncoderBase(LazyEncoder):
             design_vars = self._existence_design_vars.get(original_existence, self.design_vars)
             effective_settings, _, _ = self._effective_settings[existence]
             if len(effective_settings.src) == 0 or len(effective_settings.tgt) == 0:
-                null_dvs = np.zeros((0, len(design_vars)), dtype=int)
+                null_dvs = -np.ones((1, len(design_vars)), dtype=int)
                 dv_map[original_existence] = null_dvs
                 continue
 
