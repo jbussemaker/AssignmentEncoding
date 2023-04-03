@@ -108,16 +108,28 @@ def _do_test_encoders(encoder_cls: Type[PatternEncoderBase], settings_map, match
             # Enumerate all design variables to check pattern-provided imputation
             matrix_gen = AggregateAssignmentMatrixGenerator(settings)
             agg_matrix_map = matrix_gen.get_agg_matrix(cache=False)
+            all_x_map = encoder.get_all_design_vectors()
             for existence in matrix_gen.iter_existence():
                 agg_matrix = agg_matrix_map[existence]
                 agg_matrix_set = {tuple(flat_matrix) for flat_matrix in
                                   agg_matrix.reshape(agg_matrix.shape[0], np.prod(agg_matrix.shape[1:]))}
 
                 try:
+                    all_x = all_x_map[existence]
+                    all_x_set = {tuple(list(dv)+[-1]) for dv in all_x}
+                    assert len(all_x_set) == all_x.shape[0]
+                    for x in all_x:
+                        x_imp, _ = encoder.get_matrix(x, existence=existence)
+                        assert np.all(x_imp == x)
+
+                    if len(all_x_set) == 0:
+                        all_x_set.add(tuple([-1]*len(encoder.design_vars)+[-1]))
+
                     seen_dvs = set()
                     for des_vector in itertools.product(*[list(range(dv.n_opts+1)) for dv in encoder.design_vars]):
                         imp_dv, matrix = encoder.get_matrix(list(des_vector)+[0], existence=existence)
                         assert len(imp_dv) == len(encoder.design_vars)+1
+                        assert tuple(imp_dv) in all_x_set
                         assert tuple(matrix.ravel()) in agg_matrix_set
                         seen_dvs.add(tuple(imp_dv))
 
@@ -127,6 +139,7 @@ def _do_test_encoders(encoder_cls: Type[PatternEncoderBase], settings_map, match
                             assert np.all(mat2 == matrix)
 
                     assert len(seen_dvs) == len(agg_matrix_set)
+                    assert len(seen_dvs) == len(all_x_set)
 
                     dvs, mat = encoder._generate_random_dv_mat(100, existence)
                     for i, dv in enumerate(dvs):
@@ -198,7 +211,7 @@ def test_unordered_combining_encoder(settings):
         UnorderedCombiningPatternEncoder, settings, ['combining', 'unordered_norepl_combining', 'unordered_combining'])
 
     encoder = UnorderedCombiningPatternEncoder(LazyFirstImputer())
-    for key in ['unordered_norepl_combining', 'unordered_combining']:
+    for key in ['unordered_norepl_combining', 'unordered_combining'][1:]:
         base_settings = settings[key]
         existence_patterns = NodeExistencePatterns(patterns=[
             NodeExistence(src_n_conn_override={0: [n]}) for n in range(4)])
@@ -206,3 +219,9 @@ def test_unordered_combining_encoder(settings):
 
         assert encoder.is_compatible(ex_settings)
         assert encoder.is_compatible(ex_settings.get_transpose_settings())
+
+        encoder.set_settings(ex_settings)
+        for existence, x_all in encoder.get_all_design_vectors().items():
+            for x in x_all:
+                x_imp, _ = encoder.get_matrix(x, existence=existence)
+                assert np.all(x_imp == x)

@@ -26,7 +26,7 @@ class LazyDirectMatrixEncoder(LazyEncoder):
 
     def _encode(self, existence: NodeExistence) -> List[DiscreteDV]:
         matrix_gen = self._matrix_gen
-        max_conn_mat = matrix_gen.max_conn_mat
+        max_conn_mat = matrix_gen.get_max_conn_mat(existence)
 
         dvs = []
         self._dv_idx_map[existence] = dv_idx_map = []

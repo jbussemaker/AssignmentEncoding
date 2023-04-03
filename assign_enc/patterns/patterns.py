@@ -126,6 +126,20 @@ class CombiningPatternEncoder(PatternEncoderBase):
         matrices[:, 0, :] = np.eye(n_tgt, dtype=int)
         return design_vectors, matrices
 
+    def _do_get_all_design_vectors(self, effective_settings: MatrixGenSettings, existence: NodeExistence,
+                                   design_vars: List[DiscreteDV]) -> np.ndarray:
+        if self.is_collapsed:
+            if existence not in self._min_max_map:
+                raise RuntimeError(f'Unexpected existence pattern: {existence}')
+            min_n_conn, max_n_conn = self._min_max_map[existence]
+            i_opts = np.arange(max_n_conn-min_n_conn+1)
+            design_vectors = np.array([i_opts]).T
+            return design_vectors
+
+        n_tgt = len(effective_settings.tgt)
+        design_vectors = np.array([np.arange(n_tgt)]).T
+        return design_vectors
+
     def _pattern_name(self) -> str:
         return 'Combining'
 
@@ -253,6 +267,28 @@ class AssigningPatternEncoder(PatternEncoderBase):
             matrices[i, :, :] = design_vectors[i, :].reshape((n_src, n_tgt))
 
         return design_vectors, matrices
+
+    def _do_get_all_design_vectors(self, effective_settings: MatrixGenSettings, existence: NodeExistence,
+                                   design_vars: List[DiscreteDV]) -> np.ndarray:
+        surjective = self.surjective
+        n_src, n_tgt, n_max = len(effective_settings.src), len(effective_settings.tgt), self._n_max
+        n_min_src = effective_settings.src[0].min_conns
+
+        design_vectors = np.array(list(itertools.product(*[list(range(n_max+1)) for _ in range(n_src*n_tgt)])))
+
+        # Remove design vectors with no target connections if surjective
+        if surjective:
+            for i_tgt in range(n_tgt):
+                has_conn = np.any(design_vectors[:, i_tgt::n_tgt] > 0, axis=1)
+                design_vectors = design_vectors[has_conn, :]
+
+        # Remove design vectors with not enough source connections
+        if n_min_src > 0:
+            for i_src in range(n_src):
+                has_enough_conn = np.sum(design_vectors[:, i_src*n_tgt:(i_src+1)*n_tgt], axis=1) >= n_min_src
+                design_vectors = design_vectors[has_enough_conn, :]
+
+        return design_vectors
 
     def _pattern_name(self) -> str:
         return 'Assigning'
@@ -397,6 +433,23 @@ class PartitioningPatternEncoder(PatternEncoderBase):
 
         return design_vectors, matrices
 
+    def _do_get_all_design_vectors(self, effective_settings: MatrixGenSettings, existence: NodeExistence,
+                                   design_vars: List[DiscreteDV]) -> np.ndarray:
+        n_src, n_tgt = len(effective_settings.src), len(effective_settings.tgt)
+        n_min_src = effective_settings.src[0].min_conns
+        tgt_optional = effective_settings.tgt[0].conns == [0, 1]
+        offset = 1 if tgt_optional else 0
+
+        design_vectors = np.array(list(itertools.product(*[list(range(dv.n_opts)) for dv in design_vars])))
+
+        # Remove design vectors where the sources do not have enough connections
+        if n_min_src > 0:
+            for i_src in range(n_src):
+                has_enough_conn = np.sum(design_vectors == i_src+offset, axis=1) >= n_min_src
+                design_vectors = design_vectors[has_enough_conn, :]
+
+        return design_vectors
+
     def _pattern_name(self) -> str:
         return 'Partitioning'
 
@@ -507,6 +560,11 @@ class ConnectingPatternEncoder(PatternEncoderBase):
 
         return design_vectors, matrices
 
+    def _do_get_all_design_vectors(self, effective_settings: MatrixGenSettings, existence: NodeExistence,
+                                   design_vars: List[DiscreteDV]) -> np.ndarray:
+        design_vectors = np.array(list(itertools.product(*[[0, 1] for _ in range(len(design_vars))])))
+        return design_vectors
+
     def _pattern_name(self) -> str:
         return 'Connecting'
 
@@ -582,6 +640,11 @@ class PermutingPatternEncoder(PatternEncoderBase):
         for i, dv in enumerate(design_vectors):
             matrices[i, i_src, self._get_abs_pos(dv, n_pos)] = 1
         return design_vectors, matrices
+
+    def _do_get_all_design_vectors(self, effective_settings: MatrixGenSettings, existence: NodeExistence,
+                                   design_vars: List[DiscreteDV]) -> np.ndarray:
+        design_vectors = np.array(list(itertools.product(*[list(range(dv.n_opts)) for dv in design_vars])))
+        return design_vectors
 
     def _pattern_name(self) -> str:
         return 'Permuting'
@@ -739,6 +802,23 @@ class UnorderedCombiningPatternEncoder(PatternEncoderBase):
                     design_vectors[i, i_sel] = 1
 
         return design_vectors, matrices
+
+    def _do_get_all_design_vectors(self, effective_settings: MatrixGenSettings, existence: NodeExistence,
+                                   design_vars: List[DiscreteDV]) -> np.ndarray:
+        n_take = effective_settings.src[0].conns[0]
+        n_dv = len(design_vars)
+
+        design_vectors = []
+        for n_target in [n_take, n_take-1]:
+            for i_selected in itertools.combinations(list(range(n_dv)), n_target):
+                vector = np.zeros((n_dv,), dtype=int)
+                if len(i_selected) > 0:
+                    vector[list(i_selected)] = 1
+                design_vectors.append(vector)
+
+        if len(design_vectors) == 0:
+            return np.zeros((0, n_dv), dtype=int)
+        return np.array(design_vectors)
 
     def _pattern_name(self) -> str:
         return 'Unordered Combining'

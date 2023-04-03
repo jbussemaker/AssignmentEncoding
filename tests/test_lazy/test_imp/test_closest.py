@@ -17,6 +17,16 @@ def test_imputer():
     assert np.all(dv == [0, 2, 1, 0])
     assert np.all(mat == np.array([[0, 2], [1, 0]]))
 
+    assert encoder._matrix_gen.get_agg_matrix()[NodeExistence()].shape[0] == 21
+    all_x = encoder.get_all_design_vectors()[NodeExistence()]
+    assert all_x.shape == (21, 4)
+    matrix_seen = set()
+    for x in all_x:
+        imp_x, matrix = encoder.get_matrix(x)
+        matrix_seen.add(tuple(matrix.ravel()))
+        assert np.all(imp_x == x)
+    assert len(matrix_seen) == all_x.shape[0]
+
 
 def test_max_tries():
     encoder = LazyDirectMatrixEncoder(LazyClosestImputer(n_max_tries=100))

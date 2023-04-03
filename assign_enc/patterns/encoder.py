@@ -119,6 +119,27 @@ class PatternEncoderBase(LazyEncoder):
             expanded_matrices = expanded_matrices.transpose((0, 2, 1))
         return design_vectors, expanded_matrices
 
+    def _get_all_design_vectors(self, patterns: List[NodeExistence]) -> Optional[Dict[NodeExistence, np.ndarray]]:
+        dv_map = {}
+        for existence in patterns:
+            original_existence = existence
+            existence = self._get_existence(existence)
+            if existence is None:
+                continue
+
+            design_vars = self._existence_design_vars.get(original_existence, self.design_vars)
+            effective_settings, _, _ = self._effective_settings[existence]
+            if len(effective_settings.src) == 0 or len(effective_settings.tgt) == 0:
+                null_dvs = np.zeros((0, len(design_vars)), dtype=int)
+                dv_map[original_existence] = null_dvs
+                continue
+
+            design_vectors = self._do_get_all_design_vectors(effective_settings, existence, design_vars)
+            if design_vectors.shape[1] != len(design_vars):
+                raise RuntimeError(f'Inconsistent nr of design variables: {len(design_vars)}')
+            dv_map[original_existence] = design_vectors
+        return dv_map
+
     def _get_existence(self, existence: NodeExistence) -> Optional[NodeExistence]:
         if self._is_transpose:
             if existence not in self._transpose_existence_map:
@@ -144,6 +165,11 @@ class PatternEncoderBase(LazyEncoder):
     def _do_generate_random_dv_mat(self, n: int, effective_settings: MatrixGenSettings, existence: NodeExistence) \
             -> Tuple[np.ndarray, np.ndarray]:
         """Generate (n x nx) random vectors and (n x n_src x n_tgt) associated random matrices"""
+        raise NotImplementedError
+
+    def _do_get_all_design_vectors(self, effective_settings: MatrixGenSettings, existence: NodeExistence,
+                                   design_vars: List[DiscreteDV]) -> np.ndarray:
+        """Generate all design vectors (n x nx)"""
         raise NotImplementedError
 
     def _pattern_name(self) -> str:

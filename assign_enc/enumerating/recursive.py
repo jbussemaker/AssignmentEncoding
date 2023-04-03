@@ -52,18 +52,48 @@ class EnumRecursiveEncoder(QuasiLazyEncoder):
         if i_mat >= matrix.shape[0]:
             return self._dv_last[existence], matrix[-1, :, :]
 
-        dv_inactive_key = self._dv_inactive_key.get(existence)
-        if dv_inactive_key is not None:
-            i_inactive, left_side_values = dv_inactive_key
-            if np.all(vector[:len(left_side_values)] == left_side_values):
-                vector = np.array(vector)
-                vector[i_inactive] = X_INACTIVE_VALUE
+        vectors = np.array([vector])
+        self._set_inactive(vectors, existence)
+        vector = vectors[0, :]
 
         return vector, matrix[i_mat, :, :]
 
     @classmethod
     def base_repr_int(cls, value: int, base: int) -> List[int]:
         return [cls._str_lookup[char] for char in (np.binary_repr(value) if base == 2 else np.base_repr(value, base))]
+
+    def _do_generate_random_dv_mat(self, n: int, existence: NodeExistence, matrix: np.ndarray,
+                                   design_vars: List[DiscreteDV]) -> Optional[Tuple[np.ndarray, np.ndarray]]:
+        if n < matrix.shape[0]:
+            i_selected = np.random.choice(matrix.shape[0], n, replace=False)
+        else:
+            i_selected = np.arange(matrix.shape[0])
+
+        design_vectors = self._encode_design_vectors(i_selected, len(design_vars), existence)
+        matrices = matrix[i_selected, :, :]
+        return design_vectors, matrices
+
+    def _do_get_all_design_vectors(self, existence: NodeExistence, matrix: np.ndarray, design_vars: List[DiscreteDV]) \
+            -> np.ndarray:
+        design_vectors = self._encode_design_vectors(np.arange(matrix.shape[0]), len(design_vars), existence)
+        return design_vectors
+
+    def _encode_design_vectors(self, i_selected, n_dv: int, existence: NodeExistence) -> np.ndarray:
+        design_vectors = np.zeros((len(i_selected), n_dv), dtype=int)
+        for i_dv, i_sel in enumerate(i_selected):
+            base_repr = self.base_repr_int(i_sel, self.n_divide)
+            design_vectors[i_dv, -len(base_repr):] = base_repr
+
+        self._set_inactive(design_vectors, existence)
+        return design_vectors
+
+    def _set_inactive(self, design_vectors: np.ndarray, existence: NodeExistence):
+        dv_inactive_key = self._dv_inactive_key.get(existence)
+        if dv_inactive_key is not None:
+            i_inactive, left_side_values = dv_inactive_key
+            i_dv_inactive = np.all(design_vectors[:, :len(left_side_values)] == left_side_values, axis=1)
+            for ix in i_inactive:
+                design_vectors[i_dv_inactive, ix] = X_INACTIVE_VALUE
 
     def __repr__(self):
         return f'{self.__class__.__name__}({self._imputer!r})'

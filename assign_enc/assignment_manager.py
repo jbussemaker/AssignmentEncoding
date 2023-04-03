@@ -19,7 +19,7 @@ class AssignmentManagerBase:
     def _is_violated_matrix(matrix: np.ndarray) -> bool:
         """Whether the matrix represents output of the constraint violator imputer"""
         try:
-            return matrix[0, 0] == -1
+            return matrix[0, 0] == X_INACTIVE_VALUE
         except IndexError:
             return False
 
@@ -65,6 +65,10 @@ class AssignmentManagerBase:
     def get_conns(self, vector: DesignVector, existence: NodeExistence = None) \
             -> Tuple[DesignVector, IsActiveVector, Optional[List[Tuple[Node, Node]]]]:
         """Get node connections for a given design vector"""
+        raise NotImplementedError
+
+    def get_all_design_vectors(self) -> Dict[NodeExistence, np.ndarray]:
+        """Returns all possible valid design vectors, with inactive design variables having a value of -1"""
         raise NotImplementedError
 
 
@@ -137,6 +141,9 @@ class AssignmentManager(AssignmentManagerBase):
         edges = self._matrix_gen.get_conns(matrix)
         return imputed_vector, is_active, edges
 
+    def get_all_design_vectors(self) -> Dict[NodeExistence, np.ndarray]:
+        return self.encoder.padded_design_vectors
+
 
 class LazyAssignmentManager(AssignmentManagerBase):
 
@@ -195,3 +202,6 @@ class LazyAssignmentManager(AssignmentManagerBase):
         # Get connections from matrix
         edges = self._encoder.get_conns(matrix)
         return imputed_vector, is_active, edges
+
+    def get_all_design_vectors(self) -> Dict[NodeExistence, np.ndarray]:
+        return self._encoder.get_all_design_vectors()

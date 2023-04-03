@@ -104,6 +104,15 @@ def test_lazy_imputer_none_exist():
     assert np.all(dv == [-1, -1, -1, -1])
     assert np.all(matrix == 0)
 
+    all_x = enc.get_all_design_vectors()[NodeExistence()]
+    assert all_x.shape == (7, 4)
+    matrix_seen = set()
+    for x in all_x:
+        imp_x, matrix = enc.get_matrix(x)
+        matrix_seen.add(tuple(matrix.ravel()))
+        assert np.all(imp_x == x)
+    assert len(matrix_seen) == all_x.shape[0]
+
 
 def test_lazy_imputer_no_exist_correct():
     enc = DummyLazyEncoder(DummyImputer())

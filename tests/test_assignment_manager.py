@@ -56,3 +56,8 @@ def test_manager():
         assert np.all(is_act_corr == is_active)
 
     assert len(seen_dvs) < 100
+
+    all_x = manager.get_all_design_vectors()[NodeExistence()]
+    for x in all_x:
+        imp_x, _, _ = manager.get_matrix(x)
+        assert np.all(imp_x == x)

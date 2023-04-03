@@ -156,6 +156,8 @@ def test_encoder_impute():
     assert np.all(dv == enc._design_vectors[exist][1, :])
     assert np.all(mat == matrix[1, :, :])
 
+    assert np.all(enc.padded_design_vectors[exist] == enc._design_vectors[exist])
+
 
 def test_encoder_existence():
     exist1 = NodeExistence()
@@ -296,6 +298,11 @@ def test_encoder_zero_dvs():
     assert dv == [-1]
     assert np.all(mat == np.array([[1, 0], [0, 0]]))
 
+    padded_dvs = encoder.padded_design_vectors
+    assert len(padded_dvs) == 2
+    assert np.all(padded_dvs[NodeExistence()] == np.array([np.arange(2)]).T)
+    assert np.all(padded_dvs[exist.patterns[1]].shape == (0, 1))
+
 
 def test_one_to_one(gen_one_per_existence: AggregateAssignmentMatrixGenerator):
     encoder = DirectZeroEncoder(EagerImputer())
@@ -306,6 +313,7 @@ def test_one_to_one(gen_one_per_existence: AggregateAssignmentMatrixGenerator):
     assert encoder.get_imputation_ratio() == 1.2
     assert encoder.get_information_index() == 1
     assert encoder.get_distance_correlation() == 1.
+    assert encoder.padded_design_vectors is not None
 
     for i, existence in enumerate(gen_one_per_existence.existence_patterns.patterns):
         if i == 3 or i == 7:  # One of the sources exist but no target
@@ -332,3 +340,4 @@ def test_no_conn(gen_one_per_existence: AggregateAssignmentMatrixGenerator):
     assert np.isinf(encoder.get_imputation_ratio())
     assert encoder.get_information_index() == 1
     assert encoder.get_distance_correlation() == 1.
+    assert encoder.padded_design_vectors is not None

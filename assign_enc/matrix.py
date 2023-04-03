@@ -436,22 +436,30 @@ class AggregateAssignmentMatrixGenerator:
             return self._settings.get_excluded_indices()
 
     @property
-    def existence_patterns(self) -> Optional[NodeExistencePatterns]:
+    def existence_patterns(self) -> NodeExistencePatterns:
         if self._exist is None:
             self._exist = self._settings.existence or NodeExistencePatterns.always_exists()
         return self._exist
 
     @property
-    def max_conn_mat(self) -> np.ndarray:
+    def max_conn_mat(self) -> Dict[NodeExistence, np.ndarray]:
         if self._max_conn_mat is None:
-            self._max_conn_mat = self._settings.get_max_conn_matrix()
+            self._max_conn_mat = max_conn_mat_map = {}
+            for existence, (settings, src_map, tgt_map) in self._settings.get_effective_settings().items():
+                max_conn_mat_map[existence] = \
+                    self._settings.expand_effective_matrix(settings.get_max_conn_matrix(), src_map, tgt_map)
         return self._max_conn_mat
+
+    def get_max_conn_mat(self, existence: NodeExistence) -> np.ndarray:
+        if existence not in self.max_conn_mat:
+            return self.max_conn_mat[NodeExistence()]
+        return self.max_conn_mat[existence]
 
     def get_max_src_appear(self, existence: NodeExistence = None):
         if existence is None:
             existence = NodeExistence()
         if existence not in self._max_src_appear:
-            max_appear = np.sum(self.max_conn_mat, axis=1)
+            max_appear = np.sum(self.get_max_conn_mat(existence), axis=1)
             if existence.max_src_conn_override is not None:
                 max_appear[max_appear > existence.max_src_conn_override] = existence.max_src_conn_override
             self._max_src_appear[existence] = max_appear
@@ -461,7 +469,7 @@ class AggregateAssignmentMatrixGenerator:
         if existence is None:
             existence = NodeExistence()
         if existence not in self._max_tgt_appear:
-            max_appear = np.sum(self.max_conn_mat, axis=0)
+            max_appear = np.sum(self.get_max_conn_mat(existence), axis=0)
             if existence.max_tgt_conn_override is not None:
                 max_appear[max_appear > existence.max_tgt_conn_override] = existence.max_tgt_conn_override
             self._max_tgt_appear[existence] = max_appear
@@ -469,11 +477,11 @@ class AggregateAssignmentMatrixGenerator:
 
     def __iter__(self) -> Generator[Tuple[np.array, NodeExistence], None, None]:
         for n_src_conn, n_tgt_conn, existence in self.iter_n_sources_targets():
-            yield self._iter_matrices(n_src_conn, n_tgt_conn), existence  # Iterate over assignment matrices
+            yield self._iter_matrices(n_src_conn, n_tgt_conn, existence), existence  # Iterate over assignment matrices
 
     def iter_matrices(self, existence: NodeExistence = None):
         for n_src_conn, n_tgt_conn, exist in self.iter_n_sources_targets(existence=existence):
-            for matrix in self._iter_matrices(n_src_conn, n_tgt_conn):
+            for matrix in self._iter_matrices(n_src_conn, n_tgt_conn, existence=exist):
                 yield matrix, exist
 
     def get_agg_matrix(self, cache=False) -> MatrixMap:
@@ -750,8 +758,9 @@ class AggregateAssignmentMatrixGenerator:
         src_n_override, tgt_n_override = self._get_n_conn_override(existence=existence)
         max_src = self.get_max_src_appear(existence=existence)
         max_tgt = self.get_max_tgt_appear(existence=existence)
+        max_conn_mat = self.get_max_conn_mat(existence)
 
-        return _validate_matrix(matrix, self.max_conn_mat, src_node_settings,
+        return _validate_matrix(matrix, max_conn_mat, src_node_settings,
                                 tgt_node_settings, src_n_override, tgt_n_override, max_src, max_tgt)
 
     @staticmethod
@@ -780,16 +789,16 @@ class AggregateAssignmentMatrixGenerator:
             for n_src_conn, n_tgt_conn, existence in self.iter_n_sources_targets():
                 if existence not in count_by_existence:
                     count_by_existence[existence] = 0
-                count_by_existence[existence] += self.count_matrices(n_src_conn, n_tgt_conn)
+                count_by_existence[existence] += self.count_matrices(n_src_conn, n_tgt_conn, existence)
 
         if max_by_existence:
             return max(count_by_existence.values())
         return sum(count_by_existence.values())
 
-    def get_matrices_by_n_conn(self, n_src_conn, n_tgt_conn):
-        return self._iter_matrices(n_src_conn, n_tgt_conn)
+    def get_matrices_by_n_conn(self, n_src_conn, n_tgt_conn, existence: NodeExistence = None):
+        return self._iter_matrices(n_src_conn, n_tgt_conn, existence=existence)
 
-    def _iter_matrices(self, n_src_conn, n_tgt_conn):
+    def _iter_matrices(self, n_src_conn, n_tgt_conn, existence: NodeExistence = None):
         """
         Iterate over all permutations of the connections between the source and target objects, taking repetition and
         exclusion constraints into account.
@@ -803,37 +812,42 @@ class AggregateAssignmentMatrixGenerator:
         2. Ensure that in certain rows (sources) or columns (targets), all values are max 1 if no repetition is allowed
         3. Block certain connections from being made at all if we have excluded edges
         """
+        if existence is None:
+            existence = NodeExistence()
 
         # Check if we have any source connections
         if len(n_src_conn) == 0 or len(n_tgt_conn) == 0:
             return np.zeros((1, len(n_src_conn), len(n_tgt_conn)), dtype=int)
 
         # Generate matrices
-        return self._get_matrices_numpy(n_src_conn, n_tgt_conn)
-        # return self._get_matrices_numba(n_src_conn, n_tgt_conn)
+        return self._get_matrices_numpy(n_src_conn, n_tgt_conn, existence)
+        # return self._get_matrices_numba(n_src_conn, n_tgt_conn, existence)
 
-    def count_matrices(self, n_src_conn, n_tgt_conn) -> int:
+    def count_matrices(self, n_src_conn, n_tgt_conn, existence: NodeExistence = None) -> int:
         """Count the number of permutations as would be generated by _iter_matrices."""
+        if existence is None:
+            existence = NodeExistence()
 
         # Count special cases
-        n_mat = self._count_matrices_special(n_src_conn, n_tgt_conn)
+        n_mat = self._count_matrices_special(n_src_conn, n_tgt_conn, existence)
         if n_mat is not None:
             return n_mat
 
         # Count symmetric special cases
-        n_mat = self._count_matrices_special(n_tgt_conn, n_src_conn, is_switched=True)
+        n_mat = self._count_matrices_special(n_tgt_conn, n_src_conn, existence, is_switched=True)
         if n_mat is not None:
             return n_mat
 
-        return self._get_matrices_numpy(n_src_conn, n_tgt_conn, create_matrices=False)
-        # return len(self._get_matrices_numba(n_src_conn, n_tgt_conn, output_matrix=False))
+        return self._get_matrices_numpy(n_src_conn, n_tgt_conn, existence, create_matrices=False)
+        # return len(self._get_matrices_numba(n_src_conn, n_tgt_conn, existence, output_matrix=False))
 
-    def _get_matrices_numba(self, n_src_conn, n_tgt_conn, output_matrix=True):
+    def _get_matrices_numba(self, n_src_conn, n_tgt_conn, existence: NodeExistence, output_matrix=True):
         n_src_conn = np.array(n_src_conn, dtype=np.int64)
         n_tgt_conn = np.array(n_tgt_conn, dtype=np.int64)
+        max_conn_mat = self.get_max_conn_mat(existence)
         matrices = yield_matrices(
             len(n_src_conn), len(n_tgt_conn), np.array(n_src_conn, dtype=np.int64),
-            np.array(n_tgt_conn, dtype=np.int64), self.max_conn_mat)
+            np.array(n_tgt_conn, dtype=np.int64), max_conn_mat)
 
         if output_matrix:
             if len(matrices) == 0:
@@ -843,7 +857,8 @@ class AggregateAssignmentMatrixGenerator:
             return np.array(matrices)
         return matrices
 
-    def _count_matrices_special(self, n_src_conn, n_tgt_conn, is_switched=False) -> Optional[int]:
+    def _count_matrices_special(self, n_src_conn, n_tgt_conn, existence: NodeExistence, is_switched=False) \
+            -> Optional[int]:
         # No connections
         n_src_total = sum(n_src_conn)
         n_tgt_total = sum(n_tgt_conn)
@@ -859,7 +874,7 @@ class AggregateAssignmentMatrixGenerator:
             return n_mat
 
         # Get max conn
-        max_conn = self.max_conn_mat
+        max_conn = self.get_max_conn_mat(existence)
         if is_switched:
             max_conn = max_conn.T
 
@@ -871,9 +886,10 @@ class AggregateAssignmentMatrixGenerator:
                     return 0
                 return 1
 
-    def _get_matrices_numpy(self, n_src_conn, n_tgt_conn, create_matrices=True):
+    def _get_matrices_numpy(self, n_src_conn, n_tgt_conn, existence: NodeExistence, create_matrices=True):
+        max_conn_mat = self.get_max_conn_mat(existence)
         return _get_matrices(
-            tuple(n_src_conn), tuple(n_tgt_conn), tuple(self.max_conn_mat.ravel()), create_matrices=create_matrices)
+            tuple(n_src_conn), tuple(n_tgt_conn), tuple(max_conn_mat.ravel()), create_matrices=create_matrices)
 
     def _get_max_conn(self) -> int:
         """

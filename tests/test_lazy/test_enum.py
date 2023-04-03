@@ -22,9 +22,13 @@ def test_encoding():
     assert enc.get_imputation_ratio() == 1.
     assert enc.get_distance_correlation()
 
+    all_x = enc.get_all_design_vectors()[NodeExistence()]
+    assert all_x.shape[0] == matrix.shape[0]
+
     for i in range(matrix.shape[0]):
         dv, mat = enc.get_matrix([i])
         assert dv == [i]
+        assert np.all(dv == all_x[i, :])
         assert np.all(mat == matrix[i, :, :])
 
 
@@ -37,6 +41,7 @@ def test_one_to_one(gen_one_per_existence: AggregateAssignmentMatrixGenerator):
     assert encoder.get_imputation_ratio() == 1.2
     assert encoder.get_information_index() == 1
     assert encoder.get_distance_correlation() == 1
+    assert encoder.get_all_design_vectors() is not None
 
 
 def test_recursive_encoding():
@@ -48,6 +53,13 @@ def test_recursive_encoding():
             assert enc.n_divide == max(2, n_divide)
             enc.set_settings(settings)
             assert enc.matrix_gen.count_all_matrices() == n
+
+            all_x = enc.get_all_design_vectors()
+            assert NodeExistence() in all_x
+            assert all_x[NodeExistence()].shape[0] == n
+            for x in all_x[NodeExistence()]:
+                x_imp, _ = enc.get_matrix(x)
+                assert np.all(x_imp == x)
 
             if n <= 1:
                 assert len(enc.design_vars) == 0
@@ -81,3 +93,4 @@ def test_one_to_one_recursive(gen_one_per_existence: AggregateAssignmentMatrixGe
         assert encoder.get_imputation_ratio() == 1.2
         assert encoder.get_information_index() == 1
         assert encoder.get_distance_correlation() == 1
+        assert encoder.get_all_design_vectors() is not None

@@ -362,11 +362,25 @@ def test_max_conn_mat():
         [1, 1, 1],
     ]))
 
+    settings = MatrixGenSettings(
+        src=[Node(min_conn=0), Node(min_conn=0, repeated_allowed=False), Node([0, 1])],
+        tgt=[Node(min_conn=0), Node(min_conn=0, repeated_allowed=False), Node([0, 1])],
+        excluded=[(0, 1)], existence=NodeExistencePatterns(patterns=[
+            NodeExistence(),
+            NodeExistence(max_src_conn_override=3),
+        ]),
+    )
+    assert settings.get_max_conn_parallel() == 2
+    assert settings.get_effective_settings()[settings.existence.patterns[1]][0].get_max_conn_parallel() == 3
+    gen = AggregateAssignmentMatrixGenerator(settings)
+    assert np.max(gen.max_conn_mat[NodeExistence()]) == 2
+    assert np.max(gen.max_conn_mat[settings.existence.patterns[1]]) == 3
+
 
 def test_matrix_all_inf():
     gen = AggregateAssignmentMatrixGenerator.create(src=[Node(min_conn=0), Node(min_conn=0)],
                                                     tgt=[Node(min_conn=0), Node(min_conn=0)])
-    assert np.all(gen.max_conn_mat == np.array([
+    assert np.all(gen.max_conn_mat[NodeExistence()] == np.array([
         [2, 2],
         [2, 2],
     ]))
@@ -421,7 +435,7 @@ def test_matrix_all_inf_no_repeat_23():
     assert gen.settings.get_max_conn_parallel() == 2
     assert np.all(gen.get_max_src_appear() == [3, 3])
     assert np.all(gen.get_max_tgt_appear() == [2, 2, 2])
-    assert np.all(gen.max_conn_mat == np.array([
+    assert np.all(gen.max_conn_mat[NodeExistence()] == np.array([
         [1, 1, 1],
         [1, 1, 1],
     ]))
@@ -457,7 +471,7 @@ def test_matrix_all_inf_no_repeat_23():
     assert gen0.settings.get_max_conn_parallel() == 2
     assert np.all(gen0.get_max_src_appear() == [0, 3])
     assert np.all(gen0.get_max_tgt_appear() == [1, 1, 1])
-    assert np.all(gen0.max_conn_mat == np.array([
+    assert np.all(gen0.max_conn_mat[NodeExistence()] == np.array([
         [0, 0, 0],
         [1, 1, 1],
     ]))
@@ -671,7 +685,7 @@ def test_conditional_existence():
 
     gen = AggregateAssignmentMatrixGenerator.create(src, tgt, existence=existence_patterns)
     assert gen.settings.get_max_conn_parallel() == 2
-    assert np.all(gen.max_conn_mat == np.array([
+    assert np.all(gen.max_conn_mat[NodeExistence()] == np.array([
         [1, 1],
         [1, 1],
     ]))

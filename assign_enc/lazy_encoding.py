@@ -239,6 +239,43 @@ class LazyEncoder(Encoder):
         """Custom implementation for generating valid random design vectors (n x nx) and associated
         matrices (n x n_src x n_tgt). Used for speeding up distance correlation calculations."""
 
+    def get_all_design_vectors(self) -> Dict[NodeExistence, np.ndarray]:
+        dv_map = self._get_all_design_vectors(self.existence_patterns.patterns)
+        if dv_map is not None:
+            return self._pad_dv_map(dv_map, len(self.design_vars))
+
+        # By brute force
+        dv_map = {}
+        for existence in self.existence_patterns.patterns:
+            des_vars = self._existence_design_vars.get(existence, self.design_vars)
+
+            seen_dvs = set()
+            design_vectors = []
+            for dv in itertools.product(*[list(range(dv.n_opts)) for dv in des_vars]):
+                if dv in seen_dvs:
+                    continue
+
+                dv, matrix = self.get_matrix(list(dv), existence=existence)
+                if tuple(dv) in seen_dvs:
+                    continue
+                try:
+                    if matrix[0, 0] == X_INACTIVE_VALUE:
+                        continue
+                except IndexError:
+                    continue
+                design_vectors.append(dv)
+                seen_dvs.add(tuple(dv))
+
+            if len(design_vectors) == 0:
+                dv_map[existence] = np.zeros((0, len(des_vars)), dtype=int)
+            else:
+                dv_map[existence] = np.array(design_vectors)
+
+        return self._pad_dv_map(dv_map, len(self.design_vars))
+
+    def _get_all_design_vectors(self, patterns: List[NodeExistence]) -> Optional[Dict[NodeExistence, np.ndarray]]:
+        """Implement if it is possible to generate all possible design vectors"""
+
     def get_imputation_ratio(self, per_existence=False, use_real_matrix=True) -> float:
         if use_real_matrix:
             n_design_points = self.get_n_design_points()
@@ -430,10 +467,36 @@ class QuasiLazyEncoder(LazyEncoder):
     def _decode(self, vector: DesignVector, existence: NodeExistence) -> Optional[Tuple[DesignVector, np.ndarray]]:
         matrix = self._get_matrix(existence)
         if matrix is None or matrix.shape[0] == 0:
-            null_matrix = np.zeros((len(self._matrix_gen.src), len(self._matrix_gen.tgt)), dtype=int)
+            null_matrix = np.zeros((self.n_src, self.n_tgt), dtype=int)
             return vector, null_matrix
 
         return self._decode_matrix(vector, matrix, existence)
+
+    def _generate_random_dv_mat(self, n: int, existence: NodeExistence) -> Optional[Tuple[np.ndarray, np.ndarray]]:
+        design_vars = self._existence_design_vars.get(existence, self.design_vars)
+        matrix = self._get_matrix(existence)
+        if matrix is None or matrix.shape[0] == 0:
+            null_dvs = np.zeros((0, len(design_vars)), dtype=int)
+            null_matrices = np.zeros((0, self.n_src, self.n_tgt), dtype=int)
+            return null_dvs, null_matrices
+
+        return self._do_generate_random_dv_mat(n, existence, matrix, design_vars)
+
+    def _get_all_design_vectors(self, patterns: List[NodeExistence]) -> Optional[Dict[NodeExistence, np.ndarray]]:
+        dv_map = {}
+        for existence in patterns:
+            design_vars = self._existence_design_vars.get(existence, self.design_vars)
+            matrix = self._get_matrix(existence)
+            if matrix is None or matrix.shape[0] == 0:
+                null_dvs = np.zeros((0, len(design_vars)), dtype=int)
+                dv_map[existence] = null_dvs
+                continue
+
+            design_vectors = self._do_get_all_design_vectors(existence, matrix, design_vars)
+            if design_vectors is None:
+                return
+            dv_map[existence] = design_vectors
+        return dv_map
 
     def _encode_matrix(self, matrix: np.ndarray, existence: NodeExistence) -> List[DiscreteDV]:
         raise NotImplementedError
@@ -441,6 +504,14 @@ class QuasiLazyEncoder(LazyEncoder):
     def _decode_matrix(self, vector: DesignVector, matrix: np.ndarray, existence: NodeExistence) \
             -> Optional[Tuple[DesignVector, np.ndarray]]:
         raise NotImplementedError
+
+    def _do_generate_random_dv_mat(self, n: int, existence: NodeExistence, matrix: np.ndarray,
+                                   design_vars: List[DiscreteDV]) -> Optional[Tuple[np.ndarray, np.ndarray]]:
+        pass
+
+    def _do_get_all_design_vectors(self, existence: NodeExistence, matrix: np.ndarray, design_vars: List[DiscreteDV]) \
+            -> Optional[np.ndarray]:
+        pass
 
     def __repr__(self):
         raise NotImplementedError

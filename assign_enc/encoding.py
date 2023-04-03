@@ -256,6 +256,20 @@ class Encoder:
         corr = pearsonr(dist1, dist2).statistic
         return 1. if np.isnan(corr) else corr
 
+    @staticmethod
+    def _pad_dv_map(dv_map: Dict[NodeExistence, np.ndarray], n_dv: int) -> Dict[NodeExistence, np.ndarray]:
+        padded_dv_map = {}
+        for existence, design_vectors in dv_map.items():
+            n_extra = n_dv-design_vectors.shape[1]
+            if n_extra > 0:
+                if design_vectors.shape[0] == 0:
+                    design_vectors = np.zeros((0, n_dv), dtype=int)
+                else:
+                    design_vectors = np.column_stack([
+                        design_vectors, np.ones((design_vectors.shape[0], n_extra), dtype=int)*X_INACTIVE_VALUE])
+            padded_dv_map[existence] = design_vectors
+        return padded_dv_map
+
     def get_imputation_ratio(self, per_existence=False) -> float:
         """Ratio of the total design space size to the actual amount of possible connections"""
         raise NotImplementedError
@@ -307,6 +321,10 @@ class EagerEncoder(Encoder):
 
         self._design_vars = self.get_design_variables(des_vectors)
         self._imputer.initialize(matrix, self._design_vectors, self._design_vectors_zeros, self._design_vars)
+
+    @property
+    def padded_design_vectors(self) -> Dict[NodeExistence, np.ndarray]:
+        return self._pad_dv_map(self._design_vectors, len(self.design_vars))
 
     def set_imputer(self, imputer: EagerImputer):
         self._imputer = imputer
