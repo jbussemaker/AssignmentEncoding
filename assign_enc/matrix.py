@@ -414,6 +414,11 @@ class AggregateAssignmentMatrixGenerator:
         self._node_settings = None
         self._n_conn_override_map = {}
 
+    def __setstate__(self, state):
+        if '_max_conn_mat' in state and isinstance(state['_max_conn_mat'], np.ndarray):
+            state['_max_conn_mat'] = None
+        self.__dict__.update(**state)
+
     @classmethod
     def create(cls, src: List[Node], tgt: List[Node], **kwargs):
         return cls(MatrixGenSettings(src, tgt, **kwargs))
