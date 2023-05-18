@@ -51,6 +51,8 @@ def test_encoder():
     assert enc._design_vectors[exist].shape == (10, 1)
     assert len(enc.design_vars) == 1
     assert enc.design_vars[0].n_opts == 10
+    assert not enc.design_vars[0].conditionally_active
+    check_conditionally_active(enc)
 
     assert enc.get_n_design_points() == 10
     assert enc.get_imputation_ratio() == 1.
@@ -105,6 +107,18 @@ def test_encoder():
     assert np.all(mat == 0)
 
 
+def check_conditionally_active(encoder: EagerEncoder):
+    if len(encoder.design_vars) == 0:
+        return
+
+    any_inactive = np.zeros((len(encoder.design_vars),), dtype=bool)
+    for _, des_vectors in encoder.padded_design_vectors.items():
+        any_inactive_existence = np.any(des_vectors == X_INACTIVE_VALUE, axis=0)
+        any_inactive[:len(any_inactive_existence)] |= any_inactive_existence
+
+    assert np.all(any_inactive == [dv.conditionally_active for dv in encoder.design_vars])
+
+
 def test_information_index():
     assert Encoder.calc_information_index([]) == 1
     assert Encoder.calc_information_index([3]) == 0
@@ -137,6 +151,8 @@ def test_encoder_impute():
     assert len(enc.design_vars) == 2
     assert enc.design_vars[0].n_opts == 6
     assert enc.design_vars[1].n_opts == 2
+    assert not enc.design_vars[0].conditionally_active
+    assert not enc.design_vars[1].conditionally_active
     exist = NodeExistence()
     assert enc.matrix[exist] is matrix
     assert enc.n_mat_max == 11
@@ -173,6 +189,8 @@ def test_encoder_existence():
     assert len(enc.design_vars) == 2
     assert enc.design_vars[0].n_opts == 5
     assert enc.design_vars[1].n_opts == 2
+    assert not enc.design_vars[0].conditionally_active
+    assert enc.design_vars[1].conditionally_active
 
     assert enc._design_vectors[exist1].shape[1] == 2
     assert enc._design_vectors[exist2].shape[1] == 1
@@ -290,6 +308,7 @@ def test_encoder_zero_dvs():
 
     assert len(encoder.design_vars) == 1
     assert encoder.design_vars[0].n_opts == 2
+    assert not encoder.design_vars[0].conditionally_active
 
     dv, mat = encoder.get_matrix([0], existence=exist.patterns[0])
     assert dv == [0]

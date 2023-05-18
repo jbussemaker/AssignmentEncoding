@@ -3,6 +3,7 @@ import numpy as np
 from assign_enc.matrix import *
 from assign_enc.eager.imputation.first import *
 from assign_enc.eager.encodings.direct_matrix import *
+from tests.test_encoder import check_conditionally_active
 
 
 def test_encoding():
@@ -40,6 +41,7 @@ def test_encoding():
                 assert np.all(mat == matrix[0, :, :])
 
         n_unique = [len(np.unique(enc_dvs[:, i_dv])) for i_dv in range(enc_dvs.shape[1])]
+        check_conditionally_active(enc)
 
         enc_remove_gaps = DirectMatrixEncoder(FirstImputer())
         enc_remove_gaps.matrix = matrix
@@ -48,6 +50,8 @@ def test_encoding():
                        for i_dv in range(enc_dvs.shape[1])]
         assert np.all(n_unique_rg == n_unique)
         assert all([dv.n_opts == n_unique_rg[i] for i, dv in enumerate(enc_remove_gaps.design_vars)])
+        check_conditionally_active(enc_remove_gaps)
+
     assert n_checked > 0
 
 
@@ -68,6 +72,8 @@ def test_encoder_by_nodes():
     assert len(encoder.design_vars) == 4
     assert encoder.get_n_design_points() == 3**4
     assert encoder.get_imputation_ratio() == 1
+
+    check_conditionally_active(encoder)
 
 
 def test_encoder_excluded():
@@ -101,6 +107,8 @@ def test_encoder_excluded():
     _, mat = encoder.get_matrix([0, 2, 1])
     assert np.all(mat == np.array([[0, 2], [0, 1]]))
 
+    check_conditionally_active(encoder)
+
 
 def test_one_to_one(gen_one_per_existence: AggregateAssignmentMatrixGenerator):
     encoder = DirectMatrixEncoder(FirstImputer())
@@ -116,6 +124,8 @@ def test_one_to_one(gen_one_per_existence: AggregateAssignmentMatrixGenerator):
         dv, mat = encoder.get_matrix([], existence=existence)
         assert dv == []
         assert mat.shape[0] == (len(gen_one_per_existence.src) if i not in [3, 7] else 0)
+
+    check_conditionally_active(encoder)
 
 
 def test_different_sizes_bounds():
@@ -140,3 +150,5 @@ def test_different_sizes_bounds():
             dv_seen.add(tuple(dv_imp))
             matrix_seen.add(tuple(matrix.ravel()))
         assert len(dv_seen) == len(matrix_seen)
+
+    check_conditionally_active(encoder)

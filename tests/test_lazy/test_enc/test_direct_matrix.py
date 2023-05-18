@@ -5,6 +5,7 @@ from assign_enc.lazy.imputation.delta import *
 from assign_enc.lazy.imputation.first import *
 from assign_enc.lazy.encodings.direct_matrix import *
 from assign_enc.lazy.imputation.constraint_violation import *
+from tests.test_lazy_encoding import check_lazy_conditionally_active
 
 
 def test_encoding():
@@ -35,6 +36,8 @@ def test_encoding():
     assert encoder.get_imputation_ratio() == 36/21
     assert encoder.get_distance_correlation()
 
+    check_lazy_conditionally_active(encoder)
+
 
 def test_encoder_excluded():
     encoder = LazyDirectMatrixEncoder(LazyConstraintViolationImputer())
@@ -51,6 +54,8 @@ def test_encoder_excluded():
 
     _, mat = encoder.get_matrix([0, 2, 1])
     assert np.all(mat == np.array([[0, 2], [0, 1]]))
+
+    check_lazy_conditionally_active(encoder)
 
 
 def test_encoder_no_repeat():
@@ -73,6 +78,8 @@ def test_encoder_no_repeat():
 
     _, mat = encoder.get_matrix([0, 2, 0, 1])
     assert np.all(mat == np.array([[0, 2], [0, 1]]))
+
+    check_lazy_conditionally_active(encoder)
 
 
 def test_encoder_existence():
@@ -112,6 +119,8 @@ def test_encoder_existence():
     assert np.all(dv == [1, 0, -1, -1])
     assert np.all(mat == np.array([[1, 0], [0, 0]]))
 
+    check_lazy_conditionally_active(encoder)
+
 
 def test_large_matrix():
     encoder = LazyDirectMatrixEncoder(LazyDeltaImputer())
@@ -135,6 +144,8 @@ def test_one_to_one(gen_one_per_existence: AggregateAssignmentMatrixGenerator):
     assert encoder.get_information_index() == 1
     assert encoder.get_distance_correlation() == 1
 
+    check_lazy_conditionally_active(encoder)
+
     for i, existence in enumerate(gen_one_per_existence.existence_patterns.patterns):
         dv, mat = encoder.get_matrix([1], existence=existence)
         assert mat.shape[0] == (len(gen_one_per_existence.src) if i not in [3, 7] else 0)
@@ -147,6 +158,8 @@ def test_one_to_one_first(gen_one_per_existence: AggregateAssignmentMatrixGenera
     assert len(encoder.design_vars) == 1
     assert encoder.design_vars[0].n_opts == 2
 
+    check_lazy_conditionally_active(encoder)
+
     for i, existence in enumerate(gen_one_per_existence.existence_patterns.patterns):
         dv, mat = encoder.get_matrix([1], existence=existence)
         assert mat.shape[0] == (len(gen_one_per_existence.src) if i not in [3, 7] else 0)
@@ -158,6 +171,8 @@ def test_one_to_one_cv(gen_one_per_existence: AggregateAssignmentMatrixGenerator
     encoder.set_settings(g.settings)
     assert len(encoder.design_vars) == 1
     assert encoder.design_vars[0].n_opts == 2
+
+    check_lazy_conditionally_active(encoder)
 
     for i, existence in enumerate(gen_one_per_existence.existence_patterns.patterns):
         dv, mat = encoder.get_matrix([1], existence=existence)
@@ -184,3 +199,5 @@ def test_different_sizes_bounds():
             dv_seen.add(tuple(dv_imp))
             matrix_seen.add(tuple(matrix.ravel()))
         assert len(dv_seen) == len(matrix_seen)
+
+    check_lazy_conditionally_active(encoder)

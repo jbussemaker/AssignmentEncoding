@@ -163,7 +163,7 @@ class FlatLazyAmountEncoder(LazyAmountEncoder):
     def encode(self, n_src, n_tgt, n_src_n_tgt: NList, existence: NodeExistence, n_declared_start=None) \
             -> List[DiscreteDV]:
         self._n_src_n_tgt[existence] = n_src_n_tgt
-        return [DiscreteDV(n_opts=len(n_src_n_tgt))]
+        return [DiscreteDV(n_opts=len(n_src_n_tgt), conditionally_active=False)]
 
     def decode(self, vector: DesignVector, existence: NodeExistence) \
             -> Optional[Tuple[DesignVector, Tuple[int, ...], Tuple[int, ...]]]:
@@ -203,7 +203,10 @@ class GroupedLazyAmountEncoder(LazyAmountEncoder):
         dv_group_values = self._get_dv_group_values(n_src, n_tgt, n_src_tgt_arr)
         dv_values = LazyAmountFirstEncoder.group_by_values(dv_group_values, n_declared_start=n_declared_start)
         self._dv_val_map[existence] = (ConnCombsEncoder.get_dv_map_for_lookup(dv_values), n_src_n_tgt)
-        return [DiscreteDV(n_opts=n) for n in np.max(dv_values, axis=0)+1]
+
+        cond_active = np.any(dv_values == X_INACTIVE_VALUE, axis=0)
+        return [DiscreteDV(n_opts=n, conditionally_active=cond_active[i])
+                for i, n in enumerate(np.max(dv_values, axis=0)+1)]
 
     def decode(self, vector: DesignVector, existence: NodeExistence) \
             -> Optional[Tuple[DesignVector, Tuple[int, ...], Tuple[int, ...]]]:
@@ -278,7 +281,7 @@ class FlatLazyConnectionEncoder(LazyConnectionEncoder):
             n_matrix_max = max([matrix.shape[0] for matrix in n_matrix_map.values()])
 
         self._n_exist_max[existence] = n_matrix_max
-        return [DiscreteDV(n_opts=n_matrix_max)] if n_matrix_max > 1 else []
+        return [DiscreteDV(n_opts=n_matrix_max, conditionally_active=False)] if n_matrix_max > 1 else []
 
     def decode(self, n_src_conn, n_tgt_conn, matrices: np.ndarray, vector: DesignVector, encoder: QuasiLazyEncoder,
                existence: NodeExistence) -> Optional[Tuple[DesignVector, np.ndarray]]:

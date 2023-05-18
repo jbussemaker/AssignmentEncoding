@@ -4,6 +4,7 @@ import numpy as np
 from assign_enc.encoding import *
 from assign_enc.eager.imputation.first import *
 from assign_enc.eager.encodings.grouped_base import *
+from tests.test_encoder import check_conditionally_active
 
 
 class ProductEncoder(GroupedEncoder):
@@ -28,6 +29,8 @@ def test_half_grouped_encoder():
     assert len(encoder.design_vars) == 4
     assert all([dv.n_opts == 2 for dv in encoder.design_vars])
     assert encoder.get_imputation_ratio() == (2**4)/11
+
+    check_conditionally_active(encoder)
 
 
 def test_early_detect_high_imp_ratio():

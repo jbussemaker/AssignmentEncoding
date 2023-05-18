@@ -12,7 +12,7 @@ class EnumOrdinalEncoder(QuasiLazyEncoder):
         n_mat = matrix.shape[0]
         if n_mat <= 1:
             return []
-        return [DiscreteDV(n_opts=n_mat)]
+        return [DiscreteDV(n_opts=n_mat, conditionally_active=False)]
 
     def _decode_matrix(self, vector: DesignVector, matrix: np.ndarray, existence: NodeExistence) \
             -> Optional[Tuple[DesignVector, np.ndarray]]:

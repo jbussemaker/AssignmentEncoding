@@ -72,7 +72,7 @@ class CombiningPatternEncoder(PatternEncoderBase):
         # One design variable with n_tgt options
         if n_opts < 2:
             return []
-        return [DiscreteDV(n_opts=n_opts)]
+        return [DiscreteDV(n_opts=n_opts, conditionally_active=False)]
 
     def _decode_effective(self, vector: DesignVector, effective_settings: MatrixGenSettings, existence: NodeExistence) \
             -> Tuple[DesignVector, np.ndarray]:
@@ -217,7 +217,8 @@ class AssigningPatternEncoder(PatternEncoderBase):
 
     def _encode_effective(self, effective_settings: MatrixGenSettings, existence: NodeExistence) -> List[DiscreteDV]:
         n_max = self._n_max
-        return [DiscreteDV(n_opts=n_max+1) for _ in range(len(effective_settings.src)*len(effective_settings.tgt))]
+        return [DiscreteDV(n_opts=n_max+1, conditionally_active=False)
+                for _ in range(len(effective_settings.src)*len(effective_settings.tgt))]
 
     def _decode_effective(self, vector: DesignVector, effective_settings: MatrixGenSettings, existence: NodeExistence) \
             -> Tuple[DesignVector, np.ndarray]:
@@ -341,7 +342,7 @@ class PartitioningPatternEncoder(PatternEncoderBase):
         if effective_settings.tgt[0].conns == [0, 1]:
             n_opts += 1
 
-        return [DiscreteDV(n_opts=n_opts) for _ in range(n_tgt)]
+        return [DiscreteDV(n_opts=n_opts, conditionally_active=False) for _ in range(n_tgt)]
 
     def _decode_effective(self, vector: DesignVector, effective_settings: MatrixGenSettings, existence: NodeExistence) \
             -> Tuple[DesignVector, np.ndarray]:
@@ -516,7 +517,7 @@ class ConnectingPatternEncoder(PatternEncoderBase):
         return False
 
     def _encode_effective(self, effective_settings: MatrixGenSettings, existence: NodeExistence) -> List[DiscreteDV]:
-        return [DiscreteDV(n_opts=2) for _ in range(self._get_n_dv(effective_settings))]
+        return [DiscreteDV(n_opts=2, conditionally_active=False) for _ in range(self._get_n_dv(effective_settings))]
 
     def _get_n_dv(self, effective_settings: MatrixGenSettings) -> int:
         # Number of design variables if n*n minus n diagonal connections --> n*(n-1)
@@ -603,7 +604,7 @@ class PermutingPatternEncoder(PatternEncoderBase):
 
     def _encode_effective(self, effective_settings: MatrixGenSettings, existence: NodeExistence) -> List[DiscreteDV]:
         n = len(effective_settings.src)
-        return [DiscreteDV(n_opts=n-i) for i in range(n-1)]
+        return [DiscreteDV(n_opts=n-i, conditionally_active=False) for i in range(n-1)]
 
     def _decode_effective(self, vector: DesignVector, effective_settings: MatrixGenSettings, existence: NodeExistence) \
             -> Tuple[DesignVector, np.ndarray]:
@@ -701,7 +702,7 @@ class UnorderedCombiningPatternEncoder(PatternEncoderBase):
         n_take = effective_settings.src[0].conns[0]
         n_tgt = len(effective_settings.tgt)
         n_dv = self._get_n_dv(n_take, n_tgt)
-        return [DiscreteDV(n_opts=2) for _ in range(n_dv)]
+        return [DiscreteDV(n_opts=2, conditionally_active=False) for _ in range(n_dv)]
 
     def _get_n_dv(self, n_take, n_tgt) -> int:
         n_dv = n_tgt-1

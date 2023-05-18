@@ -3,6 +3,7 @@ from assign_enc.matrix import *
 from assign_enc.lazy.imputation.delta import *
 from assign_enc.lazy.encodings.group_amount import *
 from assign_enc.lazy.imputation.constraint_violation import *
+from tests.test_lazy_encoding import check_lazy_conditionally_active
 
 
 def test_flat_amount_encoder():
@@ -46,6 +47,8 @@ def test_flat_connection_encoder():
     assert encoder.get_imputation_ratio() == 34/21
     assert encoder.get_distance_correlation()
 
+    check_lazy_conditionally_active(encoder)
+
 
 def test_flat_connection_encoder_multi_max():
     encoder = LazyAmountFirstEncoder(LazyConstraintViolationImputer(), FlatLazyAmountEncoder(), FlatLazyConnectionEncoder())
@@ -60,6 +63,8 @@ def test_flat_connection_encoder_multi_max():
     assert len(encoder.design_vars) == 2
     assert encoder.design_vars[0].n_opts == 4
     assert encoder.design_vars[1].n_opts == 3
+
+    check_lazy_conditionally_active(encoder)
 
 
 def test_total_amount_encoder():
@@ -88,6 +93,8 @@ def test_total_amount_encoder():
 
     dv, matrix = encoder.get_matrix([3, 2, 0])
     assert np.all(matrix == np.array([[1, 1], [0, 2]]))
+
+    check_lazy_conditionally_active(encoder)
 
 
 def test_source_amount_encoder():
@@ -126,6 +133,8 @@ def test_source_amount_encoder():
     assert np.all(dv == [1, -1, -1, -1])
     assert np.all(matrix == np.array([[1, 0], [0, 0]]))
 
+    check_lazy_conditionally_active(encoder)
+
 
 def test_source_target_amount_encoder():
     dvs = SourceTargetLazyAmountEncoder().encode(
@@ -144,6 +153,8 @@ def test_source_target_amount_encoder():
     assert encoder.design_vars[0].n_opts == 3
     assert encoder.design_vars[1].n_opts == 4
     assert encoder.design_vars[2].n_opts == 2
+
+    check_lazy_conditionally_active(encoder)
 
 
 def test_filter_dvs():
@@ -165,6 +176,8 @@ def test_filter_dvs():
     assert np.all(dv == [1])
     assert np.all(matrix == np.array([[0, 1], [1, 0]]))
 
+    check_lazy_conditionally_active(encoder)
+
 
 def test_covering_partitioning():
     encoder = LazyAmountFirstEncoder(LazyDeltaImputer(), FlatLazyAmountEncoder(), FlatLazyConnectionEncoder())
@@ -180,6 +193,8 @@ def test_covering_partitioning():
     assert len(n_tgt_n_src) == 48
     assert encoder.matrix_gen.count_all_matrices() == 81
     assert encoder.get_n_design_points() >= 81
+
+    check_lazy_conditionally_active(encoder)
 
 
 def test_one_to_one(gen_one_per_existence: AggregateAssignmentMatrixGenerator):
@@ -197,3 +212,5 @@ def test_one_to_one(gen_one_per_existence: AggregateAssignmentMatrixGenerator):
         dv, mat = encoder.get_matrix([], existence=existence)
         assert dv == []
         assert mat.shape[0] == (len(gen_one_per_existence.src) if i not in [3, 7] else 0)
+
+    check_lazy_conditionally_active(encoder)

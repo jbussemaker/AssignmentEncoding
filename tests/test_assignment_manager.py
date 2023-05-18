@@ -61,3 +61,6 @@ def test_manager():
     for x in all_x:
         imp_x, _, _ = manager.get_matrix(x)
         assert np.all(imp_x == x)
+
+    is_cond_all = np.any(all_x == X_INACTIVE_VALUE, axis=0)
+    assert np.all(is_cond_all == [dv.conditionally_active for dv in manager.design_vars])

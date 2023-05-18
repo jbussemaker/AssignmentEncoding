@@ -3,6 +3,7 @@ from assign_enc.matrix import *
 from assign_enc.enumerating.ordinal import *
 from assign_enc.enumerating.recursive import *
 from assign_enc.lazy.imputation.first import *
+from tests.test_lazy_encoding import check_lazy_conditionally_active
 
 
 def test_encoding():
@@ -31,6 +32,8 @@ def test_encoding():
         assert np.all(dv == all_x[i, :])
         assert np.all(mat == matrix[i, :, :])
 
+    check_lazy_conditionally_active(enc)
+
 
 def test_one_to_one(gen_one_per_existence: AggregateAssignmentMatrixGenerator):
     encoder = EnumOrdinalEncoder(LazyFirstImputer())
@@ -43,6 +46,8 @@ def test_one_to_one(gen_one_per_existence: AggregateAssignmentMatrixGenerator):
     assert encoder.get_distance_correlation() == 1
     assert encoder.get_all_design_vectors() is not None
 
+    check_lazy_conditionally_active(encoder)
+
 
 def test_recursive_encoding():
     for n_divide in range(15):
@@ -53,6 +58,7 @@ def test_recursive_encoding():
             assert enc.n_divide == max(2, n_divide)
             enc.set_settings(settings)
             assert enc.matrix_gen.count_all_matrices() == n
+            check_lazy_conditionally_active(enc)
 
             all_x = enc.get_all_design_vectors()
             assert NodeExistence() in all_x
@@ -94,3 +100,5 @@ def test_one_to_one_recursive(gen_one_per_existence: AggregateAssignmentMatrixGe
         assert encoder.get_information_index() == 1
         assert encoder.get_distance_correlation() == 1
         assert encoder.get_all_design_vectors() is not None
+
+        check_lazy_conditionally_active(encoder)

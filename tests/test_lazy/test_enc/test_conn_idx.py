@@ -3,6 +3,7 @@ from assign_enc.matrix import *
 from assign_enc.lazy.imputation.closest import *
 from assign_enc.lazy.encodings.conn_idx import *
 from assign_enc.lazy.imputation.constraint_violation import *
+from tests.test_lazy_encoding import check_lazy_conditionally_active
 
 
 def test_encoding():
@@ -25,6 +26,7 @@ def test_encoding():
     assert mat[0, 0] == -1
 
     assert encoder.get_distance_correlation()
+    check_lazy_conditionally_active(encoder)
 
 
 def test_encoding_transpose():
@@ -48,6 +50,8 @@ def test_encoding_transpose():
     assert np.all(dv == [2, 2])
     assert mat[0, 0] == -1
 
+    check_lazy_conditionally_active(encoder)
+
 
 def test_encoding_amount_first():
     encoder = LazyConnIdxMatrixEncoder(LazyConstraintViolationImputer(), FlatConnCombsEncoder(), amount_first=True)
@@ -68,6 +72,8 @@ def test_encoding_amount_first():
     assert np.all(dv == [1, -1, 1, -1])
     assert np.all(mat == np.array([[1, 0], [0, 1], [0, 1]]))
 
+    check_lazy_conditionally_active(encoder)
+
 
 def test_encoding_grouped():
     encoder = LazyConnIdxMatrixEncoder(LazyConstraintViolationImputer(), GroupedConnCombsEncoder())
@@ -87,6 +93,8 @@ def test_encoding_grouped():
     dv, mat = encoder.get_matrix([0, 0, 0, 0], existence=encoder.existence_patterns.patterns[0])
     assert np.all(dv == [0, 0, 0, 0])
     assert mat[0, 0] == -1
+
+    check_lazy_conditionally_active(encoder)
 
 
 def test_encoding_conn_idx():
@@ -111,6 +119,8 @@ def test_encoding_conn_idx():
         assert np.all(dv == [0, -1, 0, -1])
         assert mat[0, 0] == -1
 
+        check_lazy_conditionally_active(encoder)
+
 
 def test_one_to_one(gen_one_per_existence: AggregateAssignmentMatrixGenerator):
     for binary in [False, True]:
@@ -128,3 +138,5 @@ def test_one_to_one(gen_one_per_existence: AggregateAssignmentMatrixGenerator):
             dv, mat = encoder.get_matrix([], existence=existence)
             assert dv == []
             assert mat.shape[0] == (len(gen_one_per_existence.src) if i not in [3, 7] else 0)
+
+        check_lazy_conditionally_active(encoder)

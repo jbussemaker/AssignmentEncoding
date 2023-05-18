@@ -3,6 +3,7 @@ import itertools
 import numpy as np
 from typing import *
 from assign_enc.matrix import *
+from assign_enc.encoding import *
 from assign_enc.patterns.encoder import *
 from assign_enc.patterns.patterns import *
 from assign_enc.lazy.imputation.first import *
@@ -109,6 +110,7 @@ def _do_test_encoders(encoder_cls: Type[PatternEncoderBase], settings_map, match
             matrix_gen = AggregateAssignmentMatrixGenerator(settings)
             agg_matrix_map = matrix_gen.get_agg_matrix(cache=False)
             all_x_map = encoder.get_all_design_vectors()
+            any_inactive = np.zeros((len(encoder.design_vars),), dtype=bool)
             for existence in matrix_gen.iter_existence():
                 agg_matrix = agg_matrix_map[existence]
                 agg_matrix_set = {tuple(flat_matrix) for flat_matrix in
@@ -144,11 +146,15 @@ def _do_test_encoders(encoder_cls: Type[PatternEncoderBase], settings_map, match
                         assert np.all(imp_dv == dv)
                         assert np.all(matrix == mat[i, :, :])
 
+                    any_inactive_existence = np.any(all_x == X_INACTIVE_VALUE, axis=0)
+                    any_inactive[:len(any_inactive_existence)] |= any_inactive_existence
+
                 except:
                     print(repr(encoder), key, existence, include_empty)
                     raise
 
             assert encoder.get_distance_correlation() is not None
+            assert np.all(any_inactive == [dv.conditionally_active for dv in encoder.design_vars])
 
     return encoders
 

@@ -32,7 +32,10 @@ class ConnCombsEncoder:
         dv_values = GroupedEncoder.group_by_values(
             dv_grouping_values, ordinal_base=2 if self.binary else None, n_declared_start=n_declared_other_dvs)
         self._registry[key] = (self.get_dv_map_for_lookup(dv_values), matrix)
-        return [DiscreteDV(n_opts=n+1) for n in np.max(dv_values, axis=0)]
+
+        cond_active = np.any(dv_values == X_INACTIVE_VALUE, axis=0)
+        return [DiscreteDV(n_opts=n+1, conditionally_active=cond_active[i])
+                for i, n in enumerate(np.max(dv_values, axis=0))]
 
     @staticmethod
     def get_dv_map_for_lookup(dv_values):
@@ -186,7 +189,7 @@ class LazyConnIdxMatrixEncoder(LazyEncoder):
             dvs = []
             if self._amount_first:
                 if len(matrix_combs_by_n) > 1:
-                    dvs.append(DiscreteDV(n_opts=len(matrix_combs_by_n)))
+                    dvs.append(DiscreteDV(n_opts=len(matrix_combs_by_n), conditionally_active=True))
 
                 n_declared_dvs = self.calc_n_declared_design_points(dvs)
                 conn_dvs = []

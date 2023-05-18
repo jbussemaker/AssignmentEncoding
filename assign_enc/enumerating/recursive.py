@@ -34,14 +34,15 @@ class EnumRecursiveEncoder(QuasiLazyEncoder):
         dv_last = np.array(self.base_repr_int(n_mat-1, n))
         i_inactive = np.where(dv_last == 0)[0]
         if len(i_inactive) > 0:
-            left_side_values = dv_last[:i_inactive[-1]+1]
+            left_side_values = dv_last[:i_inactive[-1]+1].copy()
             self._dv_inactive_key[existence] = (i_inactive, left_side_values)
             dv_last[i_inactive] = X_INACTIVE_VALUE
         self._dv_last[existence] = dv_last
 
         n_opts = np.ones((n_var,), dtype=int)*n
         n_opts[0] = dv_last[0]+1
-        return [DiscreteDV(n_opts=n_opt) for n_opt in n_opts]
+        return [DiscreteDV(n_opts=n_opt, conditionally_active=dv_last[i] == X_INACTIVE_VALUE)
+                for i, n_opt in enumerate(n_opts)]
 
     def _decode_matrix(self, vector: DesignVector, matrix: np.ndarray, existence: NodeExistence) \
             -> Optional[Tuple[DesignVector, np.ndarray]]:

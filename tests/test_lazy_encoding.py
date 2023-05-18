@@ -25,7 +25,7 @@ class DummyLazyEncoder(LazyEncoder):
 
     def _encode(self, existence: NodeExistence) -> List[DiscreteDV]:
         n_dv = len(self.src)*len(self.tgt)
-        return [DiscreteDV(n_opts=self._n_opts) for _ in range(n_dv)]
+        return [DiscreteDV(n_opts=self._n_opts, conditionally_active=False) for _ in range(n_dv)]
 
     def _decode(self, vector: DesignVector, existence: NodeExistence) -> Optional[Tuple[DesignVector, np.ndarray]]:
         return vector, np.reshape(np.array(vector), (self.n_src, self.n_tgt))
@@ -86,6 +86,20 @@ def test_lazy_encoder():
     for _ in range(3):
         assert enc.get_distance_correlation()
         assert enc.get_distance_correlation(minimum=True)
+
+    check_lazy_conditionally_active(enc)
+
+
+def check_lazy_conditionally_active(encoder: LazyEncoder):
+    if len(encoder.design_vars) == 0:
+        return
+
+    any_inactive = np.zeros((len(encoder.design_vars),), dtype=bool)
+    for _, des_vectors in encoder.get_all_design_vectors().items():
+        any_inactive_existence = np.any(des_vectors == X_INACTIVE_VALUE, axis=0)
+        any_inactive[:len(any_inactive_existence)] |= any_inactive_existence
+
+    assert np.all(any_inactive == [dv.conditionally_active for dv in encoder.design_vars])
 
 
 def test_lazy_imputer_none_exist():

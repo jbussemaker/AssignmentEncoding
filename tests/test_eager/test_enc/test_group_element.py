@@ -3,6 +3,7 @@ from assign_enc.matrix import *
 from assign_enc.eager.imputation.first import *
 from assign_enc.eager.imputation.closest import *
 from assign_enc.eager.encodings.group_element import *
+from tests.test_encoder import check_conditionally_active
 
 
 def test_element_grouper():
@@ -40,6 +41,8 @@ def test_element_grouper():
         [1,  1],
     ]))
 
+    check_conditionally_active(encoder)
+
 
 def test_encoder():
     # Combinations with replacement
@@ -65,6 +68,8 @@ def test_encoder():
 
     assert len(dv_seen) == 10
 
+    check_conditionally_active(encoder)
+
 
 def test_one_to_one(gen_one_per_existence: AggregateAssignmentMatrixGenerator):
     encoder = ElementGroupedEncoder(ClosestImputer())
@@ -75,6 +80,8 @@ def test_one_to_one(gen_one_per_existence: AggregateAssignmentMatrixGenerator):
     assert encoder.get_imputation_ratio() == 1.2
     assert encoder.get_information_index() == 1
     assert encoder.get_distance_correlation() == 1
+
+    check_conditionally_active(encoder)
 
 
 def test_conn_idx_grouper():
@@ -132,6 +139,8 @@ def test_conn_idx_grouper():
         assert encoder.get_n_design_points() == 6
         assert encoder.get_imputation_ratio() == 1
 
+        check_conditionally_active(encoder)
+
 
 def test_conn_idx_encoder():
     for binary in [False, True]:
@@ -163,6 +172,8 @@ def test_conn_idx_encoder():
 
             assert len(dv_seen) == 6
 
+            check_conditionally_active(encoder)
+
 
 def test_one_to_one_conn_idx(gen_one_per_existence: AggregateAssignmentMatrixGenerator):
     for binary in [False, True]:
@@ -174,3 +185,5 @@ def test_one_to_one_conn_idx(gen_one_per_existence: AggregateAssignmentMatrixGen
         assert encoder.get_imputation_ratio() == 1.2
         assert encoder.get_information_index() == 1
         assert encoder.get_distance_correlation() == 1
+
+        check_conditionally_active(encoder)

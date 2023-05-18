@@ -44,7 +44,7 @@ class LazyDirectMatrixEncoder(LazyEncoder):
 
                 # Define design variable
                 if max_conn >= 1:
-                    dvs.append(DiscreteDV(n_opts=max_conn+1))
+                    dvs.append(DiscreteDV(n_opts=max_conn+1, conditionally_active=False))
                     dv_idx_map.append((i, j))
 
         return dvs

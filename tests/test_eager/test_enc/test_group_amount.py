@@ -3,6 +3,7 @@ from assign_enc.matrix import *
 from assign_enc.encoding import *
 from assign_enc.eager.imputation.first import *
 from assign_enc.eager.encodings import *
+from tests.test_encoder import check_conditionally_active
 
 
 def test_encoder():
@@ -24,6 +25,8 @@ def test_encoder():
         n_tot_max = max([np.sum(n_tot == n_val) for n_val in n_tot_unique])
         if len(encoder.design_vars) == 2:
             assert encoder.design_vars[1].n_opts == n_tot_max
+
+        check_conditionally_active(encoder)
 
 
 def test_source_amount_grouper():
@@ -57,6 +60,8 @@ def test_source_amount_grouper():
         [1,  1, -1],
     ]))
 
+    check_conditionally_active(encoder)
+
 
 def test_source_amount_flat_grouper():
     matrix = np.array([
@@ -88,6 +93,8 @@ def test_source_amount_flat_grouper():
         [1,  1],
         [2, -1],
     ]))
+
+    check_conditionally_active(encoder)
 
 
 def test_target_amount_grouper():
@@ -121,6 +128,8 @@ def test_target_amount_grouper():
         [1,  1],
     ]))
 
+    check_conditionally_active(encoder)
+
 
 def test_target_amount_flat_grouper():
     matrix = np.array([
@@ -152,6 +161,8 @@ def test_target_amount_flat_grouper():
         [1],
         [2],
     ]))
+
+    check_conditionally_active(encoder)
 
 
 def test_flat_index_loc_grouper():
@@ -199,6 +210,8 @@ def test_flat_index_loc_grouper():
         [1,  2, -1],
     ]))
 
+    check_conditionally_active(encoder)
+
 
 def test_rel_flat_index_loc_grouper():
     matrix = np.array([
@@ -244,6 +257,8 @@ def test_rel_flat_index_loc_grouper():
         [1,  1, -1],
         [1,  2, -1],
     ]))
+
+    check_conditionally_active(encoder)
 
 
 def test_coord_index_loc_grouper():
@@ -291,6 +306,8 @@ def test_coord_index_loc_grouper():
         [1,  2, -1],
     ]))
 
+    check_conditionally_active(encoder)
+
 
 def test_rel_coord_index_loc_grouper():
     matrix = np.array([
@@ -337,6 +354,8 @@ def test_rel_coord_index_loc_grouper():
         [1,  2, -1],
     ]))
 
+    check_conditionally_active(encoder)
+
 
 def test_one_to_one(gen_one_per_existence: AggregateAssignmentMatrixGenerator):
     encoder = AmountFirstGroupedEncoder(FirstImputer(), TotalAmountGrouper(), OneVarLocationGrouper())
@@ -347,3 +366,5 @@ def test_one_to_one(gen_one_per_existence: AggregateAssignmentMatrixGenerator):
     assert encoder.get_imputation_ratio() == 1.2
     assert encoder.get_information_index() == 1
     assert encoder.get_distance_correlation() == 1
+
+    check_conditionally_active(encoder)

@@ -19,6 +19,7 @@ __all__ = ['DiscreteDV', 'DesignVector', 'PartialDesignVector', 'MatrixSelectMas
 @dataclass
 class DiscreteDV:
     n_opts: int
+    conditionally_active: bool
 
     def get_random(self):
         return np.random.randint(0, self.n_opts)
@@ -545,7 +546,9 @@ class EagerEncoder(Encoder):
                 raise RuntimeError('Design variables should start at zero!')
 
             n_opts_max = np.max(des_vectors, axis=0)+1
-            design_vars_list.append([DiscreteDV(n_opts=n_opts) for n_opts in n_opts_max])
+            is_cond_act = np.any(des_vectors == X_INACTIVE_VALUE, axis=0)
+            design_vars_list.append([DiscreteDV(n_opts=n_opts, conditionally_active=is_cond_act[i_dv])
+                                     for i_dv, n_opts in enumerate(n_opts_max)])
 
         # Merge design variables
         design_vars = cls.merge_design_vars(design_vars_list)
@@ -560,11 +563,14 @@ class EagerEncoder(Encoder):
             return []
         n_dv_max = max([len(dvs) for dvs in design_vars_list])
         n_opts = np.zeros((len(design_vars_list), n_dv_max), dtype=int)
+        is_cond_act = np.ones(n_opts.shape, dtype=bool)
         for i, dvs in enumerate(design_vars_list):
             n_opts[i, :len(dvs)] = [dv.n_opts for dv in dvs]
+            is_cond_act[i, :len(dvs)] = [dv.conditionally_active for dv in dvs]
 
         n_opts_max = np.max(n_opts, axis=0)
-        return [DiscreteDV(n_opts=n) for n in n_opts_max]
+        is_cond_act = np.any(is_cond_act, axis=0)
+        return [DiscreteDV(n_opts=n, conditionally_active=is_cond_act[i]) for i, n in enumerate(n_opts_max)]
 
     @staticmethod
     def flatten_matrix(matrix: np.ndarray) -> np.ndarray:
