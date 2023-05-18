@@ -381,7 +381,7 @@ class MatrixGenSettings:
                                  max_conn_parallel=self.max_conn_parallel)
 
     def get_cache_key(self):
-        cache_version = '1'  # Increment this if all existing caches should be invalidated
+        cache_version = '2'  # Increment this if all existing caches should be invalidated
 
         src_cache_key = ';'.join([repr(s) for s in self.src])
         tgt_cache_key = ';'.join([repr(t) for t in self.tgt])
