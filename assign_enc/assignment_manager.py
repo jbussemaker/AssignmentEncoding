@@ -32,7 +32,7 @@ class AssignmentManagerBase:
         return corrected_vector, is_active
 
     @property
-    def encoder(self):
+    def encoder(self) -> Encoder:
         raise NotImplementedError
 
     @property
