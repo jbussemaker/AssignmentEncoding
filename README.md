@@ -4,7 +4,7 @@ Experiments for finding how to best encode assignment/permutation decisions in a
 
 ## Installation
 
-Create a Python 3.7+ environment and install dependencies using pip: `pip install -r requirements.txt`
+Create a Python 3.7+ environment and install using pip: `pip install -e .`
 
 ## Background
 
