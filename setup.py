@@ -39,5 +39,5 @@ if __name__ == '__main__':
             'numba~=0.56.2',
         ],
         python_requires='>=3.7',
-        packages=['assign_enc'],
+        packages=['assign_enc', 'assign_pymoo', 'assign_experiments'],
     )
