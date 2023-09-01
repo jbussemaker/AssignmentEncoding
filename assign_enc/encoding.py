@@ -148,7 +148,7 @@ class Encoder:
     def calc_n_declared_design_points(design_vars: List[DiscreteDV]) -> int:
         if len(design_vars) == 0:
             return 1
-        return int(np.prod([dv.n_opts for dv in design_vars], dtype=np.float))
+        return int(np.prod([dv.n_opts for dv in design_vars], dtype=float))
 
     def get_information_index(self) -> float:
         return self.calc_information_index([dv.n_opts for dv in self.design_vars])
