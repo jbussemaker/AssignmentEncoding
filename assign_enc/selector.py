@@ -114,8 +114,7 @@ class EncoderSelector:
                     # Create assignment manager
                     log.debug(f'Encoding {encoder!s}')
                     try:
-                        with time_limiter(self.encoding_timeout):
-                            assignment_manager = _instantiate_manager(encoder)
+                        assignment_manager = run_timeout(self.encoding_timeout, _instantiate_manager, encoder)
 
                     except InvalidPatternEncoder:
                         continue
@@ -140,8 +139,8 @@ class EncoderSelector:
                             limit_dist_corr_time = self.limit_dist_corr_time
                         if limit_dist_corr_time:
                             try:
-                                with time_limiter(self.encoding_timeout):
-                                    distance_correlation = self._get_dist_corr(assignment_manager)
+                                distance_correlation = run_timeout(
+                                    self.encoding_timeout, self._get_dist_corr, assignment_manager)
                             except (TimeoutError, MemoryError):
                                 pass
                         else:
@@ -357,8 +356,8 @@ class EncoderSelector:
     def _get_n_mat(self) -> Tuple[Optional[int], Optional[int]]:
         try:
             matrix_gen = self._get_matrix_gen()
-            with time_limiter(self.encoding_timeout):
-                n_mat_total = matrix_gen.count_all_matrices(max_by_existence=False)
+            n_mat_total = run_timeout(
+                self.encoding_timeout, lambda: matrix_gen.count_all_matrices(max_by_existence=False))
             n_existence = len(list(matrix_gen.iter_existence()))
             return n_mat_total, n_existence
         except TimeoutError:

@@ -253,8 +253,7 @@ def exp_dist_corr_perm():
     for n in [5, 7, 8]:
         for i_enc, encoder_factory in enumerate(encoders):
             try:
-                with time_limiter(10.):
-                    problem = AnalyticalPermutingProblem(encoder_factory(imputers[i_enc]()), n=n)
+                problem = run_timeout(10., lambda: AnalyticalPermutingProblem(encoder_factory(imputers[i_enc]()), n=n))
             except TimeoutError:
                 continue
             encoder = problem.assignment_manager.encoder
@@ -506,8 +505,7 @@ def run_experiment(size: Size, sbo=False, n_repeat=8, i_prob=None, do_run=True, 
                     has_encoding_error = True
                 else:
                     try:
-                        with time_limiter(20.):
-                            enc_prob = problem.get_for_encoder(encoder)
+                        enc_prob = run_timeout(20., lambda: problem.get_for_encoder(encoder))
                     except (TimeoutError, MemoryError) as e:
                         log.info(f'Could not encode: {e.__class__.__name__}')
                         has_encoding_error = True
@@ -550,9 +548,8 @@ def run_experiment(size: Size, sbo=False, n_repeat=8, i_prob=None, do_run=True, 
                 with Encoder.with_early_detect_high_imp_ratio(imp_ratio_sample_limit):
                     for i_test in range(n_repeat_timing):
                         try:
-                            with time_limiter(20.):
-                                s = timeit.default_timer()
-                                enc_prob = problem.get_for_encoder(encoder)
+                            s = timeit.default_timer()
+                            enc_prob = run_timeout(20., lambda: problem.get_for_encoder(encoder))
                         except (TimeoutError, MemoryError, DetectedHighImpRatio) as e:
                             log.info(f'Could not encode: {e.__class__.__name__}')
                             has_encoding_error = True

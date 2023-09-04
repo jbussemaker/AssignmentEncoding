@@ -1,24 +1,52 @@
-import _thread
+import ctypes
 import threading
-from contextlib import contextmanager
 
-__all__ = ['time_limiter']
+try:
+    import gevent
+except ImportError:
+    gevent = None
+
+__all__ = ['run_timeout']
 
 
-@contextmanager
-def time_limiter(seconds: float):  # https://stackoverflow.com/a/37648512
-    # Start a timer
-    timer = threading.Timer(seconds, lambda: _thread.interrupt_main())
-    timer.start()
+class JoinThread(threading.Thread):
 
-    # Run the code in the with statement
-    try:
-        yield
+    def __init__(self, other_thread: threading.Thread):
+        super().__init__(daemon=True)
+        self._other = other_thread
 
-    # If the timer is triggered, raise an error
-    except KeyboardInterrupt:
+    def run(self) -> None:
+        while self._other.is_alive():
+            ctypes.pythonapi.PyThreadState_SetAsyncExc(
+                ctypes.c_long(self._other.ident), ctypes.py_object(KeyboardInterrupt()))
+            self._other.join()
+
+
+def run_timeout(seconds: float, func, *args, **kwargs):
+
+    return_val = []
+    exception = []
+
+    def _wrapper():
+        try:
+            return_val.append(func(*args, **kwargs))
+        except KeyboardInterrupt:
+            raise
+        except Exception as e:
+            exception.append(e)
+
+    thread = threading.Thread(target=_wrapper, daemon=True)
+    thread.start()
+    thread.join(seconds)
+
+    if thread.is_alive():
+        stopper_thread = JoinThread(thread)
+        stopper_thread.start()
+        stopper_thread.join()
         raise TimeoutError
 
-    # Otherwise, cancel the timer
-    finally:
-        timer.cancel()
+    if exception:
+        raise exception[0]
+    if not return_val:
+        raise KeyboardInterrupt
+    return return_val[0]
