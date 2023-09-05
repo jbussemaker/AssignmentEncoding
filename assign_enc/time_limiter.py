@@ -1,52 +1,33 @@
 import ctypes
 import threading
+import multiprocessing.pool
 
 try:
     import gevent
+    import gevent.monkey
 except ImportError:
     gevent = None
 
 __all__ = ['run_timeout']
 
 
-class JoinThread(threading.Thread):
-
-    def __init__(self, other_thread: threading.Thread):
-        super().__init__(daemon=True)
-        self._other = other_thread
-
-    def run(self) -> None:
-        while self._other.is_alive():
-            ctypes.pythonapi.PyThreadState_SetAsyncExc(
-                ctypes.c_long(self._other.ident), ctypes.py_object(KeyboardInterrupt()))
-            self._other.join()
-
-
 def run_timeout(seconds: float, func, *args, **kwargs):
 
-    return_val = []
-    exception = []
+    # Use native thread pool of gevent, as patched threads behave like cooperative greenlets,
+    # which block if not explicitly giving control
+    if gevent is not None and gevent.monkey.is_module_patched('threading'):
+        raise RuntimeError('Time limiter not compatible with monkey-patched gevent threading module!')
 
-    def _wrapper():
+    with multiprocessing.pool.ThreadPool(processes=1) as pool:
+        thread = pool.apply(lambda: threading.current_thread())
+
         try:
-            return_val.append(func(*args, **kwargs))
-        except KeyboardInterrupt:
-            raise
-        except Exception as e:
-            exception.append(e)
-
-    thread = threading.Thread(target=_wrapper, daemon=True)
-    thread.start()
-    thread.join(seconds)
+            return pool.apply_async(func, args, kwargs).get(timeout=seconds)
+        except multiprocessing.TimeoutError:
+            pass
 
     if thread.is_alive():
-        stopper_thread = JoinThread(thread)
-        stopper_thread.start()
-        stopper_thread.join()
-        raise TimeoutError
-
-    if exception:
-        raise exception[0]
-    if not return_val:
-        raise KeyboardInterrupt
-    return return_val[0]
+        ctypes.pythonapi.PyThreadState_SetAsyncExc(
+            ctypes.c_long(thread.ident), ctypes.py_object(KeyboardInterrupt()))
+        thread.join()
+    raise TimeoutError
