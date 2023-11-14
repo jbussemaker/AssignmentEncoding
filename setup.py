@@ -36,7 +36,7 @@ if __name__ == '__main__':
             'numpy',
             'pandas',
             'scipy>=1.9.0',
-            'numba~=0.56.2',
+            'numba~=0.56',
         ],
         python_requires='>=3.7',
         packages=['assign_enc', 'assign_pymoo', 'assign_experiments'],
