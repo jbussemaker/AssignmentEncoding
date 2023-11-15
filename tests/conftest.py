@@ -3,6 +3,7 @@ import timeit
 import itertools
 from assign_enc.matrix import *
 from assign_enc.selector import *
+from assign_enc.cache import reset_caches
 
 
 @pytest.fixture
@@ -14,6 +15,11 @@ def gen_one_per_existence():
         exist.append(NodeExistence(src_exists=[i == i_src for i in range(len(src))],
                                    tgt_exists=[i == i_tgt for i in range(len(tgt))]))
     return AggregateAssignmentMatrixGenerator.create(src=src, tgt=tgt, existence=NodeExistencePatterns(exist))
+
+
+@pytest.fixture(scope='session', autouse=True)
+def reset_cache():
+    reset_caches()
 
 
 def do_initialize_numba():
