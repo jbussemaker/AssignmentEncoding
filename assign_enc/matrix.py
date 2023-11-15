@@ -51,7 +51,7 @@ class Node:
         return f'({",".join([str(i) for i in self.conns])})'
 
     def __repr__(self):
-        return f'{self.__class__.__name__}(conns={self.conns!r}, min_conns={self.min_conns}, rep={self.rep}'
+        return f'{self.__class__.__name__}(conns={self.conns!r}, min_conns={self.min_conns}, rep={self.rep})'
 
 
 class NodeExistence:
@@ -178,6 +178,37 @@ class NodeExistence:
         src, src_idx_map = _get_effective_nodes(settings.src, self.src_n_conn_override, self.max_src_conn_override)
         tgt, tgt_idx_map = _get_effective_nodes(settings.tgt, self.tgt_n_conn_override, self.max_tgt_conn_override)
 
+        # Automatically convert to bounded connection nrs if needed
+        # For this we need to fix the maximum nr of connections before the conversion
+        max_conn_par = MatrixGenSettings(
+            src=src, tgt=tgt, max_conn_parallel=settings.max_conn_parallel).get_max_conn_parallel()
+
+        def _get_max_outgoing_conn(ref_nodes: List[Node]):
+            n_max_outgoing = 0
+            for n in ref_nodes:
+                if not n.rep:
+                    n_max_outgoing += 1
+                elif n.conns is not None:
+                    n_max_outgoing += min(max_conn_par, n.conns[-1])
+                else:
+                    return -1  # If there is a node with no upper bound, we cannot reliably check the max nr of conns
+            return n_max_outgoing
+
+        for nodes, n_conn_max in [(tgt, _get_max_outgoing_conn(src)),
+                                  (src, _get_max_outgoing_conn(tgt))]:
+            if n_conn_max < 1:
+                continue
+            n_conn_max = max(2, n_conn_max)
+            for node in nodes:
+                if node.conns is not None:
+                    for min_conns in range(n_conn_max):
+                        consecutive_n_conns = list(range(min_conns, n_conn_max+1))
+                        if node.conns[:len(consecutive_n_conns)] == consecutive_n_conns:
+                            # print(f'CONVERTING {node.conns} -> min {min_conns}; {node!r}')
+                            node.min_conns = min_conns
+                            node.conns = None
+                            break
+
         # Modify excluded edges
         excluded = []
         for i_src, i_tgt in settings.get_excluded_indices():
@@ -188,7 +219,7 @@ class NodeExistence:
             excluded.append((src_idx_map[i_src], tgt_idx_map[i_tgt]))
 
         effective_settings = MatrixGenSettings(
-            src=src, tgt=tgt, excluded=excluded, max_conn_parallel=settings.max_conn_parallel)
+            src=src, tgt=tgt, excluded=excluded, max_conn_parallel=max_conn_par)
         return effective_settings, src_idx_map, tgt_idx_map
 
     def get_transpose(self) -> 'NodeExistence':

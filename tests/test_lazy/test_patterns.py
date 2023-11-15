@@ -52,6 +52,8 @@ def settings():
                                        tgt=[Node([1], repeated_allowed=False) for _ in range(3)]),
         'unordered_combining': MatrixGenSettings(src=[Node([2])],
                                                  tgt=[Node(min_conn=0) for _ in range(3)]),
+        'unordered_combining_1': MatrixGenSettings(src=[Node([2])],
+                                                   tgt=[Node([0, 1, 2, 3, 4]) for _ in range(3)]),
         'unordered_norepl_combining': MatrixGenSettings(src=[Node([2], repeated_allowed=False)],
                                                         tgt=[Node([0, 1], repeated_allowed=False) for _ in range(3)]),
         'nomatch': MatrixGenSettings(src=[Node([1]), Node(min_conn=0), Node([0, 1], repeated_allowed=False)],
@@ -211,10 +213,11 @@ def test_permuting_encoder(settings):
 
 def test_unordered_combining_encoder(settings):
     _do_test_encoders(
-        UnorderedCombiningPatternEncoder, settings, ['combining', 'unordered_norepl_combining', 'unordered_combining'])
+        UnorderedCombiningPatternEncoder, settings,
+        ['combining', 'unordered_norepl_combining', 'unordered_combining', 'unordered_combining_1'])
 
     encoder = UnorderedCombiningPatternEncoder(LazyFirstImputer())
-    for key in ['unordered_norepl_combining', 'unordered_combining'][1:]:
+    for key in ['unordered_norepl_combining', 'unordered_combining', 'unordered_combining_1']:
         base_settings = settings[key]
         existence_patterns = NodeExistencePatterns(patterns=[
             NodeExistence(src_n_conn_override={0: [n]}) for n in range(4)])

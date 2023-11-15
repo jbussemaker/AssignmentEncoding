@@ -1,5 +1,4 @@
 import pytest
-import itertools
 import numpy as np
 from assign_enc.matrix import *
 
@@ -300,7 +299,9 @@ def test_effective_settings():
     eff_settings, src_map, tgt_map = NodeExistence().get_effective_settings(settings)
     eff_settings0 = eff_settings
     assert len(eff_settings.src) == 3
-    assert repr(eff_settings.src) == repr(settings.src)
+    assert repr(eff_settings.src[:2]) == repr(settings.src[:2])
+    assert eff_settings.src[2].conns is None
+    assert eff_settings.src[2].min_conns == 1
     assert len(eff_settings.tgt) == 1
     assert tgt_map == {1: 0}
     assert eff_settings.excluded == []
@@ -330,7 +331,8 @@ def test_effective_settings():
     assert len(eff_settings.src) == 3
     assert eff_settings.src[0].conns == [0, 1]
     assert eff_settings.src[1].conns == [2, 3]
-    assert eff_settings.src[2].conns == [1, 2, 3]
+    assert eff_settings.src[2].conns is None
+    assert eff_settings.src[2].min_conns == 1
 
     eff_settings_map = settings.get_effective_settings()
     assert eff_settings_map[NodeExistence()][0].get_cache_key() == eff_settings0.get_cache_key()
