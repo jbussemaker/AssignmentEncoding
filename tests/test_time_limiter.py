@@ -3,7 +3,7 @@ import time
 import timeit
 import itertools
 import threading
-from adsg_core.optimization.assign_enc.time_limiter import *
+from assign_enc.time_limiter import *
 
 
 def test_time_limiter():
