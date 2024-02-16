@@ -282,7 +282,7 @@ class AssignmentProblem(AssignmentProblemBase):
 
     def correct_x(self, x: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
         n_aux = self.n_aux
-        x_corr = x.copy().astype(np.int)
+        x_corr = x.copy().astype(int)
         is_active = np.ones(x_corr.shape, dtype=bool)
         for i_dv in range(x_corr.shape[0]):
             x_corr[i_dv, :n_aux], is_active[i_dv, :n_aux], existence, _ = self.correct_x_aux(x_corr[i_dv, :n_aux])
@@ -291,7 +291,7 @@ class AssignmentProblem(AssignmentProblemBase):
         return x_corr, is_active
 
     def _evaluate(self, x, out, *args, **kwargs):
-        x = np.round(x.astype(np.float64)).astype(np.int)
+        x = np.round(x.astype(np.float64)).astype(int)
         n = x.shape[0]
         is_active_out = np.ones(x.shape, dtype=bool)
         x_out = np.empty((n, self.n_var))
@@ -496,7 +496,7 @@ class MultiAssignmentProblem(AssignmentProblemBase):
         out['G'] = g_out
 
     def _separate_x_parts(self, x) -> Tuple[List[np.ndarray], List[np.ndarray]]:
-        x = np.round(x.astype(np.float64)).astype(np.int)
+        x = np.round(x.astype(np.float64)).astype(int)
         x_parts = []
         is_active_parts = []
         i = 0
@@ -542,7 +542,7 @@ class AssignmentRepair(Repair):
         is_array = not isinstance(pop, Population)
         x = pop if is_array else pop.get('X')
 
-        x = np.round(x.astype(np.float64)).astype(np.int)
+        x = np.round(x.astype(np.float64)).astype(int)
         if isinstance(problem, AssignmentProblemBase):
             x, _ = problem.correct_x(x)
 
