@@ -14,7 +14,7 @@ limitations under the License.
 Copyright: (c) 2023, Deutsches Zentrum fuer Luft- und Raumfahrt e.V.
 Contact: jasper.bussemaker@dlr.de
 """
-from setuptools import setup
+from setuptools import setup, find_packages
 
 
 if __name__ == '__main__':
@@ -39,5 +39,5 @@ if __name__ == '__main__':
             'numba~=0.56',
         ],
         python_requires='>=3.7',
-        packages=['assign_enc', 'assign_pymoo', 'assign_experiments'],
+        packages=find_packages(exclude='tests*'),
     )
