@@ -39,5 +39,5 @@ if __name__ == '__main__':
             'numba~=0.56',
         ],
         python_requires='>=3.7',
-        packages=find_packages(exclude='tests*'),
+        packages=find_packages(exclude=['tests*']),
     )
