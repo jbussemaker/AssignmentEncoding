@@ -22,12 +22,19 @@ from pymoo.core.variable import Integer
 from pymoo.problems.multi.zdt import ZDT1
 from pymoo.core.evaluator import Evaluator
 from pymoo.core.population import Population
+from pymoo.algorithms.moo.nsga2 import NSGA2
 from pymoo.visualization.scatter import Scatter
 from pymoo.core.initialization import Initialization
 from pymoo.core.duplicate import DefaultDuplicateElimination
 from pymoo.operators.sampling.lhs import LatinHypercubeSampling
-from pymoo.algorithms.moo.nsga2 import NSGA2, calc_crowding_distance
 from pymoo.util.nds.non_dominated_sorting import NonDominatedSorting
+
+try:
+    # pymoo < 0.6.1
+    from pymoo.algorithms.moo.nsga2 import calc_crowding_distance
+except ImportError:
+    # pymoo >= 0.6.1
+    from pymoo.operators.survival.rank_and_crowding.metrics import calc_crowding_distance
 
 
 __all__ = ['AssignmentProblemBase', 'AssignmentProblem', 'MultiAssignmentProblem', 'AssignmentRepair',
