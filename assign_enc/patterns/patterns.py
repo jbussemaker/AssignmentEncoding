@@ -327,6 +327,10 @@ class PartitioningPatternEncoder(PatternEncoderBase):
         if not (all(n.conns == [1] for n in tgt) or all(n.conns == [0, 1] for n in tgt)):
             return False
 
+        # Check if there are not too little connections asked for
+        if tgt[0].conns == [1] and len(src) == 1:
+            return False
+
         # Check if there are not too many connections asked for
         n_min_total = src[0].min_conns*len(src)
         if n_min_total > len(tgt):
