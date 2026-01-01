@@ -324,7 +324,7 @@ class PartitioningPatternEncoder(PatternEncoderBase):
             return False
 
         # Check if all target nodes have 1 connection or 0 or 1 connections
-        if any(n.conns != [1] and n.conns != [0, 1] for n in tgt):
+        if not (all(n.conns == [1] for n in tgt) or all(n.conns == [0, 1] for n in tgt)):
             return False
 
         # Check if there are not too many connections asked for

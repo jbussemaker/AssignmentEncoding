@@ -110,3 +110,18 @@ def test_selector_single_option2():
     tgt = [Node(min_conn=1, repeated_allowed=False)]
     selector = EncoderSelector(MatrixGenSettings(src, tgt))
     assert isinstance(selector._get_best_assignment_manager(), AssignmentManagerBase)
+
+
+def test_one_opt_one_req():
+    src = [Node([1]), Node([0, 1])]
+    tgt = [Node([0, 1, 2])]
+    selector = EncoderSelector(MatrixGenSettings(src, tgt))
+
+    manager = selector._get_best_assignment_manager()
+    all_x = manager.get_all_design_vectors()[NodeExistence()]
+    assert all_x.shape == (2, 1)
+    matrix_seen = set()
+    for x in all_x:
+        _, _, matrix = manager.get_matrix(x)
+        matrix_seen.add(tuple(matrix.ravel()))
+    assert len(matrix_seen) == all_x.shape[0]
