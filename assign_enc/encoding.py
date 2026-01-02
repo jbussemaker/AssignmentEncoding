@@ -528,6 +528,15 @@ class EagerEncoder(Encoder):
     @classmethod
     def get_design_variables(cls, design_vectors: Dict[NodeExistence, np.ndarray]) -> List[DiscreteDV]:
         """Convert possible design vectors to design variable definitions"""
+
+        # Check if there are any infeasible existence scenarios,
+        # so that all design variables should be marked as conditional
+        all_dv_cond = False
+        for des_vectors in design_vectors.values():
+            if des_vectors.shape[0] == 0 or des_vectors.shape[1] == 0:
+                all_dv_cond = True
+                break
+
         design_vars_list = []
         for des_vectors in design_vectors.values():
             if des_vectors.shape[0] == 0 or des_vectors.shape[1] == 0:
@@ -547,7 +556,7 @@ class EagerEncoder(Encoder):
 
             n_opts_max = np.max(des_vectors, axis=0)+1
             is_cond_act = np.any(des_vectors == X_INACTIVE_VALUE, axis=0)
-            design_vars_list.append([DiscreteDV(n_opts=n_opts, conditionally_active=is_cond_act[i_dv])
+            design_vars_list.append([DiscreteDV(n_opts=n_opts, conditionally_active=all_dv_cond or is_cond_act[i_dv])
                                      for i_dv, n_opts in enumerate(n_opts_max)])
 
         # Merge design variables
