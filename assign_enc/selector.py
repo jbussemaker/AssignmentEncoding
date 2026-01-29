@@ -267,15 +267,17 @@ class EncoderSelector:
     def _get_imp_ratio(n_design_points: int, n_mat: int = None, n_exist: int = None,
                        assignment_manager: AssignmentManagerBase = None) -> float:
 
+        fallback_imp_ratio = 10000+int(np.log10(n_design_points)*100)
+
         if assignment_manager is not None:
             try:
                 return assignment_manager.encoder.get_imputation_ratio(per_existence=True)
 
             except MemoryError:
-                return min(n_design_points, 1000000000)
+                return fallback_imp_ratio
 
         if n_mat is None:
-            return min(n_design_points, 1000000000)
+            return fallback_imp_ratio
 
         return (n_design_points*n_exist)/n_mat
 

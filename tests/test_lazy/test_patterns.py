@@ -110,11 +110,18 @@ def _do_test_encoders(encoder_cls: Type[PatternEncoderBase], settings_map, match
                 assert not encoder_cls(LazyFirstImputer()).is_compatible(settings)
                 continue
 
+            assert encoder.get_imputation_ratio() >= 1.
+            assert encoder.get_imputation_ratio(per_existence=True) >= 1.
+
             # Enumerate all design variables to check pattern-provided imputation
             matrix_gen = AggregateAssignmentMatrixGenerator(settings)
             agg_matrix_map = matrix_gen.get_agg_matrix(cache=False)
+
             all_x_map = encoder.get_all_design_vectors()
+            n_x_map = encoder.get_n_matrices_by_existence()
+            assert len(n_x_map) == len(all_x_map)
             any_inactive = np.zeros((len(encoder.design_vars),), dtype=bool)
+
             for existence in matrix_gen.iter_existence():
                 agg_matrix = agg_matrix_map[existence]
                 agg_matrix_set = {tuple(flat_matrix) for flat_matrix in
@@ -124,6 +131,7 @@ def _do_test_encoders(encoder_cls: Type[PatternEncoderBase], settings_map, match
                     all_x = all_x_map[existence]
                     all_x_set = {tuple(list(dv)+[-1]) for dv in all_x}
                     assert len(all_x_set) == all_x.shape[0]
+                    assert all_x.shape[0] == n_x_map[existence]
                     for x in all_x:
                         x_imp, _ = encoder.get_matrix(x, existence=existence)
                         assert np.all(x_imp == x)
