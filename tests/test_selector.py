@@ -169,8 +169,7 @@ def test_all_any_to_one():
     assert manager.design_vars[0].n_opts == 4
 
 
-@pytest.mark.skipif(int(os.getenv('RUN_SLOW_TESTS', 0)) != 1, reason='Set RUN_SLOW_TESTS=1 to run slow tests')
-def test_huge():
+def test_huge_pattern():
     n = 6
     src = [Node(min_conn=0, repeated_allowed=False) for _ in range(n)]
     tgt = [Node(min_conn=0, repeated_allowed=False) for _ in range(n)]
@@ -178,4 +177,18 @@ def test_huge():
 
     manager = selector.get_best_assignment_manager()
     assert manager
+    assert isinstance(manager.encoder, PatternEncoderBase)
+    print(manager.encoder.__class__)
+
+
+@pytest.mark.skipif(int(os.getenv('RUN_SLOW_TESTS', 0)) != 1, reason='Set RUN_SLOW_TESTS=1 to run slow tests')
+def test_huge():
+    n = 5
+    src = [Node(min_conn=2, repeated_allowed=False) for _ in range(n)]
+    tgt = [Node(min_conn=2, repeated_allowed=False) for _ in range(n)]
+    selector = EncoderSelector(MatrixGenSettings(src, tgt))
+
+    manager = selector.get_best_assignment_manager()
+    assert manager
+    assert not isinstance(manager.encoder, PatternEncoderBase)
     print(manager.encoder.__class__)

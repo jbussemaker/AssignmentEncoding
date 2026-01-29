@@ -273,7 +273,7 @@ class EncoderSelector:
     def _get_imp_ratio(n_design_points: int, n_mat: int = None, n_exist: int = None,
                        assignment_manager: AssignmentManagerBase = None) -> float:
 
-        fallback_imp_ratio = 10000+int(np.log10(n_design_points)*100)
+        fallback_imp_ratio = 10000+int(np.log10(float(n_design_points))*100)
 
         if assignment_manager is not None:
             try:
