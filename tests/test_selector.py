@@ -3,6 +3,7 @@ import pytest
 import timeit
 from assign_enc.matrix import *
 from assign_enc.selector import *
+from assign_enc.patterns.encoder import PatternEncoderBase
 from assign_enc.assignment_manager import *
 
 
@@ -12,7 +13,7 @@ def test_selector():
     selector = EncoderSelector(MatrixGenSettings(src, tgt))
     assert selector._numba_initialized
 
-    assert selector._get_n_mat() == (12, 1)
+    assert selector._get_n_mat() == 12
 
     assignment_manager = selector._get_best_assignment_manager()
     assert isinstance(assignment_manager, AssignmentManagerBase)
@@ -27,7 +28,7 @@ def test_selector_inf_idx_filter():
     selector = EncoderSelector(MatrixGenSettings(src, tgt))
     selector.n_mat_max_eager = 1
     selector.min_distance_correlation = 1.2
-    assert selector._get_n_mat() == (12, 1)
+    assert selector._get_n_mat() == 12
 
     assignment_manager = selector._get_best_assignment_manager()
     assert isinstance(assignment_manager, AssignmentManagerBase)
@@ -77,6 +78,7 @@ def test_one_to_one(gen_one_per_existence: AggregateAssignmentMatrixGenerator):
 
     assignment_manager = selector._get_best_assignment_manager()
     assert isinstance(assignment_manager, AssignmentManagerBase)
+    assert isinstance(assignment_manager.encoder, PatternEncoderBase)
 
     assert len(assignment_manager.design_vars) == 0
 
@@ -88,6 +90,7 @@ def test_one_to_one_no_patterns(gen_one_per_existence: AggregateAssignmentMatrix
 
     assignment_manager = selector._get_best_assignment_manager()
     assert isinstance(assignment_manager, AssignmentManagerBase)
+    assert not isinstance(assignment_manager.encoder, PatternEncoderBase)
 
     assert len(assignment_manager.design_vars) == 0
     EncoderSelector._exclude_pattern_encoders = False

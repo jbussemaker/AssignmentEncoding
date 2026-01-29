@@ -4,6 +4,7 @@ import numpy as np
 from typing import *
 from assign_enc.matrix import *
 from assign_enc.encoding import *
+from assign_enc.selector import *
 from assign_enc.patterns.encoder import *
 from assign_enc.patterns.patterns import *
 from assign_enc.lazy.imputation.first import *
@@ -68,10 +69,12 @@ def settings():
     return settings_map
 
 
-def _do_test_encoders(encoder_cls: Type[PatternEncoderBase], settings_map, match_keys, include_asymmetric=True):
+def _do_test_encoders(encoder_cls: Type[PatternEncoderBase], settings_map, match_keys, include_asymmetric=True,
+                      strict_selector=True):
     match_keys += [key+'_transpose' for key in match_keys]
 
     encoders = []
+    matched_selector_keys = set()
     for key, settings in settings_map.items():
         for include_empty in [False, True]:
             if include_empty:
@@ -168,6 +171,16 @@ def _do_test_encoders(encoder_cls: Type[PatternEncoderBase], settings_map, match
             assert encoder.get_distance_correlation() is not None
             assert np.all(any_inactive == [dv.conditionally_active for dv in encoder.design_vars])
 
+            # Test the encoder selector
+            selector = EncoderSelector(settings)
+            manager = selector._get_best_assignment_manager()
+            if strict_selector:
+                assert isinstance(manager.encoder, PatternEncoderBase)
+            if isinstance(manager.encoder, encoder_cls):
+                matched_selector_keys.add(key)
+
+    assert len(matched_selector_keys) > 0
+
     return encoders
 
 
@@ -225,7 +238,8 @@ def test_permuting_encoder(settings):
 def test_unordered_combining_encoder(settings):
     _do_test_encoders(
         UnorderedCombiningPatternEncoder, settings,
-        ['combining', 'unordered_norepl_combining', 'unordered_combining', 'unordered_combining_1'])
+        ['combining', 'unordered_norepl_combining', 'unordered_combining', 'unordered_combining_1'],
+        strict_selector=False)
 
     encoder = UnorderedCombiningPatternEncoder(LazyFirstImputer())
     for key in ['unordered_norepl_combining', 'unordered_combining', 'unordered_combining_1']:
