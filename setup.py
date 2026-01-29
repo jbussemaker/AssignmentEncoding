@@ -34,7 +34,7 @@ if __name__ == '__main__':
         install_requires=[
             'appdirs',
             'numpy',
-            'pandas',
+            'pandas<3.0',
             'scipy>=1.9.0',
             'numba~=0.56',
         ],
