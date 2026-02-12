@@ -34,9 +34,9 @@ if __name__ == '__main__':
         install_requires=[
             'appdirs',
             'numpy',
-            'pandas<3.0',
-            'scipy>=1.9.0',
-            'numba~=0.56',
+            'pandas',
+            'scipy',
+            'numba',
         ],
         python_requires='>=3.7',
         packages=find_packages(exclude=['tests*']),
