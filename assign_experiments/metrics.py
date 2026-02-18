@@ -443,7 +443,7 @@ class DeltaHVMetric(Metric):
         # If we have only one point, calculate the relative distance to the optimal point instead (because true HV is 0)
         if self.is_one_dim:
             # Update max points
-            self.max_f = max_f = np.max(np.row_stack([f, [self.max_f]]), axis=0)
+            self.max_f = max_f = np.max(np.vstack([f, [self.max_f]]), axis=0)
 
             # Update maximum distance to the optimal point (this represents the extend of the design space)
             true_dist = max_f-self.pf_0

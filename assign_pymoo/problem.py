@@ -88,7 +88,7 @@ class CachedParetoFrontMixin(Problem):
                     if pf is None:
                         pf = res.F
                     else:
-                        pf_merged = np.row_stack([pf, res.F])
+                        pf_merged = np.vstack([pf, res.F])
                         i_non_dom = NonDominatedSorting().do(pf_merged, only_non_dominated_front=True)
                         pf = pf_merged[i_non_dom, :]
 
